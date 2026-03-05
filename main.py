@@ -1,5 +1,5 @@
 """
-Quota Board 主入口：启动 FastAPI 后端服务。
+Glancier 主入口：启动 FastAPI 后端服务。
 """
 
 import asyncio
@@ -105,7 +105,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用。"""
     app = FastAPI(
-        title="Quota Board API",
+        title="Glancier API",
         description="API for quota monitoring and data fetching",
         version="0.1.0",
         lifespan=lifespan,
@@ -177,7 +177,7 @@ def main():
     """主入口。"""
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8400
 
-    logger.info(f"🚀 启动 Quota Board 后端 (port={port})...")
+    logger.info(f"🚀 启动 Glancier 后端 (port={port})...")
 
     app = create_app()
 
