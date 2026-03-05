@@ -58,7 +58,7 @@ import { TopNav } from "./components/TopNav";
 
 // GridStack layout constants — keep in sync with --qb-row-height / --qb-grid-margin in index.css
 const GRID_ROW_HEIGHT = 60;
-const GRID_MARGIN = 12;
+const GRID_MARGIN = 16;
 
 // Delete button — absolute positioned at top-right corner of card
 function DeleteBtn({ onDelete }: { onDelete?: () => void }) {
