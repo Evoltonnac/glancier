@@ -1,4 +1,4 @@
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { api } from "../api/client";
 import {
     Activity,
@@ -16,12 +16,16 @@ import {
 } from "./ui/tooltip";
 
 export function TopNav() {
-    // In a real application, you might want a global state or context to manage loading states
-    // Here we'll just dispatch the backend refresh and trigger a window event for active pages to listen to.
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    if (location.pathname === "/settings") {
+        return null;
+    }
+
     const handleRefreshAll = async () => {
         try {
             await api.refreshAll();
-            // Emit custom event to notify current page to reload its data
             window.dispatchEvent(new CustomEvent("app:refresh_data"));
         } catch (error) {
             console.error("刷新失败:", error);
@@ -29,19 +33,19 @@ export function TopNav() {
     };
 
     return (
-        <header className="flex-shrink-0 border-b border-border px-6 py-3 bg-card z-50">
+        <header className="flex-shrink-0 border-b border-border px-6 py-3 bg-background z-50">
             <div className="flex items-center justify-between">
                 {/* Left: Brand */}
                 <div className="flex items-center gap-6">
                     <Link to="/" className="flex items-center gap-3 mr-4">
-                        <div className="p-2 bg-primary/10 rounded-lg">
-                            <Activity className="w-5 h-5 text-primary" />
+                        <div className="p-2 bg-brand/15 rounded-lg border border-brand/20">
+                            <Activity className="w-5 h-5 text-brand" />
                         </div>
                         <div>
                             <h1 className="text-lg font-bold leading-none tracking-tight">
                                 Quota Board
                             </h1>
-                            <p className="text-[10px] text-muted-foreground mt-1">
+                            <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">
                                 资源总览
                             </p>
                         </div>
@@ -54,8 +58,8 @@ export function TopNav() {
                             className={({ isActive }) =>
                                 `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                                     isActive
-                                        ? "bg-secondary text-secondary-foreground"
-                                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                                        ? "bg-muted text-foreground"
+                                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                                 }`
                             }
                         >
@@ -67,8 +71,8 @@ export function TopNav() {
                             className={({ isActive }) =>
                                 `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                                     isActive
-                                        ? "bg-secondary text-secondary-foreground"
-                                        : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                                        ? "bg-muted text-foreground"
+                                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                                 }`
                             }
                         >
@@ -87,7 +91,7 @@ export function TopNav() {
                                     variant="outline"
                                     size="sm"
                                     onClick={handleRefreshAll}
-                                    className="h-9"
+                                    className="h-8"
                                 >
                                     <RefreshCw className="w-4 h-4 md:mr-2" />
                                     <span className="hidden md:inline">
@@ -101,9 +105,23 @@ export function TopNav() {
                         </Tooltip>
                     </TooltipProvider>
 
-                    <Button variant="ghost" size="icon" className="h-9 w-9">
-                        <Settings className="h-4 w-4 text-muted-foreground" />
-                    </Button>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9"
+                                    onClick={() => navigate("/settings")}
+                                >
+                                    <Settings className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>系统设置</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 </div>
             </div>
         </header>

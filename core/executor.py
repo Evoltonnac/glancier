@@ -28,11 +28,22 @@ class Executor:
     维护内存中的 SourceState。
     """
 
-    def __init__(self, data_controller, secrets_controller):
+    def __init__(self, data_controller, secrets_controller, settings_manager=None):
         self._data_controller = data_controller
         self._secrets = secrets_controller
+        self._settings_manager = settings_manager
         # source_id -> SourceState
         self._states: Dict[str, SourceState] = {}
+
+    def _get_proxy_url(self) -> str | None:
+        """从系统设置中读取代理地址，无代理则返回 None。"""
+        if self._settings_manager is None:
+            return None
+        try:
+            proxy = self._settings_manager.load_settings().proxy
+            return proxy if proxy else None
+        except Exception:
+            return None
 
     def get_source_state(self, source_id: str) -> SourceState:
         """获取指定数据源的运行时状态。"""
@@ -275,7 +286,12 @@ class Executor:
                      method = args.get("method", "GET")
                      headers = args.get("headers", {}).copy()
 
-                     async with httpx.AsyncClient() as client:
+                     proxy_url = self._get_proxy_url()
+                     client_kwargs = {}
+                     if proxy_url:
+                         client_kwargs["proxy"] = proxy_url
+
+                     async with httpx.AsyncClient(**client_kwargs) as client:
                          response = await client.request(method, url, headers=headers)
                          response.raise_for_status()
 

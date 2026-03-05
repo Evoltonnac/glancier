@@ -35,3 +35,4 @@ ui-react/src-tauri/gen/
 # agent
 .agent/
 .agents/
+.claude

@@ -57,27 +57,27 @@ export function BaseSourceCard({
     const hasNoData = !hasWidgetData;
 
     return (
-        <Card className="bg-card border-border h-full flex flex-col overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
+        <Card className="bg-surface border-border h-full flex flex-col overflow-hidden hover:border-foreground/20 transition-colors duration-200">
             {/* Header — left-top radial gradient encodes status; acts as drag handle */}
             <div
                 title={`Status: ${dotStatus}`}
-                className={`qb-card-header flex-shrink-0 flex items-center justify-between px-3 border-b border-border/40 ${gradientClass}`}
+                className={`qb-card-header flex-shrink-0 flex items-center justify-between px-4 border-b border-border/40 ${gradientClass}`}
                 style={{ height: "var(--qb-card-header-height)" }}
             >
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1 mt-1">
                     {ui.icon && (
                         <span className="text-sm leading-none shrink-0">
                             {ui.icon}
                         </span>
                     )}
-                    <span className="text-xs font-medium text-muted-foreground truncate">
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold truncate">
                         {ui.title}
                     </span>
                 </div>
             </div>
 
             {/* Content area — fills remaining card height */}
-            <div className="flex-1 flex flex-col overflow-hidden min-h-0 px-3 py-2">
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0 px-4 py-3">
                 {hasWidgetData && (
                     <div className="flex flex-col gap-2 h-full min-h-0">
                         {component.widgets!.map((widget, idx) => (

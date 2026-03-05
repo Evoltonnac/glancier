@@ -45,51 +45,17 @@ import {
     DialogFooter,
 } from "./components/ui/dialog";
 import { TooltipProvider } from "./components/ui/tooltip";
-import { QuotaCard } from "./components/QuotaCard";
-import { StatGrid } from "./components/StatGrid";
 import { FlowHandler } from "./components/auth/FlowHandler";
 import { OAuthCallback } from "./components/auth/OAuthCallback";
 import { BaseSourceCard } from "./components/BaseSourceCard";
 import { AddWidgetDialog } from "./components/AddWidgetDialog";
 import IntegrationsPage from "./pages/Integrations";
+import SettingsPage from "./pages/Settings";
 import { TopNav } from "./components/TopNav";
 
 // GridStack layout constants — keep in sync with --qb-row-height / --qb-grid-margin in index.css
 const GRID_ROW_HEIGHT = 60;
 const GRID_MARGIN = 8;
-
-// Format value helper
-function formatValue(value: any, format?: string): string {
-    if (value === undefined || value === null) return "N/A";
-    const numValue = typeof value === "string" ? parseFloat(value) : value;
-    if (isNaN(numValue)) return String(value);
-
-    if (format) {
-        if (format.includes("{value}")) {
-            return format.replace(/\{value\}/g, numValue.toFixed(2));
-        }
-        return format
-            .replace(/%/g, "")
-            .replace("$", "$")
-            .replace("f", numValue.toFixed(2));
-    }
-
-    if (numValue >= 1000000) return (numValue / 1000000).toFixed(2) + "M";
-    if (numValue >= 1000) return (numValue / 1000).toFixed(2) + "K";
-    return numValue.toFixed(2);
-}
-
-// Determine status based on usage percentage
-function getStatus(
-    usage: number,
-    limit: number,
-): "ok" | "warning" | "critical" | "error" {
-    if (!limit || limit === 0) return "error";
-    const percentage = (usage / limit) * 100;
-    if (percentage >= 90) return "critical";
-    if (percentage >= 75) return "warning";
-    return "ok";
-}
 
 // Delete button — absolute positioned at top-right corner of card
 function DeleteBtn({ onDelete }: { onDelete?: () => void }) {
@@ -112,212 +78,15 @@ function DeleteBtn({ onDelete }: { onDelete?: () => void }) {
 function renderComponent(
     comp: ViewComponent,
     sourceData: DataResponse | null,
-    index: number,
     sourceSummary?: SourceSummary,
     onInteract?: (source: SourceSummary) => void,
 ) {
-    const data = sourceData?.data || {};
-    const error = sourceData?.error;
-
-    // Handle use_group (component groups)
-    if (comp.use_group) {
-        return renderComponentGroup(comp, sourceData, index);
-    }
-
-    switch (comp.type) {
-        case "source_card":
-            return (
-                <BaseSourceCard
-                    key={index}
-                    component={comp}
-                    sourceSummary={sourceSummary}
-                    sourceData={sourceData}
-                    onInteract={onInteract}
-                />
-            );
-
-        case "quota_card":
-            return (
-                <QuotaCard
-                    key={index}
-                    title={comp.label}
-                    data={data}
-                    limitField={comp.limit_field}
-                    usageField={comp.usage_field}
-                    remainingField={comp.remaining_field}
-                    format={comp.format}
-                    status={getStatus(
-                        (data.usage as number) || 0,
-                        (data.limit as number) || 0,
-                    )}
-                />
-            );
-
-        case "stat_grid":
-            return (
-                <StatGrid
-                    key={index}
-                    title={comp.label}
-                    items={comp.items || []}
-                    data={data}
-                    columns={comp.columns || 4}
-                />
-            );
-
-        case "metric":
-            return (
-                <Card
-                    key={index}
-                    className="bg-card border-border flex flex-col h-full overflow-hidden"
-                >
-                    <div
-                        className="qb-card-header flex-shrink-0 flex items-center justify-between px-3 border-b border-border/40 bg-card"
-                        style={{ height: "var(--qb-card-header-height)" }}
-                    >
-                        <span className="text-xs font-medium text-muted-foreground truncate">
-                            {comp.label || comp.field}
-                        </span>
-                    </div>
-                    <CardContent className="flex-1 overflow-auto min-h-0 flex flex-col justify-center px-3 py-2">
-                        <div className="text-2xl font-bold">
-                            {formatValue(data[comp.field || ""], comp.format)}
-                        </div>
-                    </CardContent>
-                </Card>
-            );
-
-        case "badge":
-            const boolValue = data[comp.field || ""];
-            const badgeLabel =
-                typeof boolValue === "boolean"
-                    ? boolValue
-                        ? comp.true_label || "True"
-                        : comp.false_label || "False"
-                    : boolValue;
-            return (
-                <Badge
-                    key={index}
-                    variant={
-                        String(boolValue)?.toLowerCase() === "true" ||
-                        String(boolValue)?.toLowerCase() ===
-                            comp.true_label?.toLowerCase()
-                            ? "success"
-                            : "secondary"
-                    }
-                >
-                    {badgeLabel}
-                </Badge>
-            );
-
-        case "progress_bar":
-            const value =
-                data[comp.value_field || ""] || data[comp.field || ""];
-            const max = data[comp.max_field || ""] || data.limit || 100;
-            const percentage = max ? ((value as number) / max) * 100 : 0;
-            return (
-                <Card
-                    key={index}
-                    className="bg-card border-border flex flex-col h-full overflow-hidden"
-                >
-                    <div
-                        className="qb-card-header flex-shrink-0 flex items-center justify-between px-3 border-b border-border/40 bg-card"
-                        style={{ height: "var(--qb-card-header-height)" }}
-                    >
-                        <span className="text-xs font-medium text-muted-foreground truncate">
-                            {comp.label}
-                        </span>
-                    </div>
-                    <CardContent className="flex-1 overflow-auto min-h-0 flex flex-col justify-center px-3 py-2">
-                        <div className="w-full bg-secondary rounded-full h-2">
-                            <div
-                                className="bg-primary h-2 rounded-full transition-all"
-                                style={{
-                                    width: `${Math.min(100, percentage)}%`,
-                                }}
-                            />
-                        </div>
-                        <div className="text-right text-xs text-muted-foreground mt-1">
-                            {percentage.toFixed(1)}%
-                        </div>
-                    </CardContent>
-                </Card>
-            );
-
-        case "json":
-            return (
-                <Card
-                    key={index}
-                    className="bg-card border-border flex flex-col h-full overflow-hidden"
-                >
-                    <div
-                        className="qb-card-header flex-shrink-0 flex items-center justify-between px-3 border-b border-border/40 bg-card"
-                        style={{ height: "var(--qb-card-header-height)" }}
-                    >
-                        <span className="text-xs font-medium text-muted-foreground truncate">
-                            {comp.label}
-                        </span>
-                    </div>
-                    <CardContent className="flex-1 overflow-auto min-h-0 px-3 py-2">
-                        <pre className="text-xs text-muted-foreground">
-                            {JSON.stringify(data, null, 2)}
-                        </pre>
-                    </CardContent>
-                </Card>
-            );
-
-        default:
-            return (
-                <Card
-                    key={index}
-                    className="bg-card border-border flex flex-col h-full overflow-hidden"
-                >
-                    <div
-                        className="qb-card-header flex-shrink-0 flex items-center justify-between px-3 border-b border-border/40 bg-card"
-                        style={{ height: "var(--qb-card-header-height)" }}
-                    >
-                        <span className="text-xs font-medium text-muted-foreground truncate">
-                            {comp.label || comp.field || comp.type}
-                        </span>
-                    </div>
-                    <CardContent className="flex-1 overflow-auto min-h-0 px-3 py-2">
-                        <div className="text-xl font-bold">
-                            {String(data[comp.field || ""] || "N/A")}
-                        </div>
-                        {error && (
-                            <div className="text-xs text-destructive mt-2">
-                                Error: {error}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            );
-    }
-}
-
-// Render component group (multiple components from a group)
-function renderComponentGroup(
-    comp: ViewComponent & {
-        use_group?: string;
-        group_vars?: Record<string, string>;
-    },
-    sourceData: DataResponse | null,
-    index: number,
-) {
-    // For now, render as QuotaCard when group is specified
-    const data = sourceData?.data || {};
-    const groupVars = comp.group_vars || {};
-
     return (
-        <QuotaCard
-            key={index}
-            title={groupVars.label || comp.label}
-            data={data}
-            format={comp.format || "${value:.4f}"}
-            showProgress={true}
-            status={getStatus(
-                (data.usage as number) || 0,
-                (data.limit as number) || 0,
-            )}
+        <BaseSourceCard
+            component={comp}
+            sourceSummary={sourceSummary}
+            sourceData={sourceData}
+            onInteract={onInteract}
         />
     );
 }
@@ -1106,7 +875,7 @@ function Dashboard() {
                             ref={gridRef}
                             className={`grid-stack grid-stack-${viewConfig.layout_columns || 12}`}
                         >
-                            {viewConfig.items.map((item, index) => {
+                            {viewConfig.items.map((item) => {
                                 const sourceData = item.source_id
                                     ? dataMap[item.source_id]
                                     : null;
@@ -1148,7 +917,6 @@ function Dashboard() {
                                                 {renderComponent(
                                                     comp,
                                                     sourceData,
-                                                    index,
                                                     sourceSummary,
                                                     setInteractSource,
                                                 )}
@@ -1241,6 +1009,7 @@ function App() {
                             path="/integrations"
                             element={<IntegrationsPage />}
                         />
+                        <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/" element={<Dashboard />} />
                     </Routes>
                 </div>

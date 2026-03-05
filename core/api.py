@@ -29,12 +29,12 @@ _auth_manager = None
 _secrets = None
 _resource_manager = None
 _integration_manager = None
+_settings_manager = None
 
 
-
-def init_api(executor, data_controller, config, auth_manager, secrets_controller, resource_manager, integration_manager):
+def init_api(executor, data_controller, config, auth_manager, secrets_controller, resource_manager, integration_manager, settings_manager=None):
     """注入全局依赖（由 main.py 调用）。"""
-    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager
+    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager
     _executor = executor
     _data_controller = data_controller
     _config = config
@@ -42,6 +42,7 @@ def init_api(executor, data_controller, config, auth_manager, secrets_controller
     _secrets = secrets_controller
     _resource_manager = resource_manager
     _integration_manager = integration_manager
+    _settings_manager = settings_manager
 
 
 # ── 数据源列表 ────────────────────────────────────────
@@ -605,3 +606,73 @@ async def get_integration_sources(filename: str) -> list[dict]:
     related = [s for s in all_sources if s.integration_id == integration_id]
     return [s.model_dump() for s in related]
 
+
+# ── System Settings ───────────────────────────────────────────────────
+
+from core.settings_manager import SystemSettings
+
+@router.get("/settings")
+async def get_system_settings() -> SystemSettings:
+    """获取所有系统设置"""
+    if _settings_manager is None:
+        return SystemSettings()
+    return _settings_manager.load_settings()
+
+@router.put("/settings")
+async def update_system_settings(settings: SystemSettings) -> SystemSettings:
+    """更新所有系统设置，并在加密开关变更时触发全量迁移。"""
+    if _settings_manager is None:
+        return settings
+
+    old = _settings_manager.load_settings()
+    old_enc = old.encryption_enabled
+    new_enc = settings.encryption_enabled
+
+    # 保存新设置（写入 master_key 之前需先确保主密钥存在）
+    if new_enc and not settings.master_key:
+        # 如果新开启了加密但没有主密钥，先生成一个
+        settings.master_key = _settings_manager.get_or_create_master_key()
+
+    _settings_manager.save_settings(settings)
+
+    # 将新 master_key 注入 secrets_controller（以防刚切换）
+    # secrets_controller 会在 _master_key() 中重新读取 settings.json，
+    # 所以不需要额外注入，但可以触发迁移
+    if old_enc != new_enc and _secrets:
+        if new_enc:
+            # 开启加密：全量加密现有明文
+            logger.info("加密开关开启，开始全量加密 secrets...")
+            _secrets.inject_settings_manager(_settings_manager)
+            _secrets.migrate_encrypt_all()
+        else:
+            # 关闭加密：全量解密现有密文
+            logger.info("加密开关关闭，开始全量解密 secrets...")
+            _secrets.inject_settings_manager(_settings_manager)
+            _secrets.migrate_decrypt_all()
+
+    return settings
+
+
+# ── 密钥同步通行码（方案 A） ─────────────────────────────
+
+class MasterKeyImportRequest(BaseModel):
+    master_key: str
+
+@router.get("/settings/master-key/export")
+async def export_master_key() -> dict:
+    """导出当前主密钥（base64），用于设备间同步通行码。"""
+    if _settings_manager is None:
+        raise HTTPException(500, "Settings manager not initialized")
+    key = _settings_manager.get_or_create_master_key()
+    return {"master_key": key, "hint": "请妥善保管，将此通行码输入到目标设备以同步解密能力"}
+
+
+@router.post("/settings/master-key/import")
+async def import_master_key(req: MasterKeyImportRequest) -> dict:
+    """导入主密钥（用于其他设备同步解密）。不触发迁移，仅替换本地主密钥。"""
+    if _settings_manager is None:
+        raise HTTPException(500, "Settings manager not initialized")
+    settings = _settings_manager.load_settings()
+    settings.master_key = req.master_key
+    _settings_manager.save_settings(settings)
+    return {"message": "主密钥已导入，后续读写将使用新主密钥"}

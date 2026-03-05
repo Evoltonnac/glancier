@@ -3,38 +3,39 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-  {
-    variants: {
-      variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
-        outline: "text-foreground",
-        success: "border-transparent bg-emerald-500/15 text-emerald-500",
-        warning: "border-transparent bg-amber-500/15 text-amber-500",
-        error: "border-transparent bg-red-500/15 text-red-500",
-        info: "border-transparent bg-blue-500/15 text-blue-500",
-      },
+    "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+    {
+        variants: {
+            variant: {
+                default:
+                    "border-transparent bg-foreground text-background hover:opacity-90",
+                secondary:
+                    "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                destructive:
+                    "border-transparent bg-destructive text-destructive-foreground hover:opacity-90",
+                outline: "text-foreground",
+                success: "border-transparent bg-success/20 text-success",
+                warning: "border-transparent bg-warning/20 text-warning",
+                error: "border-transparent bg-error/20 text-error",
+                brand: "border-transparent bg-brand/20 text-brand",
+                info: "border-transparent bg-blue-500/20 text-blue-500",
+            },
+        },
+        defaultVariants: {
+            variant: "default",
+        },
     },
-    defaultVariants: {
-      variant: "default",
-    },
-  },
 );
 
 export interface BadgeProps
-  extends
-    React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+    extends
+        React.HTMLAttributes<HTMLDivElement>,
+        VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
-  return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
-  );
+    return (
+        <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    );
 }
 
 export { Badge, badgeVariants };

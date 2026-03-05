@@ -40,12 +40,12 @@ quota-board/
 ├── scripts/
 │   ├── dev_server.py           # 开发模式：watchdog 监控文件变更自动重启后端
 │   └── build.sh                # 生产打包：PyInstaller + Tauri Build
-├── ui/                         # [已废弃] Streamlit 前端
-└── data/                       # 数据文件目录（.gitignore 已忽略）
+└── data/                       # 数据文件目录（.gitignore 已忽略，建议只在本机存储）
     ├── sources.json            # 存储的数据源配置
     ├── views.json              # 存储的视图配置
-    ├── data.json               # TinyDB 数据文件
-    └── secrets.json            # 加密存储的密钥
+    ├── data.json               # TinyDB 数据文件（运行时状态与历史数据）
+    ├── secrets.json            # 密钥存储（API Key / Token 等，支持本地 AES-256 加密，使用 ENC: 前缀标识密文）
+    └── settings.json           # 系统设置（开机自启 / 代理 / 密钥加密开关 & 本地主密钥），为当前设备专属配置
 ```
 
 ## 技术栈
@@ -216,6 +216,21 @@ python main.py 9000     # 自定义端口
 | `status` | 当前状态：`active`（正常）、`suspended`（需交互）、`error`（错误）、`config_changed`（配置已更改） |
 | `message` | 状态描述信息 |
 | `interaction` | 交互请求详情，包含 `type`（如 `oauth_start`、`input_text`）和所需字段 |
+
+### 系统设置与密钥加密架构
+
+- **系统设置存储 (`data/settings.json`)**：用于保存当前设备的**客户端级配置**，包括：
+  - 是否开机自启 (`autostart`)：通过 Tauri `tauri-plugin-autostart` 在桌面端生效，避免与后端逻辑耦合。
+  - HTTP/HTTPS 代理 (`proxy`)：由 `core.settings_manager.SettingsManager` 统一读取，`core.executor.Executor` 在创建 HTTP 客户端时注入到 httpx 的 `proxies` 参数，仅影响 Python 后端的外部请求。
+  - 密钥加密开关与主密钥 (`encryption_enabled` / `master_key`)：控制 `secrets.json` 是否使用本地 AES-256-GCM 加密存储。
+- **密钥存储 (`data/secrets.json`)**：
+  - 所有 API Key / OAuth Token 通过 `core.secrets_controller.SecretsController` 统一管理，每个 `secret_id` 作为顶层 key。
+  - 当开启加密时，新写入的字段会使用 AES-256-GCM 加密，并以 `ENC:` 前缀标识密文（例如 `ENC:base64(...)`），读取时自动识别前缀并解密；关闭加密时则以明文存储。
+  - 切换加密开关时，会触发一次**全量迁移**：从明文 → 加密（开启时）或从加密 → 明文（关闭时），即使中断也不会造成读取崩溃，因为读取逻辑始终自适应 `ENC:` 前缀。
+- **主密钥与多端同步（方案 A）**：
+  - 主密钥为随机生成的 256-bit AES 密钥（base64 编码），仅存储在本机 `settings.json` 中，不建议通过文件同步工具跨设备共享。
+  - 后端提供 `/api/settings/master-key/export` 与 `/api/settings/master-key/import` 接口，对应前端“导出同步通行码 / 导入通行码”操作，用户可在设备间手动共享同一主密钥，以便在多端解密来自同一 `secrets.json` 的密文。
+  - 如不希望跨端同步密钥，可选择仅同步视图与数据源配置（`sources.json` / `views.json` / `data.json`），在每台新设备重新输入一次 API Key（方案 B）。
 
 前端可通过 `/api/sources` 获取这些信息，渲染对应的授权按钮或输入表单。
 

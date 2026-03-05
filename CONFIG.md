@@ -123,6 +123,9 @@ Flow 执行引擎支持三种变量类型，并按优先级检索：
 
 用于长期存储敏感信息（如 Token）。需要在步骤中显式声明 `secrets` 字段（以键值对形式）才会存储：
 
+- 实际存储载体为 `data/secrets.json`，由 `SecretsController` 统一管理。
+- 是否加密存储由系统设置中的 `encryption_enabled` 决定：开启时使用本地 AES-256-GCM 加密，并以 `ENC:` 前缀标识密文；关闭时以明文存储，但读取逻辑始终兼容 `ENC:` 前缀，便于在多端或切换过程中保持稳定。
+
 ```yaml
 - id: oauth_auth
   use: oauth

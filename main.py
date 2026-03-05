@@ -20,6 +20,7 @@ from core.executor import Executor
 from core.auth.manager import AuthManager
 from core.resource_manager import ResourceManager
 from core.integration_manager import IntegrationManager
+from core.settings_manager import SettingsManager
 from core import api
 
 
@@ -133,14 +134,20 @@ def create_app() -> FastAPI:
     # 鉴权管理器
     auth_manager = AuthManager(secrets_controller, app_config=config)
 
+    # 系统设置管理器
+    settings_manager = SettingsManager()
+
     # 执行器
-    executor = Executor(data_controller, secrets_controller)
+    executor = Executor(data_controller, secrets_controller, settings_manager)
 
     # 资源管理器 (JSON-based storage)
     resource_manager = ResourceManager()
 
     # 集成管理器 (YAML 文件管理)
     integration_manager = IntegrationManager()
+
+    # 将 SettingsManager 注入 SecretsController，开启自适应加解密
+    secrets_controller.inject_settings_manager(settings_manager)
 
     # 注入依赖到 API 模块
     api.init_api(
@@ -151,6 +158,7 @@ def create_app() -> FastAPI:
         secrets_controller=secrets_controller,
         resource_manager=resource_manager,
         integration_manager=integration_manager,
+        settings_manager=settings_manager,
     )
 
     # 注册 API 路由

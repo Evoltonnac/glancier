@@ -250,6 +250,47 @@ class ApiClient {
     if (!res.ok) throw new Error("Failed to reload config");
     return res.json();
   }
+  // --- System Settings ---
+
+  async getSettings(): Promise<SystemSettings> {
+    const res = await fetch(`${BASE_URL}/settings`);
+    if (!res.ok) throw new Error("Failed to fetch settings");
+    return res.json();
+  }
+
+  async updateSettings(settings: SystemSettings): Promise<SystemSettings> {
+    const res = await fetch(`${BASE_URL}/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) throw new Error("Failed to update settings");
+    return res.json();
+  }
+
+  async exportMasterKey(): Promise<{ master_key: string; hint: string }> {
+    const res = await fetch(`${BASE_URL}/settings/master-key/export`);
+    if (!res.ok) throw new Error("Failed to export master key");
+    return res.json();
+  }
+
+  async importMasterKey(masterKey: string): Promise<{ message: string }> {
+    const res = await fetch(`${BASE_URL}/settings/master-key/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ master_key: masterKey }),
+    });
+    if (!res.ok) throw new Error("Failed to import master key");
+    return res.json();
+  }
+}
+
+export interface SystemSettings {
+  autostart: boolean;
+  proxy: string;
+  encryption_enabled: boolean;
+  master_key?: string | null;
+  theme?: string;
 }
 
 export const api = new ApiClient();

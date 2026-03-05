@@ -234,7 +234,7 @@ export default function IntegrationsPage() {
         <TooltipProvider>
             <div className="flex h-full bg-background text-foreground">
                 {/* Sidebar */}
-                <aside className="w-64 border-r border-border bg-card/30 flex flex-col">
+                <aside className="w-64 border-r border-border bg-surface/30 flex flex-col">
                     <div className="p-4 border-b border-border">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
@@ -345,7 +345,7 @@ export default function IntegrationsPage() {
                     {selectedFile ? (
                         <>
                             {/* Toolbar */}
-                            <div className="h-14 border-b border-border px-4 flex items-center justify-between bg-card/50">
+                            <div className="h-14 border-b border-border px-4 flex items-center justify-between bg-surface/50">
                                 <div className="flex items-center gap-2">
                                     <h3 className="font-medium">
                                         {selectedFile}
@@ -429,7 +429,7 @@ export default function IntegrationsPage() {
                             </div>
 
                             {/* Source Management Section */}
-                            <div className="h-64 border-t border-border bg-card/30 flex flex-col">
+                            <div className="h-64 border-t border-border bg-surface/30 flex flex-col">
                                 <div className="p-3 border-b border-border flex items-center justify-between">
                                     <h3 className="text-sm font-semibold flex items-center gap-2">
                                         <Database className="w-4 h-4" />
@@ -533,7 +533,7 @@ export default function IntegrationsPage() {
                                             {sources.map((source) => (
                                                 <Card
                                                     key={source.id}
-                                                    className="bg-secondary/50"
+                                                    className="bg-surface border-border hover:border-foreground/20 transition-colors"
                                                 >
                                                     <CardContent className="p-3 flex items-center justify-between">
                                                         <div>
@@ -580,7 +580,7 @@ export default function IntegrationsPage() {
                         </>
                     ) : (
                         <div className="flex-1 flex items-center justify-center">
-                            <Card className="w-96">
+                            <Card className="w-96 bg-surface border-border">
                                 <CardHeader>
                                     <CardTitle>Select an Integration</CardTitle>
                                     <CardDescription>
