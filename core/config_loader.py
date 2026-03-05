@@ -43,7 +43,6 @@ class ViewComponentType(str, Enum):
     TABLE = "table"
     JSON = "json"
     BADGE = "badge"
-    QUOTA_CARD = "quota_card"
     STAT_GRID = "stat_grid"
     SOURCE_CARD = "source_card"
 
@@ -252,7 +251,7 @@ _CONFIG_SEARCH_PATHS = [
 
 def find_config_root() -> Path:
     """Find the root config file or directory."""
-    base = Path(os.getenv("QUOTA_BOARD_ROOT", "."))
+    base = Path(os.getenv("GLANCIER_DATA_DIR", "."))
     # Check for config directory
     config_dir = base / "config"
     if config_dir.is_dir():
