@@ -11,7 +11,7 @@ import yaml
 # 使用与 config_loader 相同的逻辑查找配置根目录
 def find_config_root() -> Path:
     """Find the root config directory."""
-    base = Path(os.getenv("QUOTA_BOARD_ROOT", "."))
+    base = Path(os.getenv("GLANCIER_DATA_DIR", "."))
     config_dir = base / "config"
     if config_dir.is_dir():
         return config_dir

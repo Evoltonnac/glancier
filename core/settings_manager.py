@@ -17,7 +17,7 @@ class SystemSettings(BaseModel):
     theme: str = "system" # can be 'light', 'dark', or 'system'
 
 
-_SETTINGS_DIR = Path(os.getenv("QUOTA_BOARD_ROOT", ".")) / "data"
+_SETTINGS_DIR = Path(os.getenv("GLANCIER_DATA_DIR", ".")) / "data"
 _SETTINGS_FILE = "settings.json"
 
 

@@ -13,7 +13,7 @@ from tinydb import Query, TinyDB
 
 logger = logging.getLogger(__name__)
 
-_DATA_DIR = Path(os.getenv("QUOTA_BOARD_ROOT", ".")) / "data"
+_DATA_DIR = Path(os.getenv("GLANCIER_DATA_DIR", ".")) / "data"
 
 
 class DataController:
