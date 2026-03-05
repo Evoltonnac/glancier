@@ -16,7 +16,6 @@ import {
     RefreshCw,
     Database,
     Trash2,
-    ExternalLink,
     Wrench,
     AlertTriangle,
     ChevronLeft,
@@ -56,6 +55,7 @@ import { AddWidgetDialog } from "./components/AddWidgetDialog";
 import IntegrationsPage from "./pages/Integrations";
 import SettingsPage from "./pages/Settings";
 import { TopNav } from "./components/TopNav";
+import { ScraperStatusBanner } from "./components/ScraperStatusBanner";
 
 // GridStack layout constants — keep in sync with --qb-row-height / --qb-grid-margin in index.css
 const GRID_ROW_HEIGHT = 60;
@@ -1132,48 +1132,16 @@ function Dashboard() {
                 </main>
 
                 {/* Scraper Status Banner */}
-                {(activeScraper || webviewQueue.length > 0) && (
-                    <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-top-2 fade-in duration-300">
-                        <div className="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-3 text-sm font-medium">
-                            <div className="flex items-center gap-2">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-200 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                                </span>
-                                <span>
-                                    正在后台抓取网页:{" "}
-                                    {sources.find((s) => s.id === activeScraper)
-                                        ?.name || "准备中..."}
-                                </span>
-                                {webviewQueue.length > 0 && (
-                                    <span className="text-blue-200 text-xs bg-blue-700/50 px-2 py-0.5 rounded-full ml-1">
-                                        剩余 {webviewQueue.length} 个
-                                    </span>
-                                )}
-                            </div>
-                            <div className="h-4 w-px bg-blue-400 mx-1"></div>
-                            <button
-                                onClick={handleShowScraperWindow}
-                                className="hover:text-blue-100 transition-colors flex items-center gap-1 text-xs bg-blue-500/50 hover:bg-blue-500/80 px-3 py-1.5 rounded-full"
-                            >
-                                <ExternalLink className="h-3 w-3" />
-                                显示浏览器
-                            </button>
-                            <button
-                                onClick={handleSkipScraper}
-                                className="hover:text-blue-100 transition-colors flex items-center gap-1 text-xs bg-blue-500/50 hover:bg-blue-500/80 px-3 py-1.5 rounded-full"
-                            >
-                                跳过当前
-                            </button>
-                            <button
-                                onClick={handleClearScraperQueue}
-                                className="text-red-100 hover:text-white transition-colors flex items-center gap-1 text-xs bg-red-500/60 hover:bg-red-500/90 px-3 py-1.5 rounded-full"
-                            >
-                                清空队列
-                            </button>
-                        </div>
-                    </div>
-                )}
+                <ScraperStatusBanner
+                    activeScraperName={
+                        sources.find((s) => s.id === activeScraper)?.name ||
+                        null
+                    }
+                    queueLength={webviewQueue.length}
+                    onShowWindow={handleShowScraperWindow}
+                    onSkip={handleSkipScraper}
+                    onClearQueue={handleClearScraperQueue}
+                />
             </div>
 
             <AddWidgetDialog
