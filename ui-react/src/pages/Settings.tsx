@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { TooltipProvider } from "../components/ui/tooltip";
 import { useTheme } from "../components/theme-provider";
+import { AppHeader } from "../components/AppHeader";
 
 const DEFAULT_SETTINGS: SystemSettings = {
     autostart: false,
@@ -116,17 +117,19 @@ export default function SettingsPage() {
         <TooltipProvider>
             <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
                 {/* Topbar */}
-                <header className="flex-shrink-0 border-b border-border px-6 py-3 bg-background flex items-center gap-3 z-50">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => navigate("/")}
-                        className="h-9 w-9 rounded-full hover:bg-foreground hover:text-background active:scale-95 transition-all text-muted-foreground focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-none"
-                    >
-                        <ChevronLeft className="w-5 h-5" />
-                    </Button>
-                    <h2 className="text-lg font-bold tracking-tight">设置</h2>
-                </header>
+                <AppHeader contentClassName="flex items-center gap-3 w-full">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => navigate("/")}
+                            className="h-9 w-9 rounded-full hover:bg-foreground hover:text-background active:scale-95 transition-all text-muted-foreground focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-none"
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                        </Button>
+                        <h2 className="text-lg font-bold tracking-tight">设置</h2>
+                    </div>
+                </AppHeader>
 
                 <main className="flex-1 overflow-y-auto p-6">
                     <div className="max-w-4xl mx-auto w-full flex flex-col h-full">

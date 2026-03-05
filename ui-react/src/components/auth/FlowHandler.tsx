@@ -134,6 +134,7 @@ export function FlowHandler({
                                         )
                                     }
                                     disabled={loading}
+                                    className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
                                 />
                             </div>
                         ))}
@@ -172,6 +173,7 @@ export function FlowHandler({
                                                     )
                                                 }
                                                 disabled={loading}
+                                                className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
                                             />
                                         </div>
                                     ))}

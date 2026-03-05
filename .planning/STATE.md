@@ -31,6 +31,11 @@ Progress: [██████████] 100%
 
 ## Performance Metrics
 
+**Quick Tasks Completed:**
+| Date | Task | Files Touched |
+|------|------|---------------|
+| 2026-03-04 | Q-01 Reduce contrast, Tauri titlebar, Editor theme | 4 |
+
 **Velocity:**
 - Total plans completed: 21
 - Average duration: -
@@ -64,7 +69,7 @@ Decisions are logged in PROJECT.md Key Decisions / constraints. Current high-imp
 - [08-02] Single TooltipProvider at header level instead of per-tooltip wrappers to reduce DOM overhead
 - [08-02] Native <button> elements instead of shadcn Button component for precise hover/focus styling control
 - [08-02] NavLink end prop on Dashboard link prevents matching all child routes
-- [08-01] Violet 262.1 83.3% 57.8% used for both --ring and --brand in light and dark mode for consistent focus UX
+- [08-01/Q-04] Violet used for --ring and --brand, with adjusted contrast: 262.1 83.3% 45% in light mode (darker) and 262.1 83.3% 70% in dark mode (lighter).
 - [08-01] Soft elevation: three-layer box-shadow on interactive cards instead of transform:scale
 - [08-01] Status indicator changed from header gradient to semantic dot (h-1.5 w-1.5 rounded-full)
 - [Init] 平台接入策略为平台无关（接口可访问即可接入）

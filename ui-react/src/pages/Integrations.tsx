@@ -45,8 +45,24 @@ import {
     ChevronRight,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
+import { useTheme } from "../components/theme-provider";
 
 export default function IntegrationsPage() {
+    useTheme(); // Ensure context is used if needed, or simply remove
+    const [isDarkTheme, setIsDarkTheme] = useState(false);
+
+    useEffect(() => {
+        const checkDark = () => document.documentElement.classList.contains("dark");
+        setIsDarkTheme(checkDark());
+
+        const observer = new MutationObserver(() => {
+            setIsDarkTheme(checkDark());
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+        return () => observer.disconnect();
+    }, []);
+
     const [integrations, setIntegrations] = useState<string[]>([]);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [content, setContent] = useState<string>("");
@@ -473,7 +489,7 @@ export default function IntegrationsPage() {
                                     onChange={(value) =>
                                         setContent(value || "")
                                     }
-                                    theme="vs-dark"
+                                    theme={isDarkTheme ? "vs-dark" : "light"}
                                     options={{
                                         minimap: { enabled: false },
                                         fontSize: 14,

@@ -4,18 +4,18 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
-    --surface: 0 0% 98%; /* FAFAFA */
-    --muted: 240 4.8% 95.9%;
+    --background: 0 0% 98%;
+    --foreground: 0 0% 15%;
+    --surface: 0 0% 96%; /* FAFAFA -> slightly darker */
+    --muted: 240 4.8% 93%;
     --muted-foreground: 240 3.8% 46.1%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 262.1 83.3% 57.8%; /* Violet / Brand focus ring */
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
+    --ring: 262.1 83.3% 45%; /* Darker Violet / Brand focus ring */
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 15%;
+    --popover: 0 0% 98%;
+    --popover-foreground: 0 0% 15%;
     --primary: 0 0% 9%;
     --primary-foreground: 0 0% 98%;
     --secondary: 240 4.8% 95.9%;
@@ -26,7 +26,7 @@
     --destructive-foreground: 0 0% 98%;
 
     /* Semantic Colors */
-    --brand: 262.1 83.3% 57.8%; /* Violet 600 */
+    --brand: 262.1 83.3% 45%; /* Darker Violet */
     --warning: 24.6 95% 53.1%; /* Orange 500 */
     --success: 142.1 70.6% 45.3%; /* Emerald 500 */
     --error: 0 84.2% 60.2%; /* Red 500 */
@@ -43,18 +43,18 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%; /* Zinc 950 */
-    --foreground: 0 0% 98%;
-    --surface: 240 5.9% 10%; /* Zinc 900 */
-    --muted: 240 3.7% 15.9%;
+    --background: 240 5% 12%; /* Zinc 900-ish */
+    --foreground: 0 0% 90%;
+    --surface: 240 5% 16%; /* Lighter surface */
+    --muted: 240 3.7% 20%;
     --muted-foreground: 240 5% 64.9%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 262.1 83.3% 57.8%; /* Violet / Brand focus ring */
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --border: 240 3.7% 20%;
+    --input: 240 3.7% 20%;
+    --ring: 262.1 83.3% 70%; /* Lighter Violet / Brand focus ring */
+    --card: 240 5% 12%;
+    --card-foreground: 0 0% 90%;
+    --popover: 240 5% 12%;
+    --popover-foreground: 0 0% 90%;
     --primary: 0 0% 98%;
     --primary-foreground: 240 5.9% 10%;
     --secondary: 240 3.7% 15.9%;
@@ -65,7 +65,7 @@
     --destructive-foreground: 0 0% 98%;
 
     /* Semantic Colors */
-    --brand: 262.1 83.3% 57.8%; /* Violet 600 */
+    --brand: 262.1 83.3% 70%; /* Lighter Violet */
     --warning: 24.6 95% 53.1%; /* Orange 500 */
     --success: 142.1 70.6% 45.3%; /* Emerald 500 */
     --error: 0 84.2% 60.2%; /* Red 500 */

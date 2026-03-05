@@ -155,25 +155,32 @@ export function AddWidgetDialog({
                   {templates.map((tpl, idx) => (
                     <Card
                       key={idx}
-                      className={`cursor-pointer border-2 transition-all ${
+                      className={`cursor-pointer transition-all ${
                         selectedTemplateIdx === idx
-                          ? "border-primary bg-primary/5"
-                          : "border-transparent hover:border-primary/50"
-                      }`}
+                          ? "bg-primary text-primary-foreground shadow-md border-primary"
+                          : "border-border hover:border-border/80 hover:shadow-soft-elevation hover:-translate-y-0.5"
+                      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
                       onClick={() => setSelectedTemplateIdx(idx)}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedTemplateIdx(idx);
+                        }
+                      }}
                     >
                       <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between space-y-0">
                         <CardTitle className="text-sm font-medium">
                           {tpl.label || tpl.type}
                         </CardTitle>
                         {selectedTemplateIdx === idx ? (
-                          <Check className="h-4 w-4 text-primary" />
+                          <Check className="h-4 w-4 text-primary-foreground" />
                         ) : (
                           <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                         )}
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <CardDescription className="text-xs truncate">
+                        <CardDescription className={`text-xs truncate ${selectedTemplateIdx === idx ? "text-primary-foreground/80" : ""}`}>
                           类型: {tpl.type}
                         </CardDescription>
                       </CardContent>

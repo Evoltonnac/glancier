@@ -36,3 +36,10 @@ export function evaluateTemplate(template: any, data: any): any {
     return val !== undefined && val !== null ? String(val) : match;
   });
 }
+
+/**
+ * Detects if the application is currently running inside the Tauri window.
+ */
+export function isTauri(): boolean {
+  return typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
+}
