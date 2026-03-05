@@ -10,10 +10,15 @@ This roadmap manages the delivery path for Glancier. Completed milestones are ar
 
 ## Active Phases
 
-- [ ] **Phase 09: 品牌与精神重塑 (Rebranding & Documentation)**
+- [x] **Phase 09: 品牌与精神重塑 (Rebranding & Documentation)**
   - 核心目标：清理旧有心智模型，确立新的术语标准并体现在文档中。
   - 取消 Quota 的狭隘定义，重构为 Metric、Signal 或 Integration Data。
   - 重写架构说明、PROJECT.md 和 README.md。
+  - **Plans:** 4 plans
+    - [x] 09-01-PLAN.md — Establish terminology definitions and update AI instructions
+    - [x] 09-02-PLAN.md — Update core project positioning docs (README, PROJECT)
+    - [x] 09-03-PLAN.md — Update architecture and configuration semantics
+    - [x] 09-04-PLAN.md — Scrub deep-dive documentation for legacy terminology
 - [ ] **Phase 10: 代码语义更新与组件重构 (Codebase Semantic Update)**
   - 核心目标：将设计理念落实到代码库，消除项目中的“技术债”与“命名债”。
   - 品牌更名，ICON/品牌色更新，全局变量与配置更名。

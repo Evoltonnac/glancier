@@ -6,7 +6,7 @@ Your goal is to guide the implementation of a high-density, mission-critical das
 Before proposing or writing any code, first build a clear mental model of the current system:
 - Identify the tech stack: React, Vite, Tailwind CSS, shadcn/ui, Lucide Icons, and GridStack.js for the dashboard layout.
 - Understand the existing design tokens (colors, spacing, typography, radii), global styles, and utility patterns defined in `ui-react/src/index.css` and `tailwind.config.js`.
-- Review the current component architecture: `TopNav` (with window dragging for Tauri), `BaseSourceCard` (the draggable widget container), and micro-widgets like `QuotaBar`.
+- Review the current component architecture: `TopNav` (with window dragging for Tauri), `BaseSourceCard` (the draggable **Bento Card** container), and micro-widgets like `ProgressBar`.
 - Note the density constraints: Grid row height is fixed at `60px`, with a `12px` margin between widgets.
 
 Ask the user focused questions to understand the user's goals. Do they want:
@@ -40,7 +40,7 @@ Imagine you are building a high-end, mission-critical aviation dashboard for dev
 
 ### Core Principle: Density over Breathing Room
 
-**Maximum Signal, Minimal Noise.** When faced with a design trade-off, prioritize **Density over Breathing Room**. We must fit more critical metrics, quotas, and data on a single screen without requiring the user to scroll. However, this density must not result in chaos; it is controlled through strict grid alignment (`GridStack.js`), tabular numbers, and the absolute removal of purely decorative elements.
+**Maximum Signal, Minimal Noise.** When faced with a design trade-off, prioritize **Density over Breathing Room**. We must fit more critical **Metrics**, **Signals**, and data on a single screen without requiring the user to scroll. However, this density must not result in chaos; it is controlled through strict grid alignment (`GridStack.js`), tabular numbers, and the absolute removal of purely decorative elements.
 
 ### Visual Vibe (The "Black Speech" of UI)
 
@@ -71,7 +71,7 @@ The system looks native and perfectly tuned in both Light and Dark modes. Backgr
 - **Dark Mode**: Zinc 900 (`#18181B`) surface, Zinc 950 (`#09090B`) background.
 
 ### 2. Oversized, Monospaced Metrics
-Core data points (quotas, API usage) are the heroes. They use large font sizes (3xl to 5xl) and **must** use `tabular-nums` to prevent layout jitter when data updates in real-time.
+Core data points (**Metrics**, Integration Data) are the heroes. They use large font sizes (3xl to 5xl) and **must** use `tabular-nums` to prevent layout jitter when data updates in real-time.
 
 ### 3. Compact but Breathable Layouts
 Spacing is tight (`p-3` or `gap-3`) to allow many metrics on a single screen. Elements are starkly separated by 1px hairlines (`border-border/40`) or subtle background color shifts (`bg-surface/50`).
@@ -82,8 +82,8 @@ Depth is primarily established using subtle 1px borders and slightly elevated ba
 
 ### 5. Strategic Accent Colors & Brand Tone
 - **Brand (Violet)**: Primary emphasis, active selections (`bg-brand`).
-- **Orange**: Warnings, nearing-limit quotas (`bg-warning`).
-- **Green**: Success, healthy metrics (`bg-success`).
+- **Orange**: Warnings, nearing-limit metrics (`bg-warning`).
+- **Green**: Success, healthy signals (`bg-success`).
 - **Red**: Critical errors, destructive actions (`bg-error`).
 These colors are often used as thin progress bar tracks or as **Server Rack Style Indicator Lights** (4px wide, 12px tall vertical pills with a subtle glow).
 
@@ -115,7 +115,7 @@ These colors are often used as thin progress bar tracks or as **Server Rack Styl
 ## Component Stylings
 
 ### Cards / Dashboard Widgets
-- **Container**: `BaseSourceCard` uses `bg-surface`, `border-border`, and `rounded-xl`.
+- **Container**: `BaseSourceCard` (**Bento Card**) uses `bg-surface`, `border-border`, and `rounded-xl`.
 - **Header**: `qb-card-header` acts as a drag handle (height: ~52px). Contains the title and the **Indicator Light**.
 - **Indicator Light**: A vertical pill on the left side of the header showing status (Success/Warning/Error) with a subtle glow shadow.
 - **Content Area**: Padding `px-4 py-3`, using `bg-surface/50` to distinguish from the header.

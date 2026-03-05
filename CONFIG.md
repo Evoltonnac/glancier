@@ -1,16 +1,16 @@
-# CONFIG.md - 配置与集成指南
+# CONFIG.md - 配置与集成指南 (Glancier)
 
-本文档详细说明 Quota Board 的配置架构。
+本文档详细说明 **Glancier** (原 Quota Board) 的配置架构。
 
 ## 架构概述
 
-Quota Board 采用双层配置模式：
+Glancier 采用双层配置模式，旨在实现**个人数据聚合器**的灵活性：
 
-1. **Integration（集成）**：YAML 配置文件，定义通用的 API 请求逻辑和**视图模板**。
-2. **Source & View（数据源与视图）**：JSON 文件（通过 API 管理），引用 Integration 并配置具体实例。
+1. **Integration (集成)**：YAML 配置文件，定义通用的数据获取逻辑 (**Flows**) 和视图模板 (**View Templates**)。
+2. **Source & View (数据源与视图)**：JSON 文件（通过 API 管理），引用 Integration 并配置具体实例。
 
 ```
-YAML (Integration + Templates) ──→ API/JSON (Sources + Views) ──→ React UI
+YAML (Flows + Templates) ──→ API/JSON (Sources + Views) ──→ Bento Grid UI
 ```
 
 配置文件路径（Integration）：
@@ -19,7 +19,34 @@ YAML (Integration + Templates) ──→ API/JSON (Sources + Views) ──→ Re
 
 ---
 
-## 一、集成配置 (`integrations`)
+## 一、术语变更与兼容性说明 (Terminology & Compatibility)
+
+随着从 "Quota Board" 到 "Glancier" 的品牌重塑，我们对配置中的术语进行了标准化。
+
+### 1.1 核心术语映射
+
+| 旧术语 | 新术语 (推荐) | 说明 |
+|------|------------|------|
+| Quota | **Metric** | 指标。数值型数据，如 `usage`, `balance`。 |
+| Quota | **Signal** | 信号。状态型数据，如 `status`, `is_active`。 |
+| Quota Board | **Glancier** | 项目名称。 |
+
+### 1.2 Widget 类型重命名 (v1.0 迁移)
+
+为符合 **Bento Grid** 设计哲学，以下 Widget 类型已重命名。
+
+| 旧 `type` | 新 `type` (推荐) | 说明 |
+|-----------|----------------|------|
+| `quota_bar` | **`progress_bar`** | 进度条组件。 |
+| `quota_card` | **`bento_card`** | (Legacy) 原配额卡片，建议拆分为多个微组件。 |
+| `hero_metric` | **`hero_metric`** | 保持不变，用于突出显示核心指标。 |
+
+**向后兼容性声明**：
+在 v1.0 版本中，后端与前端将继续支持 `quota_bar` 和 `quota_card` 等旧名称。系统会自动将其映射到新的渲染逻辑，因此您现有的配置文件无需立即修改即可运行。但建议在新创建的集成中使用推荐的新名称。
+
+---
+
+## 二、集成配置 (`integrations`)
 
 将通用的 API 请求逻辑抽离为模版，供多个数据源复用。
 
@@ -32,7 +59,7 @@ integrations:
     description: <描述>
     flow:                    # Flow 编排步骤
       - ...
-    templates:               # [新增] 视图模板列表
+    templates:               # 视图模板列表
       - ...
 ```
 
@@ -44,11 +71,14 @@ integrations:
 integrations:
   - id: openrouter_keys
     templates:
-      - type: metric
+      - type: hero_metric        # 核心指标
         field: total_usage
         label: "Total Usage"
         format: "${value:.4f}"
-      - type: badge
+      - type: progress_bar       # 进度条 (原 quota_bar)
+        field: usage_percent
+        label: "Usage"
+      - type: badge              # 状态信号 (信号)
         field: status
         label: "Status"
 ```
@@ -57,18 +87,16 @@ integrations:
 
 | 类型 | 说明 |
 |------|------|
-| `metric` | 指标卡片 |
+| `hero_metric` | 核心大字指标 |
+| `progress_bar` | 进度条 (替代 `quota_bar`) |
 | `line_chart` | 折线图 |
-| `bar_chart` | 柱状图 |
-| `table` | 数据表格 |
-| `json` | JSON 原始数据 |
-| `badge` | 状态徽章 |
-| `quota_card` | 配额卡片 |
+| `badge` | 状态徽章 (用于信号) |
+| `key_value_grid` | 键值对网格 |
 | `stat_grid` | 统计网格 |
 
 ---
 
-## 二、Flow 编排配置
+## 三、Flow 编排配置
 
 当单一的 HTTP 请求无法满足需求时（例如需要先获取 Token 再请求数据，或需要 OAuth 授权后获取列表），使用 `flow` 定义一系列有序的执行步骤。
 
@@ -197,7 +225,7 @@ integrations:
 
 ---
 
-## 三、步骤类型详解
+## 四、步骤类型详解
 
 ### `api_key` - API Key 注入
 
@@ -298,7 +326,7 @@ integrations:
 
 ---
 
-## 四、数据源管理 (Sources)
+## 五、数据源管理 (Sources)
 
 **注意**：数据源配置已从 YAML 迁移到 JSON 存储，通过 API 管理。
 
@@ -312,7 +340,7 @@ integrations:
 {
   "id": "my_source",
   "integration_id": "openrouter_keys_apikey",
-  "name": "My OpenRouter Keys",
+  "name": "My OpenRouter Integration",
   "config": {
     "api_key": "sk-or-xxx"
   },
@@ -334,7 +362,7 @@ integrations:
 
 ---
 
-## 五、视图管理 (Views)
+## 六、视图管理 (Views)
 
 **注意**：视图配置已从 YAML 迁移到 JSON 存储，通过 API 管理。
 
@@ -369,7 +397,7 @@ integrations:
 |------|------|------|
 | `id` | string | 唯一标识符 |
 | `name` | string | 视图名称 |
-| `layout_columns` | int | 网格列数（默认12，支持24） |
+| `layout_columns` | int | 网格列数（默认 12，支持 24） |
 | `items` | array | 视图项列表 |
 
 ### ViewItem 字段
@@ -387,20 +415,21 @@ integrations:
 
 ---
 
-## 六、组件组 (`component_groups`) [Legacy]
+## 七、组件组 (`component_groups`) [Legacy]
 
 > **注意**：此功能已逐步被 Integration Templates 取代。建议在新配置中使用 `templates` 字段。
 
 ---
 
-## 七、快速集成清单
+## 八、快速集成清单
 
 要接入一个新的第三方平台，按以下步骤操作：
 
-1. **确认鉴权方式**：API Key? OAuth?
-2. **找到目标 API**：确定 URL、方法、需要的参数
-3. **编写 Flow 步骤**：在 `integrations` YAML 中定义 flow 编排
-4. **定义视图模板**：在 `integrations` YAML 中添加 `templates`
-5. **创建数据源**：调用 `POST /api/sources` 创建 JSON 配置
-6. **创建视图**：调用 `POST /api/views` 创建视图布局
-7. **重启后端**：`python main.py`，观察日志确认采集成功
+1. **术语核对**：根据 [docs/terminology.md](docs/terminology.md) 确定数据类型 (Metric/Signal)。
+2. **确认鉴权方式**：API Key? OAuth?
+3. **找到目标 API**：确定 URL、方法、需要的参数。
+4. **编写 Flow 步骤**：在 `integrations` YAML 中定义 flow 编排。
+5. **定义视图模板**：在 `integrations` YAML 中使用 `templates` (推荐使用 `progress_bar` 代替 `quota_bar`)。
+6. **创建数据源**：调用 `POST /api/sources` 创建 JSON 配置。
+7. **创建视图**：调用 `POST /api/views` 创建视图布局。
+8. **重启后端**：启动 FastAPI 服务，观察日志确认采集成功。

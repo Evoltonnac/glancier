@@ -1,12 +1,12 @@
 # WebView Scraper Architecture & Implementation Guide
 
-This document outlines the architecture and implementation details of Quota Board's WebView scraping engine.
+This document outlines the architecture and implementation details of **Glancier's** WebView scraping engine.
 
 ## 1. Overview & Core Philosophy
 
 Traditional data fetching relies on simple HTTP requests (`requests`/`httpx`). However, modern platforms frequently employ complex Client-Side Rendering (CSR), CAPTCHAs, or dynamic cookies that are difficult to bypass programmatically. 
 
-Instead of embedding a heavy, brittle headless browser like Playwright or Selenium into the backend, Quota Board leverages its desktop nature. It utilizes Tauri's native, lightweight `WebviewWindow` capabilities to silently scrape data in the background. It is highly efficient, uses the user's native OS web engine (WKWebView on Mac, Edge WebView2 on Windows), and effortlessly handles modern JavaScript execution.
+Instead of embedding a heavy, brittle headless browser like Playwright or Selenium into the backend, Glancier leverages its desktop nature. It utilizes Tauri's native, lightweight `WebviewWindow` capabilities to silently scrape data in the background. It is highly efficient, uses the user's native OS web engine (WKWebView on Mac, Edge WebView2 on Windows), and effortlessly handles modern JavaScript execution.
 
 ## 2. Architecture & Data Flow
 

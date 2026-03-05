@@ -1,52 +1,46 @@
-# Architecture
+# Architecture - Glancier (formerly Quota Board)
 
-**Analysis Date:** 2026-02-28
+**Analysis Date:** 2026-03-05
 
 ## Pattern Overview
 
-**Overall:** Configuration-driven modular monolith with a desktop shell
+**Overall:** Configuration-driven **Personal Data Aggregator & Hub** with a Bento Grid UI.
 
 **Key Characteristics:**
-- Integration behavior is declared in YAML (`config/integrations/*.yaml`) and resolved into runtime source configs by `core/config_loader.py`
-- Backend is a single FastAPI service with injected shared services from `main.py` into module-level router state in `core/api.py`
-- Frontend is a single React SPA (`ui-react/src/App.tsx`) with Tauri native bridge (`ui-react/src-tauri/src/lib.rs`) for desktop-only capabilities
+- **Flow -> Bento Grid Pipeline**: Integration behavior is declared as a `flow` in YAML (`config/integrations/*.yaml`) and visualized using View Templates.
+- **Decoupled Data Fetching**: Data is treated as generic **Integration Data**, categorized into **Metrics** (numeric) or **Signals** (state/boolean).
+- **Desktop-First Execution**: A modular monolith backend (FastAPI) wrapped in a Tauri shell for native scraping and local-first persistence.
 
 ## Layers
 
 **Configuration Layer:**
-- Purpose: Define integration/auth/request/flow metadata
+- Purpose: Define integration flows, auth strategies, and **Bento Card** templates.
 - Location: `config/integrations/*.yaml`, `core/config_loader.py`
 - Contains: Pydantic enums/models (`AuthType`, `StepType`, `SourceConfig`, `IntegrationConfig`)
-- Depends on: `yaml`, `pydantic`
 - Used by: `main.py`, `core/api.py`, `core/auth/manager.py`, `core/executor.py`
 
-**Execution Layer:**
-- Purpose: Execute flow steps, manage source runtime state, persist results
+**Execution Layer (The Flow Engine):**
+- Purpose: Execute multi-step flows to extract **Integration Data**.
 - Location: `core/executor.py`, `core/source_state.py`
-- Contains: step runner (`http`, `oauth`, `extract`, `script`, `webview`), interaction exception mapping
+- Contains: Step runners (`http`, `oauth`, `extract`, `script`, `webview`), interaction handling.
 - Depends on: `core/secrets_controller.py`, `core/data_controller.py`, `httpx`, `jsonpath_ng`
-- Used by: `main.py` startup refresh and refresh APIs in `core/api.py`
 
-**Persistence Layer:**
-- Purpose: Store source/view config and runtime data locally
+**Persistence Layer (Local-First):**
+- Purpose: Store Metrics, Signals, configurations, and encrypted secrets locally.
 - Location: `core/resource_manager.py`, `core/data_controller.py`, `core/secrets_controller.py`, `core/settings_manager.py`
-- Contains: JSON file CRUD + TinyDB latest/history tables + encrypted secrets support
-- Depends on: local filesystem under `data/`
-- Used by: API endpoints in `core/api.py`, executor in `core/executor.py`
+- Contains: JSON file CRUD + TinyDB state/history + AES-256-GCM secret support.
+- Environment Variable: `GLANCIER_DATA_DIR` (formerly `QUOTA_BOARD_ROOT`).
 
 **API Layer:**
-- Purpose: Expose app capabilities to frontend/desktop client
+- Purpose: Expose data hub capabilities to the client.
 - Location: `main.py`, `core/api.py`
-- Contains: `/api/sources`, `/api/data`, `/api/refresh`, `/api/integrations/files`, `/api/settings`, OAuth and interaction endpoints
-- Depends on: execution/persistence/config layers
-- Used by: frontend API client `ui-react/src/api/client.ts`
+- Contains: `/api/sources`, `/api/data`, `/api/refresh`, `/api/integrations/files`.
 
-**Presentation Layer:**
-- Purpose: Render dashboard, integrations editor, settings, interaction dialogs
+**Presentation Layer (Bento UI):**
+- Purpose: Render a high-density dashboard using modular **Micro-Widgets**.
 - Location: `ui-react/src/App.tsx`, `ui-react/src/pages/*.tsx`, `ui-react/src/components/**/*`
-- Contains: GridStack dashboard, flow interaction UI, editor-driven integration management
-- Depends on: API client `ui-react/src/api/client.ts`, design system primitives in `ui-react/src/components/ui/*`
-- Used by: Browser runtime and Tauri window
+- Philosophy: **Bento Grid** - Organized, modular tiles displaying prioritized data.
+- Components: `BaseSourceCard`, `ProgressBars` (formerly Quota Bars), `MetricSignals`.
 
 **Desktop Bridge Layer:**
 - Purpose: Provide native autostart and webview scraping workflows

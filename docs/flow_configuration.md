@@ -1,10 +1,10 @@
-# Quota Board Flow Configuration Guide
+# Glancier Flow Configuration Guide
 
-This document describes how to configure the `flow` execution pipeline for your integrations in Quota Board. The flow configuration allows you to define a sequence of steps to handle complex authentication and data extraction scenarios.
+This document describes how to configure the `flow` execution pipeline for your integrations in **Glancier**. The flow configuration allows you to define a sequence of steps to handle complex authentication and data extraction scenarios for various **Metrics** and **Signals**.
 
 ## Overview
 
-The `flow` configuration replaces the legacy single-step extraction method with a robust, sequential pipeline of steps. It is designed to handle complex authentication flows (like OAuth or browser-based scraping) and multi-request data fetching.
+The `flow` configuration is a robust, sequential pipeline of steps designed to handle complex authentication flows (like OAuth or browser-based scraping) and multi-request data fetching.
 
 A key feature of the Flow engine is its **controlled suspension**: if a step requires user interaction (such as entering an API key or authorizing an OAuth application), the execution will pause, surface an interactive request to the user via the UI, and resume once the required credentials are provided.
 
@@ -28,7 +28,7 @@ Arguments within `args` can dynamically embed data from previous steps using the
 
 ## Blocking Auth Tools (鉴权相关工具)
 
-These tools act as check-points. If the required credentials (like tokens or cookies) are not found in the `SecretsController`, the flow execution suspends, and an interactive prompt is surfaced in the Quota Board UI. Once the user provides the necessary input or authorization, the flow resumes.
+These tools act as check-points. If the required credentials (like tokens or cookies) are not found in the `SecretsController`, the flow execution suspends, and an interactive prompt is surfaced in the Glancier UI. Once the user provides the necessary input or authorization, the flow resumes.
 
 ### api_key
 Use this step to prompt the user for a standard text string, such as a Bearer token, password, or API Key.
@@ -39,24 +39,15 @@ Use this step to prompt the user for a standard text string, such as a Bearer to
 **`args` Properties:**
 *   `label` *(string, default: "API Key")*: The title of the input field presented to the user.
 *   `description` *(string, default: "Please enter the API Key")*: Explanatory text under the input field.
-*   `message` *(string, default: "Missing API Key for [Source Name]")*: The primary instruction text above the input field.
-
-**Outputs:**
-By default, the entered value is output dynamically as `api_key`. You can route it to a new flow variable using the `outputs` property (e.g., `outputs: {"api_key": "access_token"}`).
 
 ### oauth
-Triggers a standard standard OAuth 2.0 authorization code flow. It redirects the user to the provider's authorization page.
-
-**`args` Properties:**
-*   `client_id` *(string, optional)*: If omitted, the UI will prompt the user to input their Client ID.
-*   `client_secret` *(string, optional)*: If omitted, the UI will prompt the user to input their Client Secret.
-*   `doc_url` *(string, optional)*: A link to external documentation guiding the user on where to generate the OAuth credentials.
+Triggers a standard OAuth 2.0 authorization code flow. It redirects the user to the provider's authorization page.
 
 **Outputs:**
 Upon successful authorization, the retrieved token is output as `access_token` and automatically stored securely.
 
 ### curl
-A tool for advanced integrations that require "reverse-engineering" browser requests. It prompts the user to paste a raw cURL command copied from their browser's Developer Tools, then parses it to extract required headers or cookies.
+A tool for advanced integrations that require "reverse-engineering" browser requests. It prompts the user to paste a raw cURL command copied from their browser's Developer Tools.
 
 > [!WARNING]
 > This method may violate the Terms of Service of third-party platforms.
@@ -64,42 +55,18 @@ A tool for advanced integrations that require "reverse-engineering" browser requ
 **`secrets` Mapping:**
 *   `curl_command` *(string, default: "curl_command")*: The internal name to store the raw command.
 
-**`args` Properties:**
-*   `label` *(string, default: "cURL Request")*: The title of the input field.
-*   `description` *(string, default: "Paste your cURL command here")*: Explanatory text under the input field.
-*   `message` *(string, default: "Provide cURL request for [Source Name]")*: The primary instruction text.
-*   `warning_message` *(string, optional)*: **Crucial for compliance.** Displays a prominent yellow warning banner to the user (e.g., "Using this integration may violate ToS.").
-
-**Outputs:**
-The tool parses the `--header` or `-H` flags from the cURL command.
-*   To extract a specific header, define the mapping in `outputs` (e.g., `outputs: {"authorization": "auth_token"}`).
-*   To extract all headers as a dictionary, use `outputs: {"headers": "all_headers"}`.
-
 ### webview
-Executes a headless or background browser session to programmatically scrape data or intercept API network requests. This is useful for platforms that heavily rely on complex browser-side rendering or cookies.
+Executes a background browser session to programmatically extract **Integration Data** or intercept API network requests. This is useful for platforms without public APIs or those relying on complex CSR.
 
 **`secrets` Mapping:**
 *   `webview_data` *(string, default: "webview_data")*: The internal name used to store the extracted data.
-
-**`args` Properties:**
-*   `url` *(string, required)*: The URL to load in the background browser.
-*   `script` *(string, optional)*: A JavaScript code snippet injected into the page to extract DOM content, `localStorage`, or cookies.
-*   `intercept_api` *(string, optional)*: A URL substring or Regex pattern. The webview will capture the JSON response of matching network requests.
-
-**Outputs:**
-The tool outputs mapping values depending on the `script` return value or the intercepted API payload body.
 
 ## Data Processing Tools
 
 These tools handle standard data acquisition and manipulation, generally executing without user interruption.
 
 ### http
-Executes a standard HTTP request to fetch data from an API.
-
-**`args` Properties:**
-*   `url` *(string, required)*: The endpoint URL. Supports variable interpolation.
-*   `method` *(string, default: "GET")*: The HTTP method (e.g., `GET`, `POST`).
-*   `headers` *(object, optional)*: A dictionary of HTTP headers. This is commonly used to inject authorization tokens retrieved from previous steps (e.g., `{"Authorization": "Bearer {access_token}"}`).
+Executes a standard HTTP request to fetch **Integration Data** from an API.
 
 **Outputs:**
 The underlying engine returns three objects that you can map to your custom variables:
@@ -108,35 +75,22 @@ The underlying engine returns three objects that you can map to your custom vari
 *   `headers`: A dictionary of the response headers.
 
 ### extract
-Extracts specific values from complex data structures (like API responses or web scraping results) into isolated variables.
+Extracts specific **Metrics** or **Signals** from complex data structures into isolated variables.
 
 **`args` Properties:**
-*   `source` *(any, required)*: The target data structure to extract from (usually injected via interpolation, e.g., `{http_response}`).
-*   `type` *(string, default: "jsonpath")*: The extraction method. Supports `"jsonpath"` (for nested JSON querying using JSONPath syntax) or `"key"` (for simple dictionary key lookups, e.g., for headers).
-*   `expr` *(string, required)*: The expression used for extraction (e.g., `$.data.attributes.balance` or `ratelimit-remaining`).
-
-**Outputs:**
-Maps the extracted single value to your specified variable name.
-
-### script
-Allows executing custom Python code to perform complex data cleansing, calculations, or logic formatting.
-
-**`args` Properties:**
-*   `code` *(string, required)*: The Python code snippet to execute.
-
-**Execution Environment & Outputs:**
-The script runs in a safe local environment where all previously generated variables (`outputs` from prior steps and global `context`) are injected as local variables.
-You can directly read or modify these variables inside the script. The engine will inspect the local environment after the script finishes and automatically capture any variable names you defined in the `outputs` mapping.
+*   `source` *(any, required)*: The target data structure to extract from (e.g., `{http_response}`).
+*   `type` *(string, default: "jsonpath")*: The extraction method (`"jsonpath"` or `"key"`).
+*   `expr` *(string, required)*: The expression used for extraction (e.g., `$.data.attributes.balance`).
 
 ## Full Example
 
-The following example demonstrates a complete flow for the "Soniox" integration. It uses the `webview` step to silently capture dashboard data in the background without requiring user interaction, then utilizes multiple `extract` steps to pull specific billing and usage metrics.
+The following example demonstrates a complete flow for the "Soniox" integration. It uses the `webview` step to capture dashboard data, then utilizes multiple `extract` steps to pull specific billing and usage **Metrics**.
 
 ```yaml
 integrations:
   - id: soniox_dashboard_webview
     name: "Soniox Dashboard (WebView)"
-    description: "Silently fetches Soniox billing data via a background webview."
+    description: "Silently fetches Soniox data via a background webview."
 
     flow:
       # Step 1: Background scraping
@@ -146,10 +100,9 @@ integrations:
           url: "https://console.soniox.com/"
           intercept_api: "/dashboard/"
         outputs:
-          # Maps the intercepted API payload to a variable named 'dashboard_response'
           dashboard_response: "dashboard_response"
 
-      # Step 2: Extract available balance
+      # Step 2: Extract available balance (Metric)
       - id: parse_billing
         use: extract
         args:
@@ -157,10 +110,9 @@ integrations:
           type: "jsonpath"
           expr: "$.billing.available_balance_usd"
         outputs:
-          # Exposes the value for the View Template
           available_balance: "available_balance"
 
-      # Step 3: Extract current month usage
+      # Step 3: Extract current month usage (Metric)
       - id: parse_usage
         use: extract
         args:
@@ -168,14 +120,12 @@ integrations:
           type: "jsonpath"
           expr: "$.mtd_usage.total_paid_amount_usd"
         outputs:
-          # Exposes the value for the View Template
           total_usage: "total_usage"
 
     # View templates can now utilize {available_balance} and {total_usage}
-    # exactly as they were defined in the final flow outputs.
     templates:
-      - label: "Soniox Quota"
-        type: "source_card"
+      - label: "Soniox Metrics"
+        type: "bento_card"
         ui:
           title: "Soniox"
           icon: "🎙️"

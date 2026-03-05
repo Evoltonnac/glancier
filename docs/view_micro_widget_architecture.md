@@ -1,106 +1,88 @@
-# Quota Board View & Micro-Widget Architecture Specs
+# Glancier View & Micro-Widget Architecture Specs
 
 ## Core Principles
 
-The view layer of this project evolves towards a "low-code / configuration-driven" approach, and must strictly adhere to the following four core principles:
+The view layer of **Glancier** evolves towards a "low-code / configuration-driven" approach, adhering to the **Bento Grid** philosophy:
 
 1. **Purely Display-Oriented**
-   * **Scope Constraint:** All Micro-Widgets are **stateless information renderers**. Their sole mission is to map extracted JSON data into visual elements.
-   * **Interaction Boundaries:** Lightweight interactions within the presentation layer are allowed (e.g., clicking to switch time dimensions on a trend chart, hovering to show tooltips, switching between line/bar chart styles).
-   * **State Isolation:** Complex backend API states are completely stripped away. **API connectivity, loading states, and authentication anomalies (like invalid OAuth) must never be exposed as customizable properties.** The bottom-layer state must be globally managed and rendered by the "Base Source Card" shell, remaining completely transparent to the micro-widget layer.
+   * **Scope Constraint:** All Micro-Widgets are **stateless information renderers**. Their mission is to map extracted **Integration Data** (Metrics & Signals) into visual elements.
+   * **State Isolation:** Complex backend API states are stripped away. **API connectivity, loading states, and authentication anomalies must never be exposed as customizable properties.** The bottom-layer state is globally managed by the **Base Source Card** (or Bento Card) shell.
 
 2. **Single Responsibility & Clear Boundaries**
-   * Each micro-widget must do one thing and do it well. "All-in-one" or "God" component designs are strictly forbidden.
-   * For example: "Key-value text", "Quota ring chart", and "Mini trendline" are three unrelated micro-widgets; they should not be mixed. Complex and rich cards should be assembled by **mounting multiple single-purpose micro-widgets in parallel** using the same source data.
-   * **Spacing/Margin Isolation:** Components must not contain external spacing/margins (e.g., no outermost `margin-top` or `mt-2`). All spacing must be handled by parent layout containers (like lists or card contents) using `gap` or `space-y` to ensure predictable alignment and reusability.
+   * Each micro-widget must do one thing well.
+   * For example: "Key-value text", "Metric ring chart", and "Progress bar" are unrelated micro-widgets. Complex cards are assembled by **mounting multiple single-purpose micro-widgets in parallel**.
+   * **Spacing/Margin Isolation:** Components must not contain external spacing. All spacing is handled by parent containers using `gap` or `space-y`.
 
 3. **Evolution Over Creation & Strict Extension Review**
-   * **Reuse is King:** When facing new business display requirements, the first duty of an engineer is to review the existing component library. Prioritize evaluating whether the problem can be solved by modifying existing data, reusing existing components, or elegantly extending property parameters with backward compatibility (e.g., adding a `show_delta` toggle).
-   * **Mandatory Review Flow:** Whenever there is a topological change to component design—such as **1) Adding a completely new Widget type**, or **2) Making destructive/structural Schema changes to an existing Widget**—developers must not decide in isolation. **Every topological change must be reported to the product/tech lead for review and decision**, to prevent the component library from bloating chaotically.
+   * **Reuse is King:** Prioritize existing components.
+   * **Mandatory Review Flow:** Topological changes (new Widget types or structural Schema changes) must be reviewed to prevent chaotic bloat.
 
 4. **Framework & UI Library Agnostic**
-   * Component design, field extraction logic, and Schema structure **must be decoupled from the underlying frontend implementation.**
-   * This design document describes "logical components and data mapping specifications", and does not care whether the frontend team uses React, Vue, or Svelte, nor whether the underlying charts are implemented using Echarts or Recharts.
+   * Logic and Schema are decoupled from the underlying frontend implementation.
 
 ---
 
-## Architecture Model: Standard Blackbox Base + Dynamic Micro-Slots
+## Architecture Model: Bento Grid (Standard Shell + Micro-Slots)
 
-The entire view layer is abstracted into a two-dimensional system: **`Base Source Card` + `Widgets Slots`**.
+The view layer is abstracted into: **`Base Source Card` (Bento Card) + `Widgets Slots`**.
 
-**Dashboard-level layout:** View items (cards) can be positioned on a grid via `x`, `y`, `w`, `h` (column/row position and span). This enables drag-and-drop and persistent grid layouts (e.g. GridStack).
+**Dashboard-level layout:** View items (cards) are positioned on a grid. This enables a modular, organized "Bento Box" feel.
 
-**Within a card:** Widgets use a flow layout. Optional `row_span` on a widget config acts as a proportional row-height weight for distributing vertical space among sibling widgets (rendered as `flex: <row_span>`). Where `row_span` is not set, height remains content-driven and auto-adaptive (`max-content`). Components that can grow indefinitely (e.g. List) must handle height via pagination or content clipping, not external fixed height.
+**Within a card:** Widgets use a flow layout. Optional `row_span` acts as a proportional weight for vertical space.
 
-### 1. Base Source Card (Shell Specification, Non-customizable)
-Every mounted cloud platform service, regardless of the unique data it returns, must be wrapped in this standard shell.
-* **Fixed Elements:** Card Title (Platform Name), Logo/Icon, Data Refresh Timestamp.
-* **Passive Interception (System-level):** When the integrated API reports an error, goes offline, or is network-blocked, all internal micro-widget rendering is immediately suspended. A unified "System State Shield" (e.g., Error State, Require OAuth State) for the entire project is forcibly rendered by the shell.
-* **Data Sharing Domain:** The dataset fetched, parsed, and purified by this source is automatically injected into all of its internal slots.
+### 1. Base Source Card / Bento Card (Shell Specification)
+Every integrated service is wrapped in this standard shell.
+* **Fixed Elements:** Card Title, Logo/Icon, Refresh Timestamp.
+* **Passive Interception:** Unified state rendering (Error, Auth Required) is handled by the shell, transparent to internal widgets.
 
-### 2. Micro-Widgets Slots (Customization Configuration Layer)
-Only when the shell detects that its own status is `Healthy`, will it load the `Widgets` array defined by YAML and sequentially assemble the different visual building blocks.
+### 2. Micro-Widgets Slots (Customization Layer)
+The shell loads the `Widgets` array defined by YAML and sequentially assembles the visual building blocks.
 
 ---
 
 ## Micro-Widgets Library Reference
 
-All future display elements must be found or carefully extended within the following categories:
-
-### Category A: Numeric & Cost Analytics
-*Primarily used to highlight cash flow or the most critical single quantitative metrics.*
+### Category A: Numeric & Cost Analytics (Metrics)
 * **`hero_metric` (Core Highlighted Value)**
   * **Role:** Highlights a single core metric in a large font.
-  * **Core Config:** `amount` (template string), `prefix`/`currency` (e.g., USD), `delta` (change amount, automatically handles red/green trend arrows). Optional `row_span` for vertical space weight among siblings.
-* **`trend_sparkline` (Minimalist Trend Background Line)**
-  * **Role:** A pure trend helper line without any XY axes, typically used to illustrate stability or sudden spikes.
-  * **Core Config:** `history_array` (must accept a 1D numeric array). Allows users to visually toggle between line and vertical bar charts.
+* **`trend_sparkline` (Minimalist Trend Line)**
+  * **Role:** Illustrates stability or spikes without axes.
 
-### Category B: Quota & Consumption Limits
-*Primarily used to reflect the trade-off game between restriction conditions and consumption progress.*
-* **`quota_bar` (Linear Progress Bar)**
-  * **Role:** Stretches horizontally, suitable for quota comparisons with long text descriptions.
-  * **Core Config:** `usage`, `limit`, `color_thresholds` (color-changing logic for high-risk warnings). Optional `row_span` for vertical space weight.
-* **`gauge_ring` (Circular Dial/Ring)**
+### Category B: Progress & Status (Signals)
+* **`progress_bar` (formerly quota_bar)**
+  * **Role:** Horizontal bar for comparing values against a limit.
+  * **Core Config:** `usage`, `limit`, `color_thresholds`.
+* **`gauge_ring` (Circular Dial)**
   * **Role:** Expresses percentages in compact vertical spaces.
-  * **Core Config:** Same as above, plus `size` preferences (thin ring / thick solid ring UI settings).
 
 ### Category C: Details & Structural Helpers
-*Used to handle irregular sporadic data and scattered information.*
-* **`key_value_grid` (Attribute Field Grid)**
-  * **Role:** Flattens and displays information that doesn't "qualify" for a standalone chart but must be shown.
-  * **Core Config:** `items` mapping dictionary (String Label -> Template Value String), supporting adaptive squishing of up to 2~3 columns. Optional `row_span` for vertical space weight.
-* **`divider` (Visual Isolation Band)**
-  * **Role:** Extremely lightweight pure visual dashed divider, used to segment layouts when card height is large.
-
-*(Note: Based on Principle 1, the previously envisioned API health status dot widget is deprecated and removed; this responsibility is absorbed by the underlying shell.)*
+* **`key_value_grid` (Attribute Grid)**
+  * **Role:** Displays information that doesn't qualify for a chart.
+* **`divider` (Visual Isolation)**
+  * **Role:** Lightweight visual separator.
 
 ---
 
-## YAML Configuration Example & Developer Implementation Protocol
-
-All developers implementing the frontend parser must use the following structure as a blueprint for integration and data decomposition:
+## YAML Configuration Example
 
 ```yaml
-# The simplest protocol structure output for external use at the design level
 source_id: openai_prod_env_1
-# (Non-display fields like 'api_status' will definitely not appear in the config below)
 widgets:
-  # Assembly 1: Cost Overview
+  # Assembly 1: Metric Overview
   - type: hero_metric
     amount: "{data.financial.current_cost}"
     currency: "USD"
 
-  # Assembly 2: Quota Occupancy Comparison
-  - type: quota_bar
+  # Assembly 2: Progress Tracking
+  - type: progress_bar
     title: "{data.account.name} Limit (TPM)"
     usage: "{data.limits.tpm_used}"
     limit: "{data.limits.tpm_max}"
-    color_thresholds:  # Explicitly stripped of business code calculations, provided entirely by display config
+    color_thresholds:
       warning_percent: 80
       critical_percent: 95
 
-  # Assembly 3: Auxiliary Attributes
+  # Assembly 3: Auxiliary Signals
   - type: key_value_grid
     items:
       "Plan Tier": "{data.account.plan_type}"

@@ -2,22 +2,22 @@
 
 ## 1. 项目定位 (Project Positioning)
 
-Glancier 是一个面向重度数字用户的个人全能数据枢纽 (Personal Data Aggregator & Hub)。
+Glancier (原 Quota Board) 是一个面向重度数字用户的个人全能数据枢纽 (Personal Data Aggregator & Hub)。
 摒弃传统的被动式静态面板，打造一个自带强抓取与 AI 清洗能力的 Headless 引擎与高密度可视化客户端。帮用户把所有脏活累活在后台处理完，前台只需“极简一瞥”。
 
-原名 Quota Board，起初是一个面向个人开发者/重度 API 用户的「配置驱动额度监控看板」系统，现已战略演进为全能数据枢纽。
+项目致力于将分散在各处的 API 数据与网页信息转化为统一的**指标 (Metrics)** 与**信号 (Signals)**。
 
 ## 2. 核心竞争点 (Unfair Advantages)
 
 - **突破封锁的多模态抓取 (Multi-modal Fetching)**：内置交互式 Flow 状态机，支持基础 HTTP、OAuth 续期，以及强大的 WebView 模拟人工抓取。遇到风控可优雅挂起，请求 UI 协助，彻底打破“无 API 则无数据”的死局。
 - **AI 洗选优先的智能折叠层 (AI-First Data Washing) (奠基中)**：告别手写复杂的 JSON 解析或模板正则。利用 AI Agent 抽离源数据的核心 Meta 信息，将千奇百怪的输入标准化，具备极强的数据容错弹性。
 - **Local-First 的极简便当盒 UI (The Bento Grid)**：配置与密钥基于 AES-256 加密存在本地。彻底抛弃老旧运维风格，采用 2026 前端最新趋势的 High-Density Minimalist（高密度极简），构建可高度自定义的 Bento 流体网格系统。
-- **配置即一切 (Configuration as Code)**：接入新平台零 Python 后端修改，全生命周期由 Integration YAML与 View Template 驱动。
+- **配置即一切 (Configuration as Code)**：接入新平台零 Python 后端修改，全生命周期由 Integration YAML 与 View Template 驱动。
 
 ## 3. 当前状态 (v1.0 Milestone in Progress)
 
 - **Shipped v0.1**：核心链路已打通。在不修改 Python 业务代码的前提下，通过配置完成「鉴权 -> 采集 -> 解析 -> 展示」全链路接入。UI 完成了高密度、响应式的看板重构。
-- **v1.0 跃迁**：进行品牌与精神重塑、代码语义更新与组件重构，引入严格的 TDD 测试覆盖规范，最终交付稳定高可用的正式版客户端。
+- **v1.0 跃迁**：进行品牌与精神重塑、代码语义更新与组件重构，引入严格的 TDD 测试覆盖规范，将原有的“额度监控”概念全面升级为“个人数据聚合”，最终交付稳定高可用的正式版客户端。
 
 ## 4. 全局目标 (Source of Truth 提炼)
 
@@ -98,13 +98,15 @@ Glancier 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 3. 看板可以基于模板稳定渲染关键指标，并在数据缺失时保持可用。
 4. 本地桌面模式与开发模式均可独立启动并完成端到端采集展示。
 
-## 11. 事实来源（Source of Truth）
+## 11. 事实来源 (Source of Truth)
 
-1. `README.md`
-2. `Agent.md`
-3. `CONFIG.md`
-4. `docs/flow_configuration.md`
-5. `docs/view_micro_widget_architecture.md`
-6. `docs/webview_scraper_architecture.md`
-7. `docs/view_template_configuration.md`
-8. `docs/custom_design_prompt.md`
+1. `docs/terminology.md`
+2. `README.md`
+3. `Agent.md`
+4. `CONFIG.md`
+5. `docs/flow_configuration.md`
+6. `docs/view_micro_widget_architecture.md`
+7. `docs/webview_scraper_architecture.md`
+8. `docs/view_template_configuration.md`
+9. `docs/custom_design_prompt.md`
+
