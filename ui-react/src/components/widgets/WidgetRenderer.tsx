@@ -1,7 +1,7 @@
 import { WidgetConfig } from "../../types/config";
 import { HeroMetric } from "./HeroMetric";
 import { KeyValueGrid } from "./KeyValueGrid";
-import { QuotaBar } from "./QuotaBar";
+import { ProgressBar } from "./ProgressBar";
 import { ListWidget } from "./ListWidget";
 
 /**
@@ -11,7 +11,7 @@ import { ListWidget } from "./ListWidget";
  */
 const DEFAULT_ROW_SPANS: Record<string, number> = {
     hero_metric: 2,
-    quota_bar: 1,
+    progress_bar: 1,
     key_value_grid: 2,
     list: 2,
 };
@@ -36,8 +36,8 @@ export function WidgetRenderer({
         case "key_value_grid":
             content = <KeyValueGrid widget={widget as any} data={data} />;
             break;
-        case "quota_bar":
-            content = <QuotaBar widget={widget as any} data={data} />;
+        case "progress_bar":
+            content = <ProgressBar widget={widget as any} data={data} />;
             break;
         default:
             content = (

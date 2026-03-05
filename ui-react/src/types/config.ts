@@ -30,7 +30,7 @@ export interface WidgetConfigBase {
     /**
      * Proportional row-height weight used to distribute vertical space among sibling
      * widgets inside a card.  Rendered as flex: <row_span> on the wrapper element.
-     * Default fallback by type: hero_metric=2, quota_bar=1, key_value_grid=2, list=2.
+     * Default fallback by type: hero_metric=2, progress_bar=1, key_value_grid=2, list=2.
      */
     row_span?: number;
 }
@@ -48,8 +48,8 @@ export interface KeyValueGridWidget extends WidgetConfigBase {
     items: Record<string, string>;
 }
 
-export interface QuotaBarWidget extends WidgetConfigBase {
-    type: "quota_bar";
+export interface ProgressBarWidget extends WidgetConfigBase {
+    type: "progress_bar";
     title?: string;
     usage: string;
     limit: string;
@@ -81,7 +81,7 @@ export interface ListWidgetConfig extends WidgetConfigBase {
 export type WidgetConfig =
     | HeroMetricWidget
     | KeyValueGridWidget
-    | QuotaBarWidget
+    | ProgressBarWidget
     | ListWidgetConfig;
 
 export interface ParserConfig {

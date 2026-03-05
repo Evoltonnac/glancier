@@ -85,7 +85,7 @@ integrations:
                   # sort_by: "key_item.usage"
                   # sort_order: "desc"
                   render:
-                      - type: "quota_bar"
+                      - type: "progress_bar"
                         area: "progress"
                         title: "{key_item.name}"
                         usage: "{key_item.usage}"

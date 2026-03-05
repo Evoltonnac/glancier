@@ -1,12 +1,12 @@
-import { QuotaBarWidget } from "../../types/config";
+import { ProgressBarWidget } from "../../types/config";
 import { evaluateTemplate } from "../../lib/utils";
 
 interface Props {
-    widget: QuotaBarWidget;
+    widget: ProgressBarWidget;
     data: Record<string, any>;
 }
 
-export function QuotaBar({ widget, data }: Props) {
+export function ProgressBar({ widget, data }: Props) {
     const usageRaw = evaluateTemplate(widget.usage, data);
     const limitRaw = evaluateTemplate(widget.limit, data);
     const title = evaluateTemplate(widget.title, data);
