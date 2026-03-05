@@ -13,13 +13,13 @@ interface BaseSourceCardProps {
     onInteract?: (source: SourceSummary) => void;
 }
 
-// Radial gradient class for header background based on status
-const statusGradientMap: Record<string, string> = {
-    active: "qb-header-gradient-active",
-    refreshing: "qb-header-gradient-refreshing",
-    suspended: "qb-header-gradient-suspended",
-    error: "qb-header-gradient-error",
-    disabled: "qb-header-gradient-disabled",
+// Semantic dot-status color indicator (replaces removed gradient classes)
+const statusDotColorMap: Record<string, string> = {
+    active: "bg-success",
+    refreshing: "bg-brand animate-pulse",
+    suspended: "bg-warning",
+    error: "bg-error",
+    disabled: "bg-muted-foreground",
 };
 
 export function BaseSourceCard({
@@ -33,7 +33,7 @@ export function BaseSourceCard({
         status_field: undefined,
     };
 
-    // Determine status for gradient indicator
+    // Determine status for indicator dot
     const rawStatus = sourceSummary?.status || "disabled";
     let dotStatus: "active" | "refreshing" | "error" | "suspended" | "disabled";
     if ((rawStatus as string) === "refreshing") {
@@ -48,8 +48,8 @@ export function BaseSourceCard({
         dotStatus = rawStatus as any;
     }
 
-    const gradientClass =
-        statusGradientMap[dotStatus] || statusGradientMap.disabled;
+    const dotColorClass =
+        statusDotColorMap[dotStatus] || statusDotColorMap.disabled;
 
     // Decide if we have data to show
     const hasWidgetData =
@@ -57,14 +57,16 @@ export function BaseSourceCard({
     const hasNoData = !hasWidgetData;
 
     return (
-        <Card className="bg-surface border-border h-full flex flex-col overflow-hidden hover:border-foreground/20 transition-colors duration-200">
-            {/* Header — left-top radial gradient encodes status; acts as drag handle */}
+        <Card className="bg-surface border-border h-full flex flex-col overflow-hidden hover:border-foreground/20 hover:shadow-soft-elevation transition-all duration-150">
+            {/* Header — semantic dot encodes status; acts as drag handle */}
             <div
                 title={`Status: ${dotStatus}`}
-                className={`qb-card-header flex-shrink-0 flex items-center justify-between px-4 border-b border-border/40 ${gradientClass}`}
+                className="qb-card-header flex-shrink-0 flex items-center justify-between px-4 border-b border-border/40 bg-surface"
                 style={{ height: "var(--qb-card-header-height)" }}
             >
-                <div className="flex items-center gap-1.5 min-w-0 flex-1 mt-1">
+                <div className="flex items-center gap-2 min-w-0 flex-1 mt-1">
+                    {/* Semantic status dot */}
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotColorClass}`} />
                     {ui.icon && (
                         <span className="text-sm leading-none shrink-0">
                             {ui.icon}

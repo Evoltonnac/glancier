@@ -158,4 +158,4 @@ Plans:
 | 5. View Runtime Architecture | 3/3 | Completed | Yes |
 | 6. Desktop Secure Acquisition | 3/3 | Completed | Yes |
 | 7. Multi-Topology Delivery | 2/2 | Completed | Yes |
-| 8. UI Refactoring | 2/3 | In Progress|  |
+| 8. UI Refactoring | 1/3 | In Progress|  |

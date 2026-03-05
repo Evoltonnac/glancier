@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 8 of 8 (UI Refactoring)
-Plan: 3 of 3 in current phase
-Status: Completed
-Last activity: 2026-03-03 - Executed 08-ui-refactoring
+Plan: 1 of 3 in current phase (08-01 completed)
+Status: In Progress
+Last activity: 2026-03-03 - Executed 08-01 Design System Foundation
 
 Progress: [██████████] 100%
 
@@ -47,7 +47,7 @@ Progress: [██████████] 100%
 | 5 | 3/3 | - | - |
 | 6 | 3/3 | - | - |
 | 7 | 2/2 | - | - |
-| 8 | 0/3 | - | - |
+| 8 | 1/3 | 12min | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -60,6 +60,9 @@ Progress: [██████████] 100%
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions / constraints. Current high-impact decisions:
+- [08-01] Violet 262.1 83.3% 57.8% used for both --ring and --brand in light and dark mode for consistent focus UX
+- [08-01] Soft elevation: three-layer box-shadow on interactive cards instead of transform:scale
+- [08-01] Status indicator changed from header gradient to semantic dot (h-1.5 w-1.5 rounded-full)
 - [Init] 平台接入策略为平台无关（接口可访问即可接入）
 - [Init] 桌面优先（WebView Scraper 依赖桌面能力）
 - [Init] 默认调度策略：30m（通用）/60m（webview,curl），按 source 可覆盖
@@ -78,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 08-02-PLAN.md
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
