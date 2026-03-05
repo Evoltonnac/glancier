@@ -10,7 +10,7 @@
 - **Preview & Coexistence**: Proceed with a direct mixed preview on the main dashboard. The new components will coexist with un-refactored ones on the homepage during the transition phase.
 
 ## 2. Layout & Information Density
-- **Grid Gap**: Use a moderate gap of `16px` (`gap-4`) by default. Architecture should account for a future toggle switch allowing users to change layouts (Compact / Moderate / Loose).
+- **Grid Gap**: Use a moderate gap of `12px` (`gap-3`) by default. Architecture should account for a future toggle switch allowing users to change layouts (Compact / Moderate / Loose).
 - **TopNav Design**: Standard height of approximately `64px`, acting as a flat, clean anchor for the application.
 - **Card Padding**: Use an evenly distributed, compact padding (`p-4` or `p-5`) inside `BaseSourceCard`.
 - **Responsive Behavior (Narrow Screens)**: Switch to a single column layout with adaptive height (driven by content) rather than forcing arbitrary heights or scaling down proportionally.

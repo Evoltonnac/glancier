@@ -143,7 +143,7 @@ export function FlowHandler({
 
             case "oauth_start":
                 return (
-                    <div className="py-6 flex flex-col items-center gap-4">
+                    <div className="py-6 flex flex-col items-center gap-3">
                         {/* Render client_id/client_secret input fields if present */}
                         {interaction.fields &&
                             interaction.fields.length > 0 && (

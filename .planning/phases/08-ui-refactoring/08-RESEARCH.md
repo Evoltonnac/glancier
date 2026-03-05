@@ -11,7 +11,7 @@
 - **Baseline Components**: Completely rewrite `TopNav`, `BaseSourceCard`, `QuotaBar` from scratch using new Design System tokens. Discard old styles.
 - **Long Data Handling**: For exceptionally long numbers/text, strictly use **Truncate + Tooltip**.
 - **Preview & Coexistence**: Proceed with a direct mixed preview on the main dashboard alongside un-refactored components.
-- **Grid Gap**: Use a moderate gap of `16px` (`gap-4`) by default. Architecture should account for future layout toggles.
+- **Grid Gap**: Use a moderate gap of `12px` (`gap-3`) by default. Architecture should account for future layout toggles.
 - **TopNav Design**: Standard height of approximately `64px`.
 - **Card Padding**: Use evenly distributed, compact padding (`p-4` or `p-5`).
 - **Responsive Behavior**: Single column on narrow screens with adaptive height (content-driven).
@@ -190,7 +190,7 @@ Verified patterns from official sources:
 1. **Card Layout Toggles**
    - What we know: Architecture must account for future toggles (Compact/Moderate/Loose).
    - What's unclear: How the state for this toggle is passed to the cards (Context API vs LocalStorage vs global state).
-   - Recommendation: Use a React Context wrapper for dashboard layout preferences, falling back to `16px` (gap-4) and `p-4` as the default.
+   - Recommendation: Use a React Context wrapper for dashboard layout preferences, falling back to `12px` (gap-3) and `p-4` as the default.
 
 ## Sources
 

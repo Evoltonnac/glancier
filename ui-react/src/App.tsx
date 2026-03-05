@@ -22,6 +22,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Plus,
+    Clock,
 } from "lucide-react";
 import {
     Card,
@@ -33,7 +34,6 @@ import {
 import { Badge, badgeVariants } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { cn } from "./lib/utils";
-
 
 import {
     Dialog,
@@ -726,28 +726,48 @@ function Dashboard() {
         return {
             label: "等待",
             variant: "secondary" as const,
-            colorClass: "bg-secondary text-secondary-foreground",
-            icon: Database,
+            colorClass: "bg-muted/10 text-muted-foreground border-transparent",
+            icon: Clock,
         };
     };
 
     const statusCounts = {
-        normal: sources.filter((s) => s.has_data && !s.error && s.status !== "refreshing").length,
         refreshing: sources.filter((s) => s.status === "refreshing").length,
-        error: sources.filter((s) => s.error).length,
         suspended: sources.filter((s) => s.status === "suspended").length,
+        error: sources.filter(
+            (s) =>
+                s.status !== "refreshing" &&
+                s.status !== "suspended" &&
+                s.error,
+        ).length,
+        normal: sources.filter(
+            (s) =>
+                s.status !== "refreshing" &&
+                s.status !== "suspended" &&
+                !s.error &&
+                s.has_data,
+        ).length,
+        waiting: sources.filter(
+            (s) =>
+                s.status !== "refreshing" &&
+                s.status !== "suspended" &&
+                !s.error &&
+                !s.has_data,
+        ).length,
     };
 
     return (
         <TooltipProvider>
             <div className="h-full bg-background text-foreground flex overflow-hidden">
                 {/* Sidebar */}
-                <aside className={`border-r border-border bg-surface/30 flex-col hidden md:flex transition-all duration-300 ${sidebarCollapsed ? "w-14" : "w-64"}`}>
-                    <div className="p-3 border-b border-border flex items-center justify-between gap-2">
+                <aside
+                    className={`border-r border-border bg-surface/30 flex-col hidden md:flex transition-all duration-300 ${sidebarCollapsed ? "w-14" : "w-64"}`}
+                >
+                    <div className="p-3 border-b border-border flex items-center justify-center gap-2">
                         {!sidebarCollapsed && (
                             <>
                                 <Database className="w-4 h-4 text-muted-foreground" />
-                                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex-1">
+                                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex-1 whitespace-nowrap">
                                     数据源状态
                                 </h2>
                             </>
@@ -755,10 +775,16 @@ function Dashboard() {
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <button
-                                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                                    onClick={() =>
+                                        setSidebarCollapsed(!sidebarCollapsed)
+                                    }
                                     className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
                                 >
-                                    {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                                    {sidebarCollapsed ? (
+                                        <ChevronRight className="h-4 w-4" />
+                                    ) : (
+                                        <ChevronLeft className="h-4 w-4" />
+                                    )}
                                 </button>
                             </TooltipTrigger>
                             <TooltipContent side="right">
@@ -773,20 +799,28 @@ function Dashboard() {
                                 <TooltipTrigger asChild>
                                     <div className="flex flex-col items-center gap-1 p-2 rounded bg-success/20 text-success w-full">
                                         <Database className="h-4 w-4" />
-                                        <span className="text-xs font-bold">{statusCounts.normal}</span>
+                                        <span className="text-xs font-bold">
+                                            {statusCounts.normal}
+                                        </span>
                                     </div>
                                 </TooltipTrigger>
-                                <TooltipContent side="right">正常: {statusCounts.normal}</TooltipContent>
+                                <TooltipContent side="right">
+                                    正常: {statusCounts.normal}
+                                </TooltipContent>
                             </Tooltip>
                             {statusCounts.refreshing > 0 && (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div className="flex flex-col items-center gap-1 p-2 rounded bg-blue-500/10 text-blue-500 w-full">
                                             <RefreshCw className="h-4 w-4" />
-                                            <span className="text-xs font-bold">{statusCounts.refreshing}</span>
+                                            <span className="text-xs font-bold">
+                                                {statusCounts.refreshing}
+                                            </span>
                                         </div>
                                     </TooltipTrigger>
-                                    <TooltipContent side="right">刷新中: {statusCounts.refreshing}</TooltipContent>
+                                    <TooltipContent side="right">
+                                        刷新中: {statusCounts.refreshing}
+                                    </TooltipContent>
                                 </Tooltip>
                             )}
                             {statusCounts.error > 0 && (
@@ -794,10 +828,14 @@ function Dashboard() {
                                     <TooltipTrigger asChild>
                                         <div className="flex flex-col items-center gap-1 p-2 rounded bg-error/20 text-error w-full">
                                             <AlertTriangle className="h-4 w-4" />
-                                            <span className="text-xs font-bold">{statusCounts.error}</span>
+                                            <span className="text-xs font-bold">
+                                                {statusCounts.error}
+                                            </span>
                                         </div>
                                     </TooltipTrigger>
-                                    <TooltipContent side="right">错误: {statusCounts.error}</TooltipContent>
+                                    <TooltipContent side="right">
+                                        错误: {statusCounts.error}
+                                    </TooltipContent>
                                 </Tooltip>
                             )}
                             {statusCounts.suspended > 0 && (
@@ -805,10 +843,29 @@ function Dashboard() {
                                     <TooltipTrigger asChild>
                                         <div className="flex flex-col items-center gap-1 p-2 rounded bg-warning/20 text-warning w-full">
                                             <Wrench className="h-4 w-4" />
-                                            <span className="text-xs font-bold">{statusCounts.suspended}</span>
+                                            <span className="text-xs font-bold">
+                                                {statusCounts.suspended}
+                                            </span>
                                         </div>
                                     </TooltipTrigger>
-                                    <TooltipContent side="right">需操作: {statusCounts.suspended}</TooltipContent>
+                                    <TooltipContent side="right">
+                                        需操作: {statusCounts.suspended}
+                                    </TooltipContent>
+                                </Tooltip>
+                            )}
+                            {statusCounts.waiting > 0 && (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex flex-col items-center gap-1 p-2 rounded bg-muted/10 text-muted-foreground w-full">
+                                            <Clock className="h-4 w-4" />
+                                            <span className="text-xs font-bold">
+                                                {statusCounts.waiting}
+                                            </span>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right">
+                                        等待: {statusCounts.waiting}
+                                    </TooltipContent>
                                 </Tooltip>
                             )}
                         </div>
@@ -816,7 +873,8 @@ function Dashboard() {
                         <>
                             <div className="space-y-1.5 p-2 overflow-y-auto flex-1">
                                 {sources.map((source) => {
-                                    const statusConfig = getStatusConfig(source);
+                                    const statusConfig =
+                                        getStatusConfig(source);
                                     return (
                                         <Card
                                             key={source.id}
@@ -830,32 +888,63 @@ function Dashboard() {
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-1 shrink-0">
-                                                        {source.status === "suspended" ? (
+                                                        {source.status ===
+                                                        "suspended" ? (
                                                             <Tooltip>
-                                                                <TooltipTrigger asChild>
+                                                                <TooltipTrigger
+                                                                    asChild
+                                                                >
                                                                     <button
-                                                                        className={cn(badgeVariants({ variant: "warning" }), "gap-1 px-1.5 py-0 h-6 shrink-0 cursor-pointer hover:bg-warning/30")}
-                                                                        onClick={() => setInteractSource(source)}
+                                                                        className={cn(
+                                                                            badgeVariants(
+                                                                                {
+                                                                                    variant:
+                                                                                        "warning",
+                                                                                },
+                                                                            ),
+                                                                            "gap-1 px-1.5 py-0 h-6 shrink-0 cursor-pointer hover:bg-warning/30",
+                                                                        )}
+                                                                        onClick={() =>
+                                                                            setInteractSource(
+                                                                                source,
+                                                                            )
+                                                                        }
                                                                     >
                                                                         <Wrench className="h-3 w-3" />
-                                                                        <span>需操作</span>
+                                                                        <span>
+                                                                            需操作
+                                                                        </span>
                                                                     </button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent side="top">
                                                                     <p>
-                                                                        {source.interaction?.type === "webview_scrape"
+                                                                        {source
+                                                                            .interaction
+                                                                            ?.type ===
+                                                                        "webview_scrape"
                                                                             ? "加入抓取队列"
                                                                             : "解决问题"}
                                                                     </p>
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         ) : (
-                                                            <Badge variant={statusConfig.variant}>
-                                                                {statusConfig.label}
+                                                            <Badge
+                                                                variant={
+                                                                    statusConfig.variant
+                                                                }
+                                                                className={
+                                                                    statusConfig.colorClass
+                                                                }
+                                                            >
+                                                                {
+                                                                    statusConfig.label
+                                                                }
                                                             </Badge>
                                                         )}
                                                         <Tooltip>
-                                                            <TooltipTrigger asChild>
+                                                            <TooltipTrigger
+                                                                asChild
+                                                            >
                                                                 <button
                                                                     className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                                                                     onClick={() =>
@@ -872,7 +961,9 @@ function Dashboard() {
                                                             </TooltipContent>
                                                         </Tooltip>
                                                         <Tooltip>
-                                                            <TooltipTrigger asChild>
+                                                            <TooltipTrigger
+                                                                asChild
+                                                            >
                                                                 <button
                                                                     className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                                                                     onClick={() =>
@@ -897,7 +988,11 @@ function Dashboard() {
                                                         </p>
                                                         <button
                                                             className="w-full mt-2 h-7 text-xs font-medium rounded bg-destructive text-destructive-foreground hover:bg-foreground hover:text-background transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 flex items-center justify-center gap-1"
-                                                            onClick={() => setInteractSource(source)}
+                                                            onClick={() =>
+                                                                setInteractSource(
+                                                                    source,
+                                                                )
+                                                            }
                                                         >
                                                             <AlertTriangle className="h-3 w-3" />
                                                             重试 / 详情
@@ -911,37 +1006,41 @@ function Dashboard() {
                             </div>
 
                             <Dialog
-                        open={deletingSourceId !== null}
-                        onOpenChange={(open) =>
-                            !open && setDeletingSourceId(null)
-                        }
-                    >
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>确认删除</DialogTitle>
-                                <DialogDescription>
-                                    确定要删除此数据源吗？相关配置和本地数据也将被清除，此操作不可撤销。
-                                </DialogDescription>
-                            </DialogHeader>
-                            <DialogFooter>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setDeletingSourceId(null)}
-                                >
-                                    取消
-                                </Button>
-                                <Button
-                                    variant="destructive"
-                                    onClick={() =>
-                                        deletingSourceId &&
-                                        handleDeleteSource(deletingSourceId)
-                                    }
-                                >
-                                    确认删除
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                                open={deletingSourceId !== null}
+                                onOpenChange={(open) =>
+                                    !open && setDeletingSourceId(null)
+                                }
+                            >
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>确认删除</DialogTitle>
+                                        <DialogDescription>
+                                            确定要删除此数据源吗？相关配置和本地数据也将被清除，此操作不可撤销。
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <DialogFooter>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() =>
+                                                setDeletingSourceId(null)
+                                            }
+                                        >
+                                            取消
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            onClick={() =>
+                                                deletingSourceId &&
+                                                handleDeleteSource(
+                                                    deletingSourceId,
+                                                )
+                                            }
+                                        >
+                                            确认删除
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
                         </>
                     )}
                 </aside>

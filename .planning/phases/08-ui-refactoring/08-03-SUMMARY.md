@@ -18,7 +18,7 @@ affects: [08-04, 08-05]
 tech-stack:
   added: []
   patterns:
-    - "Dashboard density baseline uses GRID_MARGIN=16 for consistent 16px spacing"
+    - "Dashboard density baseline uses GRID_MARGIN=16 for consistent 12px spacing"
     - "Icon-only actions with tooltip labels and focus-visible ring-brand/50"
     - "Interactive containers use hover:shadow-soft-elevation without transform scale"
 
@@ -30,7 +30,7 @@ key-files:
     - ui-react/src/pages/Settings.tsx
 
 key-decisions:
-  - "Set GridStack margin constant to 16 to align dashboard spacing with phase context gap-4 requirement"
+  - "Set GridStack margin constant to 16 to align dashboard spacing with phase context gap-3 requirement"
   - "Use icon-only reload/save controls in Integrations toolbar to preserve high-density layout"
   - "Apply brand-colored switch states via data-[state=checked]:bg-brand for semantic consistency"
 
@@ -48,7 +48,7 @@ completed: 2026-03-04
 
 # Phase 8 Plan 3: Pages and Layouts Refactor Summary
 
-**Dashboard/App, Integrations, and Settings now share a high-density interaction model with 16px layout spacing, soft-elevation card feedback, icon-first controls, and consistent brand focus behavior.**
+**Dashboard/App, Integrations, and Settings now share a high-density interaction model with 12px layout spacing, soft-elevation card feedback, icon-first controls, and consistent brand focus behavior.**
 
 ## Performance
 
@@ -73,13 +73,13 @@ Each task was committed atomically:
 3. **Task 3: Refactor Settings Page UI** - `a59a697` (feat)
 
 ## Files Created/Modified
-- `/Users/xingminghua/Coding/tools/quota-board/ui-react/src/App.tsx` - Dashboard sidebar modernization, 16px grid margin, icon-first card controls, explicit focus styles.
+- `/Users/xingminghua/Coding/tools/quota-board/ui-react/src/App.tsx` - Dashboard sidebar modernization, 12px grid margin, icon-first card controls, explicit focus styles.
 - `/Users/xingminghua/Coding/tools/quota-board/ui-react/src/pages/Integrations.tsx` - High-density integrations/editor controls, elevated source cards, standardized focus ring usage.
 - `/Users/xingminghua/Coding/tools/quota-board/ui-react/src/pages/Settings.tsx` - Compact settings containers with soft elevation, semantic switch/button interaction updates.
 - `/Users/xingminghua/Coding/tools/quota-board/.planning/phases/08-ui-refactoring/08-03-SUMMARY.md` - Execution summary and metadata for this plan.
 
 ## Decisions Made
-- Bound dashboard layout spacing to `GRID_MARGIN = 16` in `App.tsx` so GridStack spacing matches phase-level `gap-4` guidance.
+- Bound dashboard layout spacing to `GRID_MARGIN = 16` in `App.tsx` so GridStack spacing matches phase-level `gap-3` guidance.
 - Converted integrations toolbar actions to icon-only controls with tooltip labels to reduce visual density while retaining discoverability.
 - Standardized switch semantics in settings with `data-[state=checked]:bg-brand` to align interactive state colors with brand token usage.
 

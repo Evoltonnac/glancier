@@ -254,7 +254,7 @@ export default function IntegrationsPage() {
             <div className="flex h-full bg-background text-foreground">
                 {/* Sidebar */}
                 <aside className={`border-r border-border bg-surface/30 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'w-14' : 'w-64'}`}>
-                    <div className="p-3 border-b border-border flex items-center justify-between gap-2">
+                    <div className="p-3 border-b border-border flex items-center justify-center gap-2">
                         {!sidebarCollapsed && (
                             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2 flex-1">
                                 <FileJson className="w-4 h-4" />
