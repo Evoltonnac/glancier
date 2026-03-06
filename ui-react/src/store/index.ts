@@ -3,7 +3,6 @@ import {
     StoredView,
     SourceSummary,
     DataResponse,
-    ViewComponent,
 } from "../types/config";
 import { api } from "../api/client";
 
@@ -19,7 +18,7 @@ interface AppState {
     sources: SourceSummary[];
     setSources: (sources: SourceSummary[]) => void;
     dataMap: Record<string, DataResponse>;
-    setDataMap: (dataMap: Record<string, DataResponse>) => void;
+    setDataMap: (dataMap: Record<string, DataResponse> | ((prev: Record<string, DataResponse>) => Record<string, DataResponse>)) => void;
     loading: boolean;
     setLoading: (loading: boolean) => void;
 
@@ -39,6 +38,12 @@ interface AppState {
     addSkippedScraper: (id: string) => void;
     clearSkippedScrapers: () => void;
 
+    // Integrations Page State
+    integrationsSelectedFile: string | null;
+    setIntegrationsSelectedFile: (file: string | null) => void;
+    integrationsSidebarCollapsed: boolean;
+    setIntegrationsSidebarCollapsed: (collapsed: boolean) => void;
+
     // Actions
     loadData: () => Promise<void>;
 }
@@ -56,7 +61,10 @@ export const useStore = create<AppState>((set, get) => ({
     sources: [],
     setSources: (sources) => set({ sources }),
     dataMap: {},
-    setDataMap: (dataMap) => set({ dataMap }),
+    setDataMap: (dataMap) =>
+        set((state) => ({
+            dataMap: typeof dataMap === "function" ? dataMap(state.dataMap) : dataMap,
+        })),
     loading: true,
     setLoading: (loading) => set({ loading }),
 
@@ -81,12 +89,20 @@ export const useStore = create<AppState>((set, get) => ({
         }),
     clearSkippedScrapers: () => set({ skippedScrapers: new Set() }),
 
+    // Integrations Page State
+    integrationsSelectedFile: null,
+    setIntegrationsSelectedFile: (integrationsSelectedFile) => set({ integrationsSelectedFile }),
+    integrationsSidebarCollapsed: false,
+    setIntegrationsSidebarCollapsed: (integrationsSidebarCollapsed) => set({ integrationsSidebarCollapsed }),
+
     // Actions
     loadData: async () => {
-        const { loading } = get();
-        // Simple guard to prevent concurrent loads if desired, 
-        // though App.tsx used a ref for this.
-        set({ loading: true });
+        const { dataMap, viewConfig } = get();
+        // Guard against UI wipeout when navigating back to Dashboard:
+        // Only set loading to true if we genuinely have no initial data.
+        if (!viewConfig || Object.keys(dataMap).length === 0) {
+            set({ loading: true });
+        }
         try {
             const [views, sourcesData] = await Promise.all([
                 api.getViews(),
@@ -94,7 +110,7 @@ export const useStore = create<AppState>((set, get) => ({
             ]);
 
             const activeView = views.length > 0 ? views[0] : null;
-            
+
             const dataPromises = sourcesData.map((s) =>
                 api
                     .getSourceData(s.id)
