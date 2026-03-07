@@ -3,17 +3,75 @@ use tauri::Emitter;
 use std::collections::HashSet;
 use std::sync::Mutex;
 
+#[cfg(target_os = "macos")]
+use cocoa_foundation::base::{id, nil};
+#[cfg(target_os = "macos")]
+use cocoa_foundation::foundation::{NSProcessInfo, NSString};
+#[cfg(target_os = "macos")]
+use objc::{msg_send, sel, sel_impl};
+
+/// RAII guard to disable App Nap on macOS during background scraping
+#[cfg(target_os = "macos")]
+struct AppNapGuard {
+    activity: id,
+}
+
+#[cfg(target_os = "macos")]
+unsafe impl Send for AppNapGuard {}
+#[cfg(target_os = "macos")]
+unsafe impl Sync for AppNapGuard {}
+
+#[cfg(target_os = "macos")]
+impl AppNapGuard {
+    fn new(reason: &str) -> Self {
+        unsafe {
+            let NSActivityIdleSystemSleepDisabled = 1u64 << 20;
+            let NSActivitySuddenTerminationDisabled = 1u64 << 14;
+            let NSActivityAutomaticTerminationDisabled = 1u64 << 15;
+            let NSActivityUserInitiated = 0x00FFFFFFu64 | NSActivityIdleSystemSleepDisabled;
+
+            let options = NSActivityIdleSystemSleepDisabled
+                | NSActivitySuddenTerminationDisabled
+                | NSActivityAutomaticTerminationDisabled
+                | NSActivityUserInitiated;
+
+            let pinfo = NSProcessInfo::processInfo(nil);
+            let reason_str = NSString::alloc(nil).init_str(reason);
+            let activity: id = msg_send![pinfo, beginActivityWithOptions:options reason:reason_str];
+
+            println!("[Scraper Debug] App Nap disabled: {:?}", activity);
+
+            AppNapGuard { activity }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for AppNapGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let pinfo = NSProcessInfo::processInfo(nil);
+            let _: () = msg_send![pinfo, endActivity:self.activity];
+            println!("[Scraper Debug] App Nap re-enabled");
+        }
+    }
+}
+
 /// Global state to deduplicate scraper results.
 /// Fetch + XHR interceptors can both fire for the same request,
 /// so we only process the first result per source_id.
 pub struct ScraperState {
     pub handled_results: Mutex<HashSet<String>>,
+    #[cfg(target_os = "macos")]
+    pub app_nap_guard: Mutex<Option<AppNapGuard>>,
 }
 
 impl Default for ScraperState {
     fn default() -> Self {
         ScraperState {
             handled_results: Mutex::new(HashSet::new()),
+            #[cfg(target_os = "macos")]
+            app_nap_guard: Mutex::new(None),
         }
     }
 }
@@ -35,11 +93,7 @@ pub async fn push_scraper_task(
     foreground: Option<bool>,
 ) -> Result<(), String> {
     let foreground = foreground.unwrap_or(false);
-    println!(
-        "[Scraper Debug] push_scraper_task called for source_id: {}, url: {}, foreground: {}",
-        source_id, url, foreground
-    );
-    
+
     // Clear any previous dedup record for this source so the new task's result is processed
     {
         let state = app.state::<ScraperState>();
@@ -50,12 +104,6 @@ pub async fn push_scraper_task(
     let final_script = format!(
         r#"
         (function() {{
-            function logDebug(msg) {{
-                try {{
-                    window.__TAURI_INTERNALS__.invoke('scraper_log', {{ message: msg }});
-                }} catch(e) {{}}
-            }}
-            logDebug('Scraper initialization started');
             // Resource blocker
             const blockExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.woff', '.woff2', '.ttf'];
             
@@ -70,27 +118,26 @@ pub async fn push_scraper_task(
                 
                 // Intercept Target API
                 if (reqUrl.includes('{}')) {{
-                    logDebug('Matched intercept API: ' + reqUrl);
-                    const response = await originalFetch.apply(this, args);
-                    logDebug('Response received with status: ' + response.status);
-                    if (response.status === 401 || response.status === 403) {{
-                        logDebug('Auth required triggered');
-                        window.__TAURI_INTERNALS__.invoke('handle_scraper_auth', {{ sourceId: '{}', targetUrl: reqUrl }});
-                    }} else {{
-                        const cloneRes = response.clone();
-                        cloneRes.json().then(data => {{
-                            logDebug('JSON parse successful, sending scraped data');
-                            window.__TAURI_INTERNALS__.invoke('handle_scraped_data', {{ 
-                                sourceId: '{}', 
-                                secretKey: '{}',
-                                data: data 
+                    try {{
+                        const response = await originalFetch.apply(this, args);
+                        if (response.status === 401 || response.status === 403) {{
+                            window.__TAURI_INTERNALS__.invoke('handle_scraper_auth', {{ sourceId: '{}', targetUrl: reqUrl }});
+                        }} else {{
+                            const cloneRes = response.clone();
+                            cloneRes.json().then(data => {{
+                                window.__TAURI_INTERNALS__.invoke('handle_scraped_data', {{
+                                    sourceId: '{}',
+                                    secretKey: '{}',
+                                    data: data
+                                }});
+                            }}).catch(e => {{
+                                console.error('Failed to capture JSON:', e);
                             }});
-                        }}).catch(e => {{
-                            logDebug('Failed to capture JSON: ' + e);
-                            console.error('Failed to capture JSON:', e);
-                        }});
+                        }}
+                        return response;
+                    }} catch(e) {{
+                        throw e;
                     }}
-                    return response;
                 }}
                 
                 return originalFetch.apply(this, args);
@@ -102,7 +149,7 @@ pub async fn push_scraper_task(
                 this._url = xUrl;
                 return originalXhrOpen.call(this, method, xUrl, ...rest);
             }};
-            
+
             const originalXhrSend = XMLHttpRequest.prototype.send;
             XMLHttpRequest.prototype.send = function(body) {{
                 this.addEventListener('load', function() {{
@@ -112,14 +159,16 @@ pub async fn push_scraper_task(
                          }} else {{
                              try {{
                                  const data = JSON.parse(this.responseText);
-                                 window.__TAURI_INTERNALS__.invoke('handle_scraped_data', {{ 
-                                     sourceId: '{}', 
+                                 window.__TAURI_INTERNALS__.invoke('handle_scraped_data', {{
+                                     sourceId: '{}',
                                      secretKey: '{}',
-                                     data: data 
+                                     data: data
                                  }});
                              }} catch(e) {{}}
                          }}
                     }}
+                }});
+                this.addEventListener('error', function() {{}});
                 }});
                 return originalXhrSend.call(this, body);
             }};
@@ -146,15 +195,12 @@ pub async fn push_scraper_task(
                     observer.observe(document.documentElement, {{ childList: true, subtree: true }});
                 }});
             }}
-            
+
             // User Injected Script
             try {{
-                logDebug('Executing user inject script');
                 {}
-                logDebug('User inject script executed cleanly');
-            }} catch(e) {{ 
-                logDebug('Inject script error: ' + String(e));
-                console.error('Inject script error:', e); 
+            }} catch(e) {{
+                console.error('Inject script error:', e);
             }}
         }})();
         "#,
@@ -165,11 +211,9 @@ pub async fn push_scraper_task(
 
     // If a scraper window already exists, close it to avoid state pollution and cleanly re-inject
     if let Some(win) = app.get_webview_window("scraper_worker") {
-        println!("[Scraper Debug] closing existing scraper_worker");
         let _ = win.close();
     }
 
-    println!("[Scraper Debug] building new WebviewWindow for url: {}", url);
     let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         "scraper_worker",
@@ -185,27 +229,33 @@ pub async fn push_scraper_task(
             .inner_size(960.0, 720.0)
             .resizable(true);
     } else {
-        // 关键：macOS App Nap 会挂起 visible(false) 的 WKWebView 执行
-        // 我们将其设为 visible(true)，但非常小、透明，且位置在屏幕之外
+        // Background mode: disable App Nap on macOS to prevent WKWebView suspension
+        #[cfg(target_os = "macos")]
+        {
+            let state = app.state::<ScraperState>();
+            let mut guard = state.app_nap_guard.lock().unwrap();
+            *guard = Some(AppNapGuard::new("Background webview scraper running"));
+        }
+
+        // CRITICAL: WKWebView must be in the view hierarchy to execute JavaScript
+        // Off-screen positioning (-10000, -10000) removes it from view hierarchy
+        // Solution: Use minimal size at (0, 0) with visible(true) but effectively invisible
+        // The window will be 1x1 pixel in top-left corner - invisible but in view hierarchy
         builder = builder
             .visible(true)
             .decorations(false)
-            .inner_size(10.0, 10.0)
-            .position(-10000.0, -10000.0);
+            .inner_size(1.0, 1.0)
+            .position(0.0, 0.0)
+            .skip_taskbar(true);
     }
 
-    let _webview = builder.build().map_err(|e| {
-        println!("[Scraper Debug] failed to build webview: {}", e);
-        e.to_string()
-    })?;
+    let _webview = builder.build().map_err(|e| e.to_string())?;
 
     if foreground {
         let _ = _webview.center();
         let _ = _webview.show();
         let _ = _webview.set_focus();
     }
-    
-    println!("[Scraper Debug] WebviewWindow built successfully");
 
     Ok(())
 }
@@ -236,11 +286,20 @@ pub async fn handle_scraped_data(
         "secretKey": secret_key,
         "data": data
     })).map_err(|e| e.to_string())?;
-    
+
     // Close the scraper window since task is done
     if let Some(win) = app.get_webview_window("scraper_worker") {
         let _ = win.close();
     }
+
+    // Re-enable App Nap on macOS after scraping completes
+    #[cfg(target_os = "macos")]
+    {
+        let state = app.state::<ScraperState>();
+        let mut guard = state.app_nap_guard.lock().unwrap();
+        *guard = None; // Drop the guard, which calls endActivity
+    }
+
     Ok(())
 }
 
@@ -291,5 +350,14 @@ pub async fn cancel_scraper_task(
     if let Some(win) = app.get_webview_window("scraper_worker") {
         let _ = win.close();
     }
+
+    // Re-enable App Nap on macOS when scraper is cancelled
+    #[cfg(target_os = "macos")]
+    {
+        let state = app.state::<ScraperState>();
+        let mut guard = state.app_nap_guard.lock().unwrap();
+        *guard = None; // Drop the guard, which calls endActivity
+    }
+
     Ok(())
 }
