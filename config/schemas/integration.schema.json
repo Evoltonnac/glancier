@@ -1,0 +1,276 @@
+{
+  "$defs": {
+    "IntegrationYamlConfig": {
+      "additionalProperties": false,
+      "description": "Schema-only model for flow-based integration YAML files.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "flow": {
+          "items": {
+            "$ref": "#/$defs/StepConfig"
+          },
+          "title": "Flow",
+          "type": "array"
+        },
+        "templates": {
+          "items": {
+            "$ref": "#/$defs/ViewComponent"
+          },
+          "title": "Templates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "flow"
+      ],
+      "title": "IntegrationYamlConfig",
+      "type": "object"
+    },
+    "StepConfig": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run"
+        },
+        "use": {
+          "$ref": "#/$defs/StepType"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context",
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secrets",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "use"
+      ],
+      "title": "StepConfig",
+      "type": "object"
+    },
+    "StepType": {
+      "enum": [
+        "http",
+        "oauth",
+        "api_key",
+        "curl",
+        "extract",
+        "script",
+        "log",
+        "webview"
+      ],
+      "title": "StepType",
+      "type": "string"
+    },
+    "ViewComponent": {
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/ViewComponentType",
+          "default": "metric"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "delta_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delta Field"
+        },
+        "ui": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ui"
+        },
+        "widgets": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Widgets"
+        },
+        "use_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Use Group"
+        },
+        "group_vars": {
+          "additionalProperties": true,
+          "title": "Group Vars",
+          "type": "object"
+        }
+      },
+      "title": "ViewComponent",
+      "type": "object"
+    },
+    "ViewComponentType": {
+      "enum": [
+        "metric",
+        "line_chart",
+        "bar_chart",
+        "table",
+        "json",
+        "badge",
+        "stat_grid",
+        "source_card"
+      ],
+      "title": "ViewComponentType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Schema for Glancier integration YAML files",
+  "properties": {
+    "integrations": {
+      "items": {
+        "$ref": "#/$defs/IntegrationYamlConfig"
+      },
+      "title": "Integrations",
+      "type": "array"
+    }
+  },
+  "title": "Glancier Integration Configuration",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

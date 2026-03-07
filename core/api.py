@@ -528,6 +528,60 @@ async def create_integration_file(filename: str, request: FileContentRequest) ->
 @router.put("/integrations/files/{integration_id}")
 async def update_integration_file(integration_id: str, request: FileContentRequest) -> dict:
     """更新集成 YAML 文件内容。"""
+    # 先进行 Pydantic 校验
+    from core.config_loader import IntegrationConfig
+    from pydantic import ValidationError
+
+    try:
+        # 解析 YAML 内容
+        parsed = yaml.safe_load(request.content)
+        if not parsed:
+            raise HTTPException(400, "Empty YAML content")
+
+        # 校验 integrations 列表
+        if "integrations" not in parsed:
+            raise HTTPException(400, "Missing 'integrations' key in YAML")
+
+        integrations = parsed.get("integrations", [])
+        if not isinstance(integrations, list):
+            raise HTTPException(400, "'integrations' must be a list")
+
+        # 使用 Pydantic 校验每个 integration
+        diagnostics = []
+        for idx, integration_data in enumerate(integrations):
+            try:
+                IntegrationConfig.model_validate(integration_data)
+            except ValidationError as exc:
+                # 将 Pydantic ValidationError 转换为前端可用的诊断信息
+                for error in exc.errors():
+                    field_path = ".".join(str(loc) for loc in error["loc"])
+                    diagnostics.append({
+                        "source": "backend",
+                        "message": error["msg"],
+                        "code": error["type"],
+                        "fieldPath": f"integrations[{idx}].{field_path}" if field_path else f"integrations[{idx}]"
+                    })
+
+        # 如果有校验错误，返回详细信息
+        if diagnostics:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Integration validation failed",
+                    "diagnostics": diagnostics
+                }
+            )
+
+    except yaml.YAMLError as exc:
+        # YAML 语法错误
+        raise HTTPException(400, f"Invalid YAML syntax: {exc}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Validation error: %s", exc, exc_info=True)
+        raise HTTPException(400, f"Validation failed: {exc}")
+
+    # 校验通过，保存文件
     success = _integration_manager.save_integration(integration_id, request.content)
     if not success:
         raise HTTPException(500, f"Failed to save integration {integration_id}")

@@ -9,6 +9,17 @@ import type {
 
 const BASE_URL = "/api";
 
+export interface ReloadConfigDiagnostic {
+  source?: "backend" | "editor";
+  file?: string;
+  line?: number;
+  column?: number;
+  code?: string;
+  message: string;
+  field_path?: string;
+  fieldPath?: string;
+}
+
 class ApiClient {
   async getSources(): Promise<SourceSummary[]> {
     const res = await fetch(`${BASE_URL}/sources`);
@@ -163,7 +174,33 @@ class ApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
     });
-    if (!res.ok) throw new Error(`Failed to save integration ${filename}`);
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null);
+
+      // Check if backend returned structured validation errors
+      if (payload && typeof payload === "object" && "detail" in payload) {
+        const detail = typeof payload.detail === "string"
+          ? payload.detail
+          : payload.detail?.message || "Failed to save integration";
+
+        const diagnostics =
+          payload.detail &&
+          typeof payload.detail === "object" &&
+          "diagnostics" in payload.detail &&
+          Array.isArray(payload.detail.diagnostics)
+            ? (payload.detail.diagnostics as ReloadConfigDiagnostic[])
+            : [];
+
+        const saveError = Object.assign(new Error(detail), {
+          diagnostics,
+          detail,
+          status: res.status,
+        });
+        throw saveError;
+      }
+
+      throw new Error(`Failed to save integration ${filename}`);
+    }
   }
 
   async deleteIntegrationFile(filename: string): Promise<void> {
@@ -247,7 +284,29 @@ class ApiClient {
     const res = await fetch(`${BASE_URL}/system/reload`, {
       method: "POST",
     });
-    if (!res.ok) throw new Error("Failed to reload config");
+    if (!res.ok) {
+      const payload = await res.json().catch(() => null);
+      const detail =
+        payload &&
+        typeof payload === "object" &&
+        "detail" in payload &&
+        typeof payload.detail === "string"
+          ? payload.detail
+          : "Failed to reload config";
+      const diagnostics =
+        payload &&
+        typeof payload === "object" &&
+        "diagnostics" in payload &&
+        Array.isArray(payload.diagnostics)
+          ? (payload.diagnostics as ReloadConfigDiagnostic[])
+          : [];
+      const reloadError = Object.assign(new Error(detail), {
+        diagnostics,
+        detail,
+        status: res.status,
+      });
+      throw reloadError;
+    }
     return res.json();
   }
   // --- System Settings ---

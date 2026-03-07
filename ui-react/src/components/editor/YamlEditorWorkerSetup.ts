@@ -5,10 +5,11 @@ import * as monaco from "monaco-editor";
 import { loader } from "@monaco-editor/react";
 
 // Use Vite's ?worker import syntax for proper worker bundling
-// This is the official workaround recommended by monaco-yaml for Vite:
-// https://github.com/remcohaszing/monaco-yaml#why-doesnt-it-work-with-vite
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import YamlWorker from "../../workers/yaml.worker?worker";
+
+// Import schema directly to let Vite bundle it
+import bundledSchema from "../../../../config/schemas/integration.schema.json";
 
 // Tell @monaco-editor/react to use locally installed monaco-editor instead of CDN
 loader.config({ monaco });
@@ -24,14 +25,9 @@ export interface IntegrationDiagnostic {
 
 type JsonSchema = Record<string, unknown>;
 
-const SCHEMA_PATH = "/config/schemas/integration.schema.json";
-const LOCAL_SCHEMA_PATH = new URL(
-  "../../../../config/schemas/integration.schema.json",
-  import.meta.url,
-).toString();
 const SCHEMA_URI = "inmemory://schema/integration.schema.json";
 
-const FALLBACK_INTEGRATION_SCHEMA: JsonSchema = {
+const FALLBACK_INTEGRATION_SCHEMA: JsonSchema = bundledSchema || {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   title: "IntegrationFile",
   type: "object",
@@ -83,37 +79,9 @@ function ensureMonacoEnvironment() {
   workerInitialized = true;
 }
 
-async function fetchJson(url: string): Promise<JsonSchema | null> {
-  try {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-      return null;
-    }
-    const payload = await response.json();
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      return null;
-    }
-    return payload as JsonSchema;
-  } catch {
-    return null;
-  }
-}
-
-async function loadSchema(): Promise<JsonSchema> {
-  const schema = await fetchJson(SCHEMA_PATH);
-  if (schema) {
-    return schema;
-  }
-  const bundledSchema = await fetchJson(LOCAL_SCHEMA_PATH);
-  if (bundledSchema) {
-    return bundledSchema;
-  }
-  return schema ?? FALLBACK_INTEGRATION_SCHEMA;
-}
-
 function getSchemaCache(): Promise<JsonSchema> {
   if (!schemaCachePromise) {
-    schemaCachePromise = loadSchema();
+    schemaCachePromise = Promise.resolve(FALLBACK_INTEGRATION_SCHEMA);
   }
   return schemaCachePromise;
 }

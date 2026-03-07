@@ -2,7 +2,7 @@
 Data models for stored Sources and Views (JSON-based management).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 
 from pydantic import BaseModel, Field
 
@@ -34,3 +34,10 @@ class StoredSource(BaseModel):
     name: str
     config: Dict[str, Any] = Field(default_factory=dict, description="Authentication and specific settings")
     vars: Dict[str, Any] = Field(default_factory=dict, description="Variables for template substitution")
+
+
+WIDGET_SCHEMA_MODELS: Dict[str, Type[BaseModel]] = {
+    "view_item": ViewItem,
+    "stored_view": StoredView,
+    "stored_source": StoredSource,
+}
