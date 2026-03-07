@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Editor from "@monaco-editor/react";
+import type { editor } from "monaco-editor";
+import type * as Monaco from "monaco-editor";
 import { api } from "../api/client";
+import type { ReloadConfigDiagnostic } from "../api/client";
 import { useStore } from "../store";
 import {
     Card,
@@ -47,6 +50,20 @@ import {
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { useTheme } from "../components/theme-provider";
+import {
+    markersToDiagnostics,
+    setupYamlWorker,
+    type IntegrationDiagnostic,
+} from "../components/editor/YamlEditorWorkerSetup";
+
+type ReloadConfigError = Error & {
+    diagnostics?: ReloadConfigDiagnostic[];
+    detail?: string;
+};
+
+function normalizeIntegrationFilename(input: string): string {
+    return input.trim();
+}
 
 export default function IntegrationsPage() {
     useTheme(); // Ensure context is used if needed, or simply remove
@@ -81,6 +98,12 @@ export default function IntegrationsPage() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [backendDiagnosticsByFile, setBackendDiagnosticsByFile] = useState<
+        Record<string, IntegrationDiagnostic[]>
+    >({});
+    const [editorDiagnosticsByFile, setEditorDiagnosticsByFile] = useState<
+        Record<string, IntegrationDiagnostic[]>
+    >({});
 
     // Source management
     const [sources, setSources] = useState<any[]>([]);
@@ -99,6 +122,107 @@ export default function IntegrationsPage() {
     const [deletingSourceId, setDeletingSourceId] = useState<string | null>(
         null,
     );
+    const activeFileRef = useRef<string | null>(selectedFile);
+    const validateDebounceRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        activeFileRef.current = selectedFile;
+    }, [selectedFile]);
+
+    useEffect(() => {
+        return () => {
+            if (validateDebounceRef.current !== null) {
+                window.clearTimeout(validateDebounceRef.current);
+            }
+        };
+    }, []);
+
+    const getFileDiagnostics = useCallback(
+        (filename: string): IntegrationDiagnostic[] => {
+            const backend = backendDiagnosticsByFile[filename] ?? [];
+            const editor = editorDiagnosticsByFile[filename] ?? [];
+            return [...backend, ...editor];
+        },
+        [backendDiagnosticsByFile, editorDiagnosticsByFile],
+    );
+
+    const hasFileErrors = useCallback(
+        (filename: string) => getFileDiagnostics(filename).length > 0,
+        [getFileDiagnostics],
+    );
+
+    const selectedDiagnostics =
+        selectedFile ? getFileDiagnostics(selectedFile) : [];
+    const editorModelPath = selectedFile
+        ? `file:///integrations/${selectedFile}`
+        : undefined;
+
+    const handleEditorValidate = useCallback((markers: editor.IMarker[]) => {
+        const currentFile = activeFileRef.current;
+        if (!currentFile) {
+            return;
+        }
+        if (validateDebounceRef.current !== null) {
+            window.clearTimeout(validateDebounceRef.current);
+        }
+        validateDebounceRef.current = window.setTimeout(() => {
+            setEditorDiagnosticsByFile((prev) => ({
+                ...prev,
+                [currentFile]: markersToDiagnostics(markers),
+            }));
+        }, 220);
+    }, []);
+
+    const mapBackendDiagnostics = useCallback(
+        (
+            fallbackFile: string,
+            diagnostics: ReloadConfigDiagnostic[] | undefined,
+            fallbackMessage: string,
+        ): Record<string, IntegrationDiagnostic[]> => {
+            if (!diagnostics || diagnostics.length === 0) {
+                return {
+                    [fallbackFile]: [
+                        {
+                            source: "backend",
+                            message: fallbackMessage,
+                            code: "reload.error",
+                        },
+                    ],
+                };
+            }
+
+            const grouped: Record<string, IntegrationDiagnostic[]> = {};
+            diagnostics.forEach((diagnostic) => {
+                const targetFile = diagnostic.file
+                    ? normalizeIntegrationFilename(diagnostic.file)
+                    : fallbackFile;
+                if (!grouped[targetFile]) {
+                    grouped[targetFile] = [];
+                }
+                grouped[targetFile].push({
+                    source: "backend",
+                    message: diagnostic.message || fallbackMessage,
+                    code: diagnostic.code,
+                    line: diagnostic.line,
+                    column: diagnostic.column,
+                    fieldPath: diagnostic.field_path ?? diagnostic.fieldPath,
+                });
+            });
+            return grouped;
+        },
+        [],
+    );
+
+    const clearBackendDiagnosticsForFile = useCallback((filename: string) => {
+        setBackendDiagnosticsByFile((prev) => {
+            if (!prev[filename]) {
+                return prev;
+            }
+            const next = { ...prev };
+            delete next[filename];
+            return next;
+        });
+    }, []);
 
     const loadIntegrations = useCallback(async () => {
         try {
@@ -158,19 +282,47 @@ export default function IntegrationsPage() {
         try {
             await api.saveIntegrationFile(selectedFile, content);
             setOriginalContent(content);
-            setSuccess("Saved successfully!");
+            setSuccess("Saved file.");
 
-            // Trigger config reload
-            const result = await api.reloadConfig();
-            if (result.affected_sources.length > 0) {
-                setSuccess(
-                    `Saved! Reloaded config. Affected sources: ${result.affected_sources.join(", ")}`,
+            try {
+                const result = await api.reloadConfig();
+                clearBackendDiagnosticsForFile(selectedFile);
+                if (result.affected_sources.length > 0) {
+                    setSuccess(
+                        `Saved! Reloaded config. Affected sources: ${result.affected_sources.join(", ")}`,
+                    );
+                } else {
+                    setSuccess("Saved and reloaded config.");
+                }
+            } catch (reloadErr) {
+                const typedReloadErr = reloadErr as ReloadConfigError;
+                const reloadMessage =
+                    typedReloadErr.detail ||
+                    typedReloadErr.message ||
+                    "Configuration reload failed";
+                const groupedDiagnostics = mapBackendDiagnostics(
+                    selectedFile,
+                    typedReloadErr.diagnostics,
+                    reloadMessage,
                 );
+                setBackendDiagnosticsByFile((prev) => {
+                    const next = { ...prev };
+                    Object.entries(groupedDiagnostics).forEach(
+                        ([filename, diagnostics]) => {
+                            next[filename] = diagnostics;
+                        },
+                    );
+                    return next;
+                });
+                setSuccess("Saved file, but config reload failed.");
+                setError(reloadMessage);
             }
 
-            setTimeout(() => setSuccess(null), 3000);
-        } catch (err: any) {
-            setError(err.message || "Failed to save");
+            setTimeout(() => setSuccess(null), 4000);
+        } catch (saveErr) {
+            const message =
+                saveErr instanceof Error ? saveErr.message : "Failed to save";
+            setError(message);
         } finally {
             setSaving(false);
         }
@@ -203,6 +355,15 @@ export default function IntegrationsPage() {
         try {
             await api.deleteIntegrationFile(filename);
             await loadIntegrations();
+            clearBackendDiagnosticsForFile(filename);
+            setEditorDiagnosticsByFile((prev) => {
+                if (!prev[filename]) {
+                    return prev;
+                }
+                const next = { ...prev };
+                delete next[filename];
+                return next;
+            });
             if (selectedFile === filename) {
                 setSelectedFile(null);
                 setContent("");
@@ -273,6 +434,23 @@ export default function IntegrationsPage() {
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [selectedFile, content, originalContent]);
+
+    const handleMonacoMount = useCallback(
+        async (_editor: editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
+            const model = _editor.getModel();
+
+            await setupYamlWorker(monaco, {
+                fileMatch: ["*"], // Match all files since this editor only edits YAML
+            });
+
+            // Trigger validation after schema is loaded
+            if (model) {
+                // Force re-validation by clearing and letting the language service re-validate
+                monaco.editor.setModelMarkers(model, 'yaml', []);
+            }
+        },
+        [],
+    );
 
     return (
         <TooltipProvider>
@@ -398,7 +576,12 @@ export default function IntegrationsPage() {
                                             }
                                             className={`h-10 w-10 flex items-center justify-center rounded-md transition-colors duration-150 ${selectedFile === file ? "bg-brand/20 text-brand" : "hover:bg-foreground hover:text-background text-muted-foreground"}`}
                                         >
-                                            <FileJson className="h-5 w-5" />
+                                            <span className="relative inline-flex">
+                                                <FileJson className="h-5 w-5" />
+                                                {hasFileErrors(file) && (
+                                                    <AlertCircle className="absolute -top-1 -right-1 h-3.5 w-3.5 text-error" />
+                                                )}
+                                            </span>
                                         </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="right">
@@ -419,9 +602,14 @@ export default function IntegrationsPage() {
                                     }`}
                                     onClick={() => loadIntegrationContent(file)}
                                 >
-                                    <span className="text-sm truncate">
-                                        {file}
-                                    </span>
+                                    <div className="min-w-0 flex items-center gap-2">
+                                        <span className="text-sm truncate">
+                                            {file}
+                                        </span>
+                                        {hasFileErrors(file) && (
+                                            <Badge variant="error">Error</Badge>
+                                        )}
+                                    </div>
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button
@@ -532,21 +720,62 @@ export default function IntegrationsPage() {
                                 </div>
                             </div>
 
+                            {selectedDiagnostics.length > 0 && (
+                                <div className="border-b border-border bg-error/10 px-4 py-3">
+                                    <div className="flex items-center gap-2 text-sm font-medium text-error mb-2">
+                                        <AlertCircle className="h-4 w-4" />
+                                        Configuration diagnostics (
+                                        {selectedDiagnostics.length})
+                                    </div>
+                                    <div className="space-y-2">
+                                        {selectedDiagnostics.map(
+                                            (diagnostic, index) => (
+                                                <div
+                                                    key={`${diagnostic.code || "diag"}-${index}`}
+                                                    className="rounded-md border border-error/20 bg-background/80 px-3 py-2 text-xs"
+                                                >
+                                                    <div className="font-medium text-foreground">
+                                                        {diagnostic.message}
+                                                    </div>
+                                                    <div className="mt-1 text-muted-foreground">
+                                                        {diagnostic.line &&
+                                                        diagnostic.column
+                                                            ? `line ${diagnostic.line}, column ${diagnostic.column}`
+                                                            : "No precise position from backend"}
+                                                        {diagnostic.fieldPath
+                                                            ? ` · field: ${diagnostic.fieldPath}`
+                                                            : ""}
+                                                        {diagnostic.code
+                                                            ? ` · code: ${diagnostic.code}`
+                                                            : ""}
+                                                    </div>
+                                                </div>
+                                            ),
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Editor */}
                             <div className="flex-1 overflow-hidden">
                                 <Editor
                                     height="100%"
+                                    path={editorModelPath}
+                                    language="yaml"
                                     defaultLanguage="yaml"
                                     value={content}
                                     onChange={(value) =>
                                         setContent(value || "")
                                     }
+                                    onMount={handleMonacoMount}
+                                    onValidate={handleEditorValidate}
                                     theme={isDarkTheme ? "vs-dark" : "light"}
                                     options={{
                                         minimap: { enabled: false },
                                         fontSize: 14,
                                         wordWrap: "on",
                                         automaticLayout: true,
+                                        renderValidationDecorations: "on",
                                     }}
                                 />
                             </div>
