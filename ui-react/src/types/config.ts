@@ -214,6 +214,7 @@ export interface SourceSummary {
     has_data: boolean;
     updated_at?: number;
     error?: string;
+    error_details?: string;
     // Runtime State
     status: SourceStatus;
     message?: string;

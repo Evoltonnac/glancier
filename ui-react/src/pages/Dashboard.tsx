@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { GridStack } from "gridstack";
 import "gridstack/dist/gridstack.min.css";
 import { api } from "../api/client";
@@ -80,6 +80,7 @@ function renderComponent(
     sourceData: DataResponse | null,
     sourceSummary?: SourceSummary,
     onInteract?: (source: SourceSummary) => void,
+    onShowError?: (source: SourceSummary) => void,
 ) {
     return (
         <BaseSourceCard
@@ -87,8 +88,40 @@ function renderComponent(
             sourceSummary={sourceSummary}
             sourceData={sourceData}
             onInteract={onInteract}
+            onShowError={onShowError}
         />
     );
+}
+
+function hasSourceError(
+    source: SourceSummary,
+    sourceData?: DataResponse | null,
+): boolean {
+    return (
+        !!source.error ||
+        !!source.error_details ||
+        (!!source.message && source.status === "error") ||
+        !!sourceData?.error
+    );
+}
+
+function getSourceErrorSummary(
+    source: SourceSummary,
+    sourceData?: DataResponse | null,
+): string {
+    return (
+        source.error ||
+        sourceData?.error ||
+        source.message?.split("\n")[0] ||
+        "Execution failed"
+    );
+}
+
+function getSourceErrorDetails(
+    source: SourceSummary,
+    sourceData?: DataResponse | null,
+): string {
+    return source.error_details || source.message || sourceData?.error || source.error || "";
 }
 
 export default function Dashboard() {
@@ -118,6 +151,8 @@ export default function Dashboard() {
         handlePushToQueue,
         handleShowScraperWindow,
     } = useScraper();
+    const [errorSourceId, setErrorSourceId] = useState<string | null>(null);
+    const [showErrorDetails, setShowErrorDetails] = useState(false);
 
     // GridStack ref
     const gridRef = useRef<HTMLDivElement>(null);
@@ -361,6 +396,11 @@ export default function Dashboard() {
         }
     };
 
+    const openErrorDialog = useCallback((source: SourceSummary) => {
+        setErrorSourceId(source.id);
+        setShowErrorDetails(false);
+    }, []);
+
     if (loading) {
         return (
             <TooltipProvider>
@@ -382,6 +422,8 @@ export default function Dashboard() {
     }
 
     const getStatusConfig = (source: SourceSummary) => {
+        const sourceData = dataMap[source.id];
+        const hasError = hasSourceError(source, sourceData);
         if ((source.status as string) === "refreshing") {
             return {
                 label: "刷新中",
@@ -398,7 +440,7 @@ export default function Dashboard() {
                 icon: Wrench,
             };
         }
-        if (source.error) {
+        if (hasError) {
             return {
                 label: "错误",
                 variant: "error" as const,
@@ -429,23 +471,35 @@ export default function Dashboard() {
             (s) =>
                 s.status !== "refreshing" &&
                 s.status !== "suspended" &&
-                s.error,
+                hasSourceError(s, dataMap[s.id]),
         ).length,
         normal: sources.filter(
             (s) =>
                 s.status !== "refreshing" &&
                 s.status !== "suspended" &&
-                !s.error &&
+                !hasSourceError(s, dataMap[s.id]) &&
                 s.has_data,
         ).length,
         waiting: sources.filter(
             (s) =>
                 s.status !== "refreshing" &&
                 s.status !== "suspended" &&
-                !s.error &&
+                !hasSourceError(s, dataMap[s.id]) &&
                 !s.has_data,
         ).length,
     };
+
+    const errorSource = errorSourceId
+        ? sources.find((source) => source.id === errorSourceId) || null
+        : null;
+    const errorSourceData = errorSource ? dataMap[errorSource.id] : null;
+    const errorSummary = errorSource
+        ? getSourceErrorSummary(errorSource, errorSourceData)
+        : "";
+    const errorDetails = errorSource
+        ? getSourceErrorDetails(errorSource, errorSourceData)
+        : "";
+    const canShowDetails = !!errorDetails && errorDetails !== errorSummary;
 
     return (
         <TooltipProvider>
@@ -561,6 +615,15 @@ export default function Dashboard() {
                         <>
                             <div className="space-y-1.5 p-2 overflow-y-auto flex-1">
                                 {sources.map((source) => {
+                                    const sourceData = dataMap[source.id];
+                                    const hasError = hasSourceError(
+                                        source,
+                                        sourceData,
+                                    );
+                                    const errorSummary = getSourceErrorSummary(
+                                        source,
+                                        sourceData,
+                                    );
                                     const statusConfig =
                                         getStatusConfig(source);
                                     return (
@@ -614,7 +677,33 @@ export default function Dashboard() {
                                                                             : "解决问题"}
                                                                     </p>
                                                                 </TooltipContent>
-                                                            </Tooltip>
+                                                                </Tooltip>
+                                                        ) : hasError ? (
+                                                            <button
+                                                                type="button"
+                                                                className={cn(
+                                                                    badgeVariants(
+                                                                        {
+                                                                            variant:
+                                                                                "error",
+                                                                        },
+                                                                    ),
+                                                                    "gap-1 px-1.5 py-0 h-6 shrink-0 cursor-pointer hover:bg-error/30",
+                                                                )}
+                                                                onClick={() =>
+                                                                    openErrorDialog(
+                                                                        source,
+                                                                    )
+                                                                }
+                                                                title={
+                                                                    errorSummary
+                                                                }
+                                                            >
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                <span>
+                                                                    错误
+                                                                </span>
+                                                            </button>
                                                         ) : (
                                                             <Badge
                                                                 variant={
@@ -669,21 +758,17 @@ export default function Dashboard() {
                                                         </Tooltip>
                                                     </div>
                                                 </div>
-                                                {source.error && (
+                                                {hasError && (
                                                     <div className="mt-2">
                                                         <p className="text-xs text-destructive line-clamp-2">
-                                                            {source.error}
+                                                            {errorSummary}
                                                         </p>
                                                         <button
                                                             className="w-full mt-2 h-7 text-xs font-medium rounded bg-destructive text-destructive-foreground hover:bg-foreground hover:text-background transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 flex items-center justify-center gap-1"
-                                                            onClick={() =>
-                                                                setInteractSource(
-                                                                    source,
-                                                                )
-                                                            }
+                                                            onClick={() => openErrorDialog(source)}
                                                         >
                                                             <AlertTriangle className="h-3 w-3" />
-                                                            重试 / 详情
+                                                            查看详情
                                                         </button>
                                                     </div>
                                                 )}
@@ -805,6 +890,7 @@ export default function Dashboard() {
                                                     sourceData,
                                                     sourceSummary,
                                                     setInteractSource,
+                                                    openErrorDialog,
                                                 )}
                                             </div>
                                         </div>
@@ -826,6 +912,75 @@ export default function Dashboard() {
                     onClearQueue={handleClearScraperQueue}
                 />
             </div>
+
+            <Dialog
+                open={errorSourceId !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setErrorSourceId(null);
+                        setShowErrorDetails(false);
+                    }
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-error" />
+                            执行错误
+                        </DialogTitle>
+                        <DialogDescription>
+                            {errorSource
+                                ? `${errorSource.name} 的执行在运行期间失败。`
+                                : "执行发生错误。"}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div className="rounded border border-error/20 bg-error/5 p-3 text-sm text-error whitespace-pre-wrap break-words">
+                            {errorSummary}
+                        </div>
+                        {canShowDetails && (
+                            <button
+                                type="button"
+                                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                onClick={() =>
+                                    setShowErrorDetails((prev) => !prev)
+                                }
+                            >
+                                {showErrorDetails
+                                    ? "隐藏详细堆栈"
+                                    : "显示详细堆栈"}
+                            </button>
+                        )}
+                        {showErrorDetails && canShowDetails && (
+                            <pre className="max-h-72 overflow-auto rounded border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+                                {errorDetails}
+                            </pre>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setErrorSourceId(null);
+                                setShowErrorDetails(false);
+                            }}
+                        >
+                            关闭
+                        </Button>
+                        {errorSource && (
+                            <Button
+                                onClick={() => {
+                                    setErrorSourceId(null);
+                                    setShowErrorDetails(false);
+                                    void handleRefreshSource(errorSource.id);
+                                }}
+                            >
+                                重新执行
+                            </Button>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <AddWidgetDialog
                 open={isAddDialogOpen}

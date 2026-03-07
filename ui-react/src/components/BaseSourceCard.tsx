@@ -1,4 +1,5 @@
 import { Card } from "./ui/card";
+import { AlertTriangle } from "lucide-react";
 import type {
     ViewComponent,
     SourceSummary,
@@ -11,6 +12,7 @@ interface BaseSourceCardProps {
     sourceSummary?: SourceSummary;
     sourceData?: DataResponse | null;
     onInteract?: (source: SourceSummary) => void;
+    onShowError?: (source: SourceSummary) => void;
 }
 
 // Semantic status color indicator for server-rack style pill
@@ -26,6 +28,7 @@ export function BaseSourceCard({
     component,
     sourceSummary,
     sourceData,
+    onShowError,
 }: BaseSourceCardProps) {
     const ui = component.ui || {
         title: component.label || "Untitled",
@@ -33,12 +36,23 @@ export function BaseSourceCard({
         status_field: undefined,
     };
 
+    const hasError =
+        !!sourceSummary?.error ||
+        !!sourceSummary?.error_details ||
+        (!!sourceSummary?.message && sourceSummary.status === "error") ||
+        !!sourceData?.error;
+    const errorLabel =
+        sourceSummary?.error ||
+        sourceData?.error ||
+        sourceSummary?.message?.split("\n")[0] ||
+        "Execution failed";
+
     // Determine status for indicator
     const rawStatus = sourceSummary?.status || "disabled";
     let pillKey: "success" | "info" | "error" | "warning" | "disabled";
     if ((rawStatus as string) === "refreshing") {
         pillKey = "info";
-    } else if (sourceSummary?.error || sourceData?.error) {
+    } else if (hasError) {
         pillKey = "error";
     } else if (rawStatus === "suspended") {
         pillKey = "warning";
@@ -72,6 +86,20 @@ export function BaseSourceCard({
                         {ui.title}
                     </span>
                 </div>
+                {hasError && sourceSummary && onShowError && (
+                    <button
+                        type="button"
+                        className="relative z-10 mr-5 inline-flex h-6 items-center gap-1 rounded bg-error/15 px-2 text-[11px] font-medium text-error hover:bg-error/25 transition-colors"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onShowError(sourceSummary);
+                        }}
+                        title={errorLabel}
+                    >
+                        <AlertTriangle className="h-3 w-3" />
+                        错误
+                    </button>
+                )}
                 {/* Absolute positioned server rack style indicator light in top-left */}
                 <div
                     className={`absolute left-2 top-1/2 -translate-y-1/2 w-[4px] h-3 rounded-full flex-shrink-0 transition-all duration-500 z-20 ${pillClass}`}
