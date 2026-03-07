@@ -61,8 +61,10 @@ async def list_sources() -> list[dict]:
         # 确定 has_data
         has_data = latest_data is not None and latest_data.get("data") is not None
 
-        # 确定 error
+        # 确定 error（优先使用持久化错误，其次回落到运行时 ERROR 状态消息首行）
         error = latest_data.get("error") if latest_data else None
+        if not error and state and state.status == SourceStatus.ERROR and state.message:
+            error = state.message.splitlines()[0].strip() or "Execution failed"
 
         # 构建 SourceSummary
         summary = {
@@ -76,6 +78,7 @@ async def list_sources() -> list[dict]:
             "has_data": has_data,
             "updated_at": latest_data.get("updated_at") if latest_data else None,
             "error": error,
+            "error_details": state.message if state and state.status == SourceStatus.ERROR else None,
             "status": state.status.value if state else "disabled",
             "message": state.message if state else None,
             "interaction": state.interaction.model_dump() if state and state.interaction else None,

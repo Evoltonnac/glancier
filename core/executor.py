@@ -8,6 +8,8 @@ import time
 import asyncio
 import httpx
 import shlex
+import traceback
+from contextlib import redirect_stderr, redirect_stdout
 from typing import Any, Dict
 
 from core.source_state import (
@@ -21,6 +23,8 @@ from core.config_loader import SourceConfig, StepConfig, StepType, AuthType
 from jsonpath_ng import parse
 
 logger = logging.getLogger(__name__)
+_RUNTIME_LOG_LINE_LIMIT = 120
+_RUNTIME_LOG_CHAR_LIMIT = 6000
 
 class Executor:
     """
@@ -73,7 +77,14 @@ class Executor:
         except Exception as e:
             logger.error(f"[{source_id}] Failed to persist state: {e}")
 
-    def _update_state(self, source_id: str, status: SourceStatus, message: str | None = None, interaction: InteractionRequest | None = None):
+    def _update_state(
+        self,
+        source_id: str,
+        status: SourceStatus,
+        message: str | None = None,
+        interaction: InteractionRequest | None = None,
+        error: str | None = None,
+    ):
         """更新状态并记录日志，同时持久化到 data.json。"""
         state = self.get_source_state(source_id)
         state.status = status
@@ -90,6 +101,7 @@ class Executor:
                 status=status.value,
                 message=message,
                 interaction=interaction_dict,
+                error=error,
             )
         except Exception as e:
             logger.error(f"[{source_id}] Failed to persist state: {e}")
@@ -123,11 +135,21 @@ class Executor:
             logger.error(f"[{source.id}] Fetch failed: {e}", exc_info=True)
             # 将异常转换为交互请求
             interaction = self._exception_to_interaction(source, e)
+            if interaction:
+                self._update_state(
+                    source.id,
+                    SourceStatus.SUSPENDED,
+                    str(e),
+                    interaction,
+                )
+                return
+
+            error_summary, error_details = self._format_fetch_error(e)
             self._update_state(
-                source.id, 
-                SourceStatus.SUSPENDED if interaction else SourceStatus.ERROR,
-                str(e),
-                interaction
+                source.id,
+                SourceStatus.ERROR,
+                error_details,
+                error=error_summary,
             )
 
     async def _run_flow(self, source: SourceConfig) -> Dict[str, Any]:
@@ -141,16 +163,24 @@ class Executor:
         context = {}
         # Initial context with source vars
         context.update(source.vars)
+        execution_logs: list[str] = []
 
         final_data = {}
 
         for step in source.flow:
             logger.info(f"[{source.id}] Running step {step.id} ({step.use})")
+            self._update_state(
+                source.id,
+                SourceStatus.ACTIVE,
+                self._build_runtime_message(step.id, execution_logs),
+            )
 
             # Outputs from previous step - only valid for this step
             outputs = {}
 
             try:
+                await self._check_step_auth_requirements(source, step)
+
                 # Resolve args with priority: outputs > context > secrets
                 args = self._resolve_args(step.args, outputs, context, source.id)
 
@@ -340,9 +370,25 @@ class Executor:
                     # Redirect stdout to capture if needed, though usually we expect output via variables
                     # We'll expect the script to either modify local_env or set variables we extract
                     try:
+                        def on_script_stream(stream: str, chunk: str):
+                            self._append_runtime_logs(execution_logs, step.id, stream, chunk)
+                            self._update_state(
+                                source.id,
+                                SourceStatus.ACTIVE,
+                                self._build_runtime_message(step.id, execution_logs),
+                            )
+
+                        stdout_relay = _RuntimeStreamRelay(
+                            lambda text: on_script_stream("stdout", text),
+                        )
+                        stderr_relay = _RuntimeStreamRelay(
+                            lambda text: on_script_stream("stderr", text),
+                        )
+
                         # Use compile and exec to run the script
-                        compiled = compile(script_code, f"<step_{step.id}>", "exec")
-                        exec(compiled, {}, local_env)
+                        with redirect_stdout(stdout_relay), redirect_stderr(stderr_relay):
+                            compiled = compile(script_code, f"<step_{step.id}>", "exec")
+                            exec(compiled, {}, local_env)
                         
                         # Any defined outputs in step config will be extracted from local_env
                         output = {}
@@ -419,8 +465,15 @@ class Executor:
                     context.update(outputs)
 
             except Exception as step_error:
+                if isinstance(step_error, RequiredSecretMissing):
+                    raise
                 logger.error(f"Step {step.id} failed: {step_error}")
-                raise step_error
+                flow_error = self._build_flow_step_error(
+                    step_id=step.id,
+                    error=step_error,
+                    execution_logs=execution_logs,
+                )
+                raise flow_error from step_error
 
         # Return final data mapping
         return final_data
@@ -508,6 +561,68 @@ class Executor:
                     data={"auth_url": f"/api/oauth/authorize/{source.id}"}
                 )
 
+    async def _check_step_auth_requirements(self, source: SourceConfig, step: StepConfig):
+        """在执行高风险步骤前先做一次鉴权兜底，避免脚本/cURL进入不可恢复失败。"""
+        if step.use not in {StepType.CURL, StepType.SCRIPT}:
+            return
+        if not source.auth or source.auth.type == AuthType.NONE:
+            return
+        await self._check_auth_requirements(source)
+
+    def _append_runtime_logs(
+        self,
+        logs: list[str],
+        step_id: str,
+        stream: str,
+        chunk: str,
+    ):
+        for line in chunk.splitlines():
+            if not line.strip():
+                continue
+            logs.append(f"[{step_id}][{stream}] {line}")
+
+        if len(logs) > _RUNTIME_LOG_LINE_LIMIT:
+            del logs[: len(logs) - _RUNTIME_LOG_LINE_LIMIT]
+
+    def _build_runtime_message(self, step_id: str, logs: list[str]) -> str:
+        if not logs:
+            return f"Running step {step_id}..."
+
+        tail = "\n".join(logs[-20:])
+        message = f"Running step {step_id}...\n{tail}"
+        if len(message) > _RUNTIME_LOG_CHAR_LIMIT:
+            return message[-_RUNTIME_LOG_CHAR_LIMIT:]
+        return message
+
+    def _build_flow_step_error(
+        self,
+        step_id: str,
+        error: Exception,
+        execution_logs: list[str],
+    ) -> "FlowExecutionError":
+        summary = f"Flow halted at step '{step_id}': {error}"
+        parts = [summary]
+
+        if execution_logs:
+            parts.append("Script streams:\n" + "\n".join(execution_logs[-60:]))
+
+        trace_text = traceback.format_exc().strip()
+        if trace_text:
+            parts.append("Raw traceback:\n" + trace_text)
+
+        return FlowExecutionError(summary=summary, details="\n\n".join(parts))
+
+    def _format_fetch_error(self, error: Exception) -> tuple[str, str]:
+        if isinstance(error, FlowExecutionError):
+            return error.summary, error.details
+
+        summary = str(error) or "Fetch failed"
+        parts = [summary]
+        trace_text = traceback.format_exc().strip()
+        if trace_text:
+            parts.append("Raw traceback:\n" + trace_text)
+        return summary, "\n\n".join(parts)
+
 
     def _exception_to_interaction(self, source: SourceConfig, error: Exception) -> InteractionRequest | None:
         """根据异常生成特定的交互请求。"""
@@ -543,3 +658,27 @@ class RequiredSecretMissing(Exception):
         self.data = data
         self.warning_message = warning_message
         super().__init__(message)
+
+
+class FlowExecutionError(Exception):
+    """Flow 执行失败的结构化异常。"""
+
+    def __init__(self, summary: str, details: str):
+        self.summary = summary
+        self.details = details
+        super().__init__(summary)
+
+
+class _RuntimeStreamRelay:
+    """将 stdout/stderr 内容转发到状态消息，模拟流式输出。"""
+
+    def __init__(self, on_chunk):
+        self._on_chunk = on_chunk
+
+    def write(self, text: str) -> int:
+        if text:
+            self._on_chunk(text)
+        return len(text)
+
+    def flush(self):
+        return None

@@ -77,19 +77,29 @@ class DataController:
         status: str,
         message: str | None = None,
         interaction: dict | None = None,
+        error: str | None = None,
     ):
         """
         记录数据源的运行时状态（用于持久化 SourceState）。
         当执行异常或需要用户交互时，调用此方法将状态存储到 data 中。
         """
         now = time.time()
-        record = {
-            "source_id": source_id,
-            "status": status,
-            "message": message,
-            "interaction": interaction,
-            "updated_at": now,
-        }
+        existing = self.get_latest(source_id) or {"source_id": source_id}
+        record = dict(existing)
+        record.update(
+            {
+                "source_id": source_id,
+                "status": status,
+                "message": message,
+                "interaction": interaction,
+                "updated_at": now,
+            }
+        )
+        if error is not None:
+            record["error"] = error
+        elif status != "error":
+            # 非错误态主动清理旧错误，避免 UI 长期显示陈旧错误。
+            record.pop("error", None)
         Source = Query()
         self.latest_table.upsert(record, Source.source_id == source_id)
         logger.debug(f"[{source_id}] 状态已持久化: {status}")
