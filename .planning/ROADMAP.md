@@ -40,7 +40,7 @@ This roadmap manages the delivery path for Glancier. Completed milestones are ar
   - 数据源 Flow 的普通 Pattern 步骤（如 Fetch、脚本操作）报错需标准化透传与展示。
   - **Plans:** 3 plans
     - [x] 12-01-PLAN.md — JSON Schema Generation & Monaco YAML Integration
-    - [ ] 12-02-PLAN.md — Flow Execution Fail-Fast & Error UI
+    - [x] 12-02-PLAN.md — Flow Execution Fail-Fast & Error UI
     - [ ] 12-03-PLAN.md — Interactive Step States & WebScraper Foregrounding
 - [ ] **Phase 13: Release v1.0 稳定版发版 (Build & Release)**
   - 核心目标：完成端到端打磨，交付可直接对外展示的安全、流畅的客户端。
