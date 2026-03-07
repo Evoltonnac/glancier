@@ -10,7 +10,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { AlertCircle, ExternalLink } from "lucide-react";
+import { AlertCircle, ExternalLink, Wrench } from "lucide-react";
 import { api } from "../../api/client";
 
 interface FlowHandlerProps {
@@ -18,7 +18,10 @@ interface FlowHandlerProps {
     isOpen: boolean;
     onClose: () => void;
     onInteractSuccess?: () => void;
-    onPushToQueue?: (source: SourceSummary) => boolean; // returns false if already in queue
+    onPushToQueue?: (
+        source: SourceSummary,
+        options?: { foreground?: boolean },
+    ) => boolean; // returns false if already in queue
 }
 
 export function FlowHandler({
@@ -37,6 +40,8 @@ export function FlowHandler({
     }
 
     const { interaction } = source;
+    const isErrorState = source.status === "error";
+    const isSuspendedState = source.status === "suspended";
 
     const handleInputChange = (key: string, value: string) => {
         setFormData((prev) => ({ ...prev, [key]: value }));
@@ -230,29 +235,31 @@ export function FlowHandler({
             case "webview_scrape":
                 return (
                     <div className="py-6 flex flex-col items-center justify-center space-y-4">
-                        <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                            <ExternalLink className="w-6 h-6 text-blue-500" />
+                        <div className="w-12 h-12 rounded-full bg-warning/20 flex items-center justify-center">
+                            <Wrench className="w-6 h-6 text-warning" />
                         </div>
                         <div className="text-sm text-muted-foreground text-center">
                             <p className="font-medium text-foreground mb-1">
-                                网页数据抓取
+                                需要手动继续 Web 抓取
                             </p>
-                            <p>点击下方按钮将此任务加入后台抓取队列。</p>
+                            <p>点击下方按钮将 WebView 以前台模式启动。</p>
                             <p className="mt-1">
-                                任务会在后台自动执行，完成后数据将自动更新。
+                                你可以在窗口中登录或通过验证码，完成后将自动继续执行。
                             </p>
                         </div>
                         <Button
                             onClick={() => {
                                 if (!source || !onPushToQueue) return;
-                                const added = onPushToQueue(source);
+                                const added = onPushToQueue(source, {
+                                    foreground: true,
+                                });
                                 if (added) {
                                     onClose();
                                 }
                             }}
                             className="w-full"
                         >
-                            加入抓取队列
+                            前台手动启动
                         </Button>
                     </div>
                 );
@@ -277,9 +284,20 @@ export function FlowHandler({
                     <DialogDescription>
                         {interaction.type === "oauth_start"
                             ? "Authentication"
-                            : "Please provide the requested information."}
+                            : isErrorState
+                              ? "凭证无效，请更新后重试。"
+                              : isSuspendedState
+                                ? "等待补充信息后继续执行。"
+                                : "Please provide the requested information."}
                     </DialogDescription>
                 </DialogHeader>
+
+                {isErrorState && (
+                    <div className="bg-error/15 text-error text-sm p-3 rounded-md flex items-start gap-2 mt-2">
+                        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                        <div>当前状态为 ERROR：凭证已提供但无效，请修正后重新提交。</div>
+                    </div>
+                )}
 
                 {interaction.warning_message && (
                     <div className="bg-orange-500/15 text-orange-600 dark:text-orange-400 text-sm p-3 rounded-md flex items-start gap-2 mt-4 mx-4">

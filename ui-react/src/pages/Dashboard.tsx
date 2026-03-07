@@ -105,6 +105,13 @@ function hasSourceError(
     );
 }
 
+function hasActionableInteraction(source: SourceSummary): boolean {
+    return (
+        !!source.interaction &&
+        (source.status === "suspended" || source.status === "error")
+    );
+}
+
 function getSourceErrorSummary(
     source: SourceSummary,
     sourceData?: DataResponse | null,
@@ -424,6 +431,7 @@ export default function Dashboard() {
     const getStatusConfig = (source: SourceSummary) => {
         const sourceData = dataMap[source.id];
         const hasError = hasSourceError(source, sourceData);
+        const actionable = hasActionableInteraction(source);
         if ((source.status as string) === "refreshing") {
             return {
                 label: "刷新中",
@@ -437,6 +445,14 @@ export default function Dashboard() {
                 label: "需操作",
                 variant: "warning" as const,
                 colorClass: "bg-warning/20 text-warning",
+                icon: Wrench,
+            };
+        }
+        if ((source.status as string) === "error" && actionable) {
+            return {
+                label: "需修复",
+                variant: "error" as const,
+                colorClass: "bg-error/20 text-error",
                 icon: Wrench,
             };
         }
@@ -620,6 +636,8 @@ export default function Dashboard() {
                                         source,
                                         sourceData,
                                     );
+                                    const actionableInteraction =
+                                        hasActionableInteraction(source);
                                     const errorSummary = getSourceErrorSummary(
                                         source,
                                         sourceData,
@@ -639,8 +657,7 @@ export default function Dashboard() {
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-1 shrink-0">
-                                                        {source.status ===
-                                                        "suspended" ? (
+                                                        {actionableInteraction ? (
                                                             <Tooltip>
                                                                 <TooltipTrigger
                                                                     asChild
@@ -650,10 +667,16 @@ export default function Dashboard() {
                                                                             badgeVariants(
                                                                                 {
                                                                                     variant:
-                                                                                        "warning",
+                                                                                        source.status ===
+                                                                                        "error"
+                                                                                            ? "error"
+                                                                                            : "warning",
                                                                                 },
                                                                             ),
-                                                                            "gap-1 px-1.5 py-0 h-6 shrink-0 cursor-pointer hover:bg-warning/30",
+                                                                            source.status ===
+                                                                                "error"
+                                                                                ? "gap-1 px-1.5 py-0 h-6 shrink-0 cursor-pointer hover:bg-error/30"
+                                                                                : "gap-1 px-1.5 py-0 h-6 shrink-0 cursor-pointer hover:bg-warning/30",
                                                                         )}
                                                                         onClick={() =>
                                                                             setInteractSource(
@@ -663,18 +686,24 @@ export default function Dashboard() {
                                                                     >
                                                                         <Wrench className="h-3 w-3" />
                                                                         <span>
-                                                                            需操作
+                                                                            {source.status ===
+                                                                            "error"
+                                                                                ? "需修复"
+                                                                                : "需操作"}
                                                                         </span>
                                                                     </button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent side="top">
                                                                     <p>
-                                                                        {source
-                                                                            .interaction
-                                                                            ?.type ===
-                                                                        "webview_scrape"
-                                                                            ? "加入抓取队列"
-                                                                            : "解决问题"}
+                                                                        {source.status ===
+                                                                        "error"
+                                                                            ? "更新无效凭证"
+                                                                            : source
+                                                                                    .interaction
+                                                                                    ?.type ===
+                                                                              "webview_scrape"
+                                                                              ? "前台手动启动"
+                                                                              : "解决问题"}
                                                                     </p>
                                                                 </TooltipContent>
                                                                 </Tooltip>

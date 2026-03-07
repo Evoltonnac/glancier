@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useStore } from "../store";
@@ -14,19 +14,36 @@ export function useScraper() {
     const skippedScrapers = useStore((state) => state.skippedScrapers);
     const addSkippedScraper = useStore((state) => state.addSkippedScraper);
     const setSkippedScrapers = useStore((state) => state.setSkippedScrapers);
+    const [queueNonce, setQueueNonce] = useState(0);
 
     const activeScraperRef = useRef<string | null>(null);
+    const manualQueuedRef = useRef<Set<string>>(new Set());
+    const foregroundOverridesRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         activeScraperRef.current = activeScraper;
     }, [activeScraper]);
 
+    const bumpQueueNonce = useCallback(() => {
+        setQueueNonce((prev) => prev + 1);
+    }, []);
+
     // Compute the current queue of webview scrapers
     const webviewQueue = sources.filter(
-        (source) =>
-            source.status === "suspended" &&
-            source.interaction?.type === "webview_scrape" &&
-            !skippedScrapers.has(source.id),
+        (source) => {
+            const isWebviewInteraction =
+                source.status === "suspended" &&
+                source.interaction?.type === "webview_scrape";
+            if (!isWebviewInteraction || skippedScrapers.has(source.id)) {
+                return false;
+            }
+
+            const manualOnly = Boolean(source.interaction?.data?.manual_only);
+            if (!manualOnly) {
+                return true;
+            }
+            return manualQueuedRef.current.has(source.id);
+        },
     );
 
     // Actions
@@ -39,9 +56,12 @@ export function useScraper() {
             console.error("Failed to cancel scraper task:", error);
         }
 
+        manualQueuedRef.current.delete(activeScraper);
+        foregroundOverridesRef.current.delete(activeScraper);
         addSkippedScraper(activeScraper);
         setActiveScraper(null);
-    }, [activeScraper, addSkippedScraper, setActiveScraper]);
+        bumpQueueNonce();
+    }, [activeScraper, addSkippedScraper, setActiveScraper, bumpQueueNonce]);
 
     const handleClearScraperQueue = useCallback(async () => {
         if (activeScraper) {
@@ -57,15 +77,43 @@ export function useScraper() {
         webviewQueue.forEach((s) => newSkipped.add(s.id));
         setSkippedScrapers(newSkipped);
         setActiveScraper(null);
-    }, [activeScraper, skippedScrapers, webviewQueue, setSkippedScrapers, setActiveScraper]);
+        manualQueuedRef.current.clear();
+        foregroundOverridesRef.current.clear();
+        bumpQueueNonce();
+    }, [activeScraper, skippedScrapers, webviewQueue, setSkippedScrapers, setActiveScraper, bumpQueueNonce]);
 
-    const handlePushToQueue = useCallback((source: SourceSummary): boolean => {
+    const handlePushToQueue = useCallback((
+        source: SourceSummary,
+        options?: { foreground?: boolean },
+    ): boolean => {
+        const forceForeground =
+            Boolean(options?.foreground) ||
+            Boolean(source.interaction?.data?.force_foreground);
+
+        if (forceForeground) {
+            foregroundOverridesRef.current.add(source.id);
+        }
+        if (source.interaction?.data?.manual_only) {
+            manualQueuedRef.current.add(source.id);
+        }
+
         if (activeScraper === source.id) {
+            if (forceForeground) {
+                void invoke("show_scraper_window").catch((error) =>
+                    console.error("Failed to show scraper window:", error),
+                );
+                return true;
+            }
             alert(`"${source.name}" 的抓取任务已在运行中。`);
             return false;
         }
         const alreadyInQueue = webviewQueue.some((s) => s.id === source.id);
         if (alreadyInQueue) {
+            if (forceForeground) {
+                void invoke("show_scraper_window").catch((error) =>
+                    console.error("Failed to show scraper window:", error),
+                );
+            }
             alert(`"${source.name}" 已在抓取队列中，请勿重复添加。`);
             return false;
         }
@@ -75,8 +123,9 @@ export function useScraper() {
         setSkippedScrapers(next);
         
         console.log(`手动将 ${source.name} (${source.id}) 加入抓取队列`);
+        bumpQueueNonce();
         return true;
-    }, [activeScraper, webviewQueue, skippedScrapers, setSkippedScrapers]);
+    }, [activeScraper, webviewQueue, skippedScrapers, setSkippedScrapers, bumpQueueNonce]);
 
     const handleShowScraperWindow = useCallback(async () => {
         try {
@@ -144,9 +193,13 @@ export function useScraper() {
         if (nextSource) {
             const { url, script, intercept_api, secret_key } =
                 nextSource.interaction?.data || {};
+            const forceForeground =
+                foregroundOverridesRef.current.has(nextSource.id) ||
+                Boolean(nextSource.interaction?.data?.force_foreground);
 
             console.log(`Starting scraper for ${nextSource.name} (${nextSource.id})`);
             setActiveScraper(nextSource.id);
+            manualQueuedRef.current.delete(nextSource.id);
 
             invoke("push_scraper_task", {
                 sourceId: nextSource.id,
@@ -154,12 +207,13 @@ export function useScraper() {
                 injectScript: script,
                 interceptApi: intercept_api,
                 secretKey: secret_key,
+                foreground: forceForeground,
             }).catch((err) => {
                 console.error("Failed to push scraper task to Tauri:", err);
                 setActiveScraper(null);
             });
         }
-    }, [webviewQueue, activeScraper, setActiveScraper]);
+    }, [webviewQueue, activeScraper, setActiveScraper, queueNonce]);
 
     // 4. Global listeners from Tauri
     useEffect(() => {
@@ -183,6 +237,9 @@ export function useScraper() {
                 // Add to skipped list and clear active
                 useStore.getState().addSkippedScraper(sourceId);
                 useStore.getState().setActiveScraper(null);
+                manualQueuedRef.current.delete(sourceId);
+                foregroundOverridesRef.current.delete(sourceId);
+                bumpQueueNonce();
 
                 if (error) {
                     console.error(`Scraper error for ${sourceId}:`, error);
@@ -204,6 +261,39 @@ export function useScraper() {
                 "scraper_auth_required",
                 (event) => {
                     console.log(`Manual auth required for source ${event.payload.sourceId}`);
+                    const sourceId = event.payload.sourceId;
+                    useStore.getState().addSkippedScraper(sourceId);
+                    useStore.getState().setActiveScraper(null);
+                    foregroundOverridesRef.current.add(sourceId);
+                    manualQueuedRef.current.delete(sourceId);
+                    bumpQueueNonce();
+
+                    const currentSources = useStore.getState().sources;
+                    useStore.getState().setSources(
+                        currentSources.map((source) => {
+                            if (source.id !== sourceId) {
+                                return source;
+                            }
+                            return {
+                                ...source,
+                                status: "suspended",
+                                message: "Web scraper blocked by login wall/captcha. Resume in foreground mode.",
+                                interaction: {
+                                    type: "webview_scrape",
+                                    step_id: source.interaction?.step_id || "webview",
+                                    message: "Web scraper blocked. Resume in foreground mode.",
+                                    fields: source.interaction?.fields || [],
+                                    warning_message: source.interaction?.warning_message,
+                                    data: {
+                                        ...(source.interaction?.data || {}),
+                                        force_foreground: true,
+                                        manual_only: true,
+                                        blocked_target_url: event.payload.targetUrl,
+                                    },
+                                },
+                            };
+                        }),
+                    );
                 },
             );
         };
@@ -214,7 +304,7 @@ export function useScraper() {
             if (unlistenScraperResult) unlistenScraperResult();
             if (unlistenAuthRequired) unlistenAuthRequired();
         };
-    }, []); // Empty dependencies!
+    }, [bumpQueueNonce]); // Empty dependencies in logic, only stable callback dependency
 
     return {
         activeScraper,

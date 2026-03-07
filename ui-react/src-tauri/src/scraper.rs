@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager};
 use tauri::Emitter;
 use std::collections::HashSet;
 use std::sync::Mutex;
@@ -32,8 +32,13 @@ pub async fn push_scraper_task(
     inject_script: String,
     intercept_api: String,
     secret_key: String,
+    foreground: Option<bool>,
 ) -> Result<(), String> {
-    println!("[Scraper Debug] push_scraper_task called for source_id: {}, url: {}", source_id, url);
+    let foreground = foreground.unwrap_or(false);
+    println!(
+        "[Scraper Debug] push_scraper_task called for source_id: {}, url: {}, foreground: {}",
+        source_id, url, foreground
+    );
     
     // Clear any previous dedup record for this source so the new task's result is processed
     {
@@ -165,23 +170,40 @@ pub async fn push_scraper_task(
     }
 
     println!("[Scraper Debug] building new WebviewWindow for url: {}", url);
-    let _webview = tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         "scraper_worker",
         tauri::WebviewUrl::External(url.parse().unwrap())
     )
-    .title("Background Worker")
-    // 关键：macOS App Nap 会挂起 visible(false) 的 WKWebView 执行
-    // 我们将其设为 visible(true)，但非常小、透明，且位置在屏幕之外
-    .visible(true)
-    .inner_size(10.0, 10.0)
-    .position(-10000.0, -10000.0)
-    .initialization_script(&final_script)
-    .build()
-    .map_err(|e| {
+        .title(if foreground { "Manual Scraper" } else { "Background Worker" })
+        .initialization_script(&final_script);
+
+    if foreground {
+        builder = builder
+            .visible(true)
+            .decorations(true)
+            .inner_size(960.0, 720.0)
+            .resizable(true);
+    } else {
+        // 关键：macOS App Nap 会挂起 visible(false) 的 WKWebView 执行
+        // 我们将其设为 visible(true)，但非常小、透明，且位置在屏幕之外
+        builder = builder
+            .visible(true)
+            .decorations(false)
+            .inner_size(10.0, 10.0)
+            .position(-10000.0, -10000.0);
+    }
+
+    let _webview = builder.build().map_err(|e| {
         println!("[Scraper Debug] failed to build webview: {}", e);
         e.to_string()
     })?;
+
+    if foreground {
+        let _ = _webview.center();
+        let _ = _webview.show();
+        let _ = _webview.set_focus();
+    }
     
     println!("[Scraper Debug] WebviewWindow built successfully");
 

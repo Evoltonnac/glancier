@@ -227,7 +227,9 @@ export type InteractionType =
     | "oauth_start"
     | "captcha"
     | "confirm"
-    | "webview_scrape";
+    | "webview_scrape"
+    | "retry"
+    | "cookies_refresh";
 
 export interface InteractionField {
     key: string;
@@ -240,7 +242,9 @@ export interface InteractionField {
 
 export interface InteractionRequest {
     type: InteractionType;
-    step_id: string;
+    step_id?: string;
+    source_id?: string;
+    title?: string;
     message?: string;
     warning_message?: string;
     fields: InteractionField[];
