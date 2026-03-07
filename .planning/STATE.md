@@ -38,6 +38,7 @@ Resume file: .planning/phases/12-error-exposure-visibility/12-03-SUMMARY.md
 - [ ] [2026-03-06] dashboard-multi-view-tabs (Area: ui)
 - [ ] [2026-03-06] flowhandler-refactor (Area: ui)
 - [ ] [2026-03-07] ui-i18n (Area: ui)
+- [ ] [2026-03-07] ux-ai-enhancements (Area: ui, core)
 
 ## Quick Tasks Completed
 
