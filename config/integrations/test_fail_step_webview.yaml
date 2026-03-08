@@ -1,0 +1,22 @@
+name: "TEST - WebView Blocked Recovery"
+description: "Failure test for webview step: after webview payload is provided, downstream 403 maps to webview foreground/manual recovery interaction."
+
+# Manual failure input for /api/sources/{source_id}/interact:
+# - test_webview_data: {"session": "invalid", "note": "failure-test"}
+flow:
+  - id: webview_capture
+    use: webview
+    args:
+      url: "https://example.com/login"
+      intercept_api: "/api/session"
+      script: ""
+    secrets:
+      webview_data: "test_webview_data"
+    outputs:
+      webview_data: "webview_payload"
+
+  - id: fetch_blocked
+    use: http
+    args:
+      url: "https://httpbin.org/status/403"
+      method: "GET"

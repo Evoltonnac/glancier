@@ -1,0 +1,24 @@
+name: "TEST - cURL Invalid Session"
+description: "Failure test for curl step: parse user-pasted cURL, then always 401 to verify invalid session re-entry interaction."
+
+# Manual failure input for /api/sources/{source_id}/interact:
+# - test_curl_command: "curl 'https://example.com' -H 'Authorization: Bearer invalid-token'"
+flow:
+  - id: auth_curl
+    use: curl
+    args:
+      label: "Test cURL Command"
+      description: "Paste any cURL command; this test forces invalid credential handling"
+      message: "Paste cURL command for invalid-session test"
+      warning_message: "Test only: this config intentionally fails with 401."
+    secrets:
+      curl_command: "test_curl_command"
+    outputs:
+      headers: "request_headers"
+
+  - id: fetch_unauthorized
+    use: http
+    args:
+      url: "https://httpbin.org/status/401"
+      method: "GET"
+      headers: "{request_headers}"

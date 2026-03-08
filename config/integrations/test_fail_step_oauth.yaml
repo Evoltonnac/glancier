@@ -1,0 +1,29 @@
+name: "TEST - OAuth Invalid Credentials"
+description: "Failure test for oauth step: prompts for OAuth fields, then protected request returns 401 to verify reconnect interaction."
+
+# Manual failure input for /api/sources/{source_id}/interact (when prompted):
+# - client_id: "test-client-id-invalid"
+# - client_secret: "test-client-secret-invalid"
+# Optional manual seed to force HTTP 401 branch directly:
+# - access_token: "test-token-invalid"
+flow:
+  - id: auth_oauth
+    use: oauth
+    args:
+      auth_url: "https://github.com/login/oauth/authorize"
+      token_url: "https://github.com/login/oauth/access_token"
+      doc_url: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
+      scopes: ["read:user"]
+      token_request_type: "json"
+    outputs:
+      access_token: "access_token"
+    secrets:
+      access_token: "access_token"
+
+  - id: fetch_unauthorized
+    use: http
+    args:
+      url: "https://httpbin.org/status/401"
+      method: "GET"
+      headers:
+        Authorization: "Bearer {access_token}"

@@ -14,6 +14,7 @@ import {
 } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import {
     Dialog,
     DialogContent,
@@ -63,6 +64,10 @@ type ReloadConfigError = Error & {
 
 function normalizeIntegrationFilename(input: string): string {
     return input.trim();
+}
+
+function toYamlSingleQuoted(value: string): string {
+    return `'${value.replace(/'/g, "''")}'`;
 }
 
 function DiagnosticItem({ diagnostic }: { diagnostic: IntegrationDiagnostic }) {
@@ -143,14 +148,19 @@ export default function IntegrationsPage() {
 
     // Source management
     const [sources, setSources] = useState<any[]>([]);
+    const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<
+        string[]
+    >([]);
 
     // Dialogs
     const [showNewIntegrationDialog, setShowNewIntegrationDialog] =
         useState(false);
     const [showNewSourceDialog, setShowNewSourceDialog] = useState(false);
     const [newFilename, setNewFilename] = useState("");
+    const [newIntegrationName, setNewIntegrationName] = useState("");
     const [newSourceName, setNewSourceName] = useState("");
-    const [newSourceIntegration, setNewSourceIntegration] = useState("");
+    const [integrationDisplayNameByFile, setIntegrationDisplayNameByFile] =
+        useState<Record<string, string>>({});
 
     const [deletingIntegration, setDeletingIntegration] = useState<
         string | null
@@ -275,6 +285,31 @@ export default function IntegrationsPage() {
         try {
             const files = await api.listIntegrationFiles();
             setIntegrations(files);
+            try {
+                const metadata = await api.listIntegrationFileMetadata();
+                const nextNames: Record<string, string> = {};
+                metadata.forEach((item) => {
+                    const name = item.name?.trim();
+                    if (name) {
+                        nextNames[item.filename] = name;
+                    }
+                });
+                setIntegrationDisplayNameByFile(nextNames);
+            } catch (metadataErr) {
+                console.warn(
+                    "Failed to load integration metadata:",
+                    metadataErr,
+                );
+                setIntegrationDisplayNameByFile((prev) => {
+                    const next: Record<string, string> = {};
+                    files.forEach((file) => {
+                        if (prev[file]) {
+                            next[file] = prev[file];
+                        }
+                    });
+                    return next;
+                });
+            }
         } catch (err) {
             console.error("Failed to load integrations:", err);
         }
@@ -283,13 +318,24 @@ export default function IntegrationsPage() {
     const loadIntegrationContent = async (filename: string) => {
         try {
             const data = await api.getIntegrationFile(filename);
-            setSelectedFile(filename);
+            setSelectedFile(data.filename);
             setContent(data.content);
             setOriginalContent(data.content);
+            setSelectedIntegrationIds(data.integration_ids ?? []);
+            setIntegrationDisplayNameByFile((prev) => {
+                const next = { ...prev };
+                const name = data.display_name?.trim();
+                if (name) {
+                    next[data.filename] = name;
+                } else {
+                    delete next[data.filename];
+                }
+                return next;
+            });
             setError(null);
 
             // Load related sources
-            const relatedSources = await api.getIntegrationSources(filename);
+            const relatedSources = await api.getIntegrationSources(data.filename);
             setSources(relatedSources);
         } catch (err) {
             setError(`Failed to load ${filename}`);
@@ -312,8 +358,17 @@ export default function IntegrationsPage() {
             integrations.length > 0 &&
             !hasInitialLoaded.current
         ) {
-            if (integrations.includes(selectedFile)) {
-                loadIntegrationContent(selectedFile);
+            const compatibleFilename = integrations.includes(selectedFile)
+                ? selectedFile
+                : integrations.includes(`${selectedFile}.yaml`)
+                  ? `${selectedFile}.yaml`
+                  : null;
+
+            if (compatibleFilename) {
+                if (compatibleFilename !== selectedFile) {
+                    setSelectedFile(compatibleFilename);
+                }
+                loadIntegrationContent(compatibleFilename);
                 hasInitialLoaded.current = true;
             }
         }
@@ -376,25 +431,39 @@ export default function IntegrationsPage() {
     };
 
     const handleCreateIntegration = async () => {
-        if (!newFilename) return;
+        const rawFilename = newFilename.trim();
+        if (!rawFilename) return;
+
+        // Ensure the filename has .yaml extension
+        const filename = rawFilename.toLowerCase().endsWith(".yaml")
+            ? rawFilename
+            : `${rawFilename}.yaml`;
+        const displayName = newIntegrationName.trim();
+        const initialContent = displayName
+            ? `name: ${toYamlSingleQuoted(displayName)}\n`
+            : "";
 
         try {
-            await api.createIntegrationFile(
-                newFilename.endsWith(".yaml")
-                    ? newFilename
-                    : `${newFilename}.yaml`,
+            const created = await api.createIntegrationFile(
+                filename,
+                initialContent,
             );
             await loadIntegrations();
             setShowNewIntegrationDialog(false);
             setNewFilename("");
+            setNewIntegrationName("");
             // Load the newly created file
-            await loadIntegrationContent(
-                newFilename.endsWith(".yaml")
-                    ? newFilename
-                    : `${newFilename}.yaml`,
-            );
+            await loadIntegrationContent(created.filename);
         } catch (err: any) {
             setError(err.message || "Failed to create integration");
+        }
+    };
+
+    const handleNewIntegrationDialogChange = (open: boolean) => {
+        setShowNewIntegrationDialog(open);
+        if (!open) {
+            setNewFilename("");
+            setNewIntegrationName("");
         }
     };
 
@@ -411,10 +480,19 @@ export default function IntegrationsPage() {
                 delete next[filename];
                 return next;
             });
+            setIntegrationDisplayNameByFile((prev) => {
+                if (!prev[filename]) {
+                    return prev;
+                }
+                const next = { ...prev };
+                delete next[filename];
+                return next;
+            });
             if (selectedFile === filename) {
                 setSelectedFile(null);
                 setContent("");
                 setSources([]);
+                setSelectedIntegrationIds([]);
             }
             setDeletingIntegration(null);
         } catch (err: any) {
@@ -426,13 +504,11 @@ export default function IntegrationsPage() {
         if (!newSourceName) return;
 
         try {
-            const integrationId = selectedFile
-                ? selectedFile.replace(".yaml", "")
-                : newSourceIntegration;
+            const integrationId = (selectedIntegrationIds[0] ?? "").trim();
 
             await api.createSourceFile({
                 name: newSourceName,
-                integration_id: integrationId,
+                integration_id: integrationId || undefined,
             });
 
             if (selectedFile) {
@@ -442,7 +518,6 @@ export default function IntegrationsPage() {
             }
             setShowNewSourceDialog(false);
             setNewSourceName("");
-            setNewSourceIntegration("");
 
             // Reload config
             await api.reloadConfig();
@@ -517,7 +592,9 @@ export default function IntegrationsPage() {
                             {!sidebarCollapsed && (
                                 <Dialog
                                     open={showNewIntegrationDialog}
-                                    onOpenChange={setShowNewIntegrationDialog}
+                                    onOpenChange={
+                                        handleNewIntegrationDialogChange
+                                    }
                                 >
                                     <DialogTrigger asChild>
                                         <Button
@@ -538,22 +615,69 @@ export default function IntegrationsPage() {
                                                 file.
                                             </DialogDescription>
                                         </DialogHeader>
-                                        <div className="py-4">
-                                            <Input
-                                                placeholder="filename.yaml"
-                                                value={newFilename}
-                                                onChange={(e) =>
-                                                    setNewFilename(
-                                                        e.target.value,
-                                                    )
-                                                }
-                                            />
+                                        <div className="py-4 space-y-4">
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="new-integration-id">
+                                                    Integration ID (filename)
+                                                </Label>
+                                                <div className="flex items-center rounded-md border border-input focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background">
+                                                    <Input
+                                                        id="new-integration-id"
+                                                        placeholder="github_oauth"
+                                                        value={newFilename}
+                                                        onChange={(e) => {
+                                                            const val =
+                                                                e.target.value;
+                                                            setNewFilename(
+                                                                val
+                                                                    .toLowerCase()
+                                                                    .endsWith(
+                                                                        ".yaml",
+                                                                    )
+                                                                    ? val.slice(
+                                                                          0,
+                                                                          -5,
+                                                                      )
+                                                                    : val,
+                                                            );
+                                                        }}
+                                                        className="flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                                                    />
+                                                    <span className="flex h-10 items-center justify-center rounded-r-md border-l border-input bg-muted px-3 text-sm font-medium text-muted-foreground select-none">
+                                                        .yaml
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                    File name stem is used as
+                                                    integration id.
+                                                </p>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="new-integration-name">
+                                                    Display Name (optional)
+                                                </Label>
+                                                <Input
+                                                    id="new-integration-name"
+                                                    placeholder="GitHub 登录"
+                                                    value={newIntegrationName}
+                                                    onChange={(e) =>
+                                                        setNewIntegrationName(
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    When provided, name is
+                                                    written into the new YAML
+                                                    and shown in sidebar.
+                                                </p>
+                                            </div>
                                         </div>
                                         <DialogFooter>
                                             <Button
                                                 variant="outline"
                                                 onClick={() =>
-                                                    setShowNewIntegrationDialog(
+                                                    handleNewIntegrationDialogChange(
                                                         false,
                                                     )
                                                 }
@@ -614,79 +738,127 @@ export default function IntegrationsPage() {
                                     New Integration
                                 </TooltipContent>
                             </Tooltip>
-                            {integrations.map((file) => (
-                                <Tooltip key={file}>
-                                    <TooltipTrigger asChild>
-                                        <button
-                                            onClick={() =>
-                                                loadIntegrationContent(file)
-                                            }
-                                            className={`h-10 w-10 flex items-center justify-center rounded-md transition-colors duration-150 ${selectedFile === file ? "bg-brand/20 text-brand" : "hover:bg-foreground hover:text-background text-muted-foreground"}`}
-                                        >
-                                            <span className="relative inline-flex">
-                                                <FileJson className="h-5 w-5" />
-                                                {hasFileErrors(file) && (
-                                                    <AlertCircle className="absolute -top-1 -right-1 h-3.5 w-3.5 text-error" />
+                            {integrations.map((file) => {
+                                const displayName =
+                                    integrationDisplayNameByFile[file]?.trim();
+                                const hasDisplayName = Boolean(displayName);
+                                const title = displayName || file;
+                                return (
+                                    <Tooltip key={file}>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                onClick={() =>
+                                                    loadIntegrationContent(file)
+                                                }
+                                                className={`h-10 w-10 flex items-center justify-center rounded-md transition-colors duration-150 ${selectedFile === file ? "bg-brand/20 text-brand" : "hover:bg-foreground hover:text-background text-muted-foreground"}`}
+                                            >
+                                                <span className="relative inline-flex">
+                                                    <FileJson className="h-5 w-5" />
+                                                    {hasFileErrors(file) && (
+                                                        <AlertCircle className="absolute -top-1 -right-1 h-3.5 w-3.5 text-error" />
+                                                    )}
+                                                </span>
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">
+                                            <div className="flex max-w-56 flex-col">
+                                                <span className="truncate text-sm">
+                                                    {title}
+                                                </span>
+                                                {hasDisplayName && (
+                                                    <span className="truncate text-xs text-muted-foreground">
+                                                        {file}
+                                                    </span>
                                                 )}
-                                            </span>
-                                        </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right">
-                                        {file}
-                                    </TooltipContent>
-                                </Tooltip>
-                            ))}
+                                            </div>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="flex-1 overflow-y-auto p-2">
-                            {integrations.map((file) => (
-                                <div
-                                    key={file}
-                                    className={`group flex items-center justify-between p-2 rounded-md cursor-pointer mb-1 transition-colors duration-150 ${
-                                        selectedFile === file
-                                            ? "bg-brand/10 text-brand"
-                                            : "hover:bg-foreground hover:text-background"
-                                    }`}
-                                    onClick={() => loadIntegrationContent(file)}
-                                >
-                                    <div className="min-w-0 flex items-center gap-2">
-                                        <span className="text-sm truncate">
-                                            {file}
-                                        </span>
-                                        {hasFileErrors(file) && (
-                                            <Badge variant="error">Error</Badge>
-                                        )}
+                            {integrations.map((file) => {
+                                const displayName =
+                                    integrationDisplayNameByFile[file]?.trim();
+                                const hasDisplayName = Boolean(displayName);
+                                const title = displayName || file;
+                                return (
+                                    <div
+                                        key={file}
+                                        className={`group flex items-center justify-between p-2 rounded-md cursor-pointer mb-1 transition-colors duration-150 ${
+                                            selectedFile === file
+                                                ? "bg-brand/10 text-brand"
+                                                : "hover:bg-foreground hover:text-background"
+                                        }`}
+                                        onClick={() =>
+                                            loadIntegrationContent(file)
+                                        }
+                                    >
+                                        <div className="min-w-0 flex items-center gap-2 overflow-hidden">
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm truncate">
+                                                            {title}
+                                                        </p>
+                                                        {hasDisplayName && (
+                                                            <p className="text-[11px] leading-tight truncate text-muted-foreground">
+                                                                {file}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="top">
+                                                    <div className="flex max-w-72 flex-col">
+                                                        <span className="truncate text-sm">
+                                                            {title}
+                                                        </span>
+                                                        {hasDisplayName && (
+                                                            <span className="truncate text-xs text-muted-foreground">
+                                                                {file}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                            {hasFileErrors(file) && (
+                                                <Badge variant="error">
+                                                    Error
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className={`h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-brand/50 ${selectedFile === file ? "hover:bg-brand/20 text-brand" : ""}`}
+                                                    onClick={(e) =>
+                                                        e.stopPropagation()
+                                                    }
+                                                >
+                                                    <MoreVertical className="h-3 w-3" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem
+                                                    className="text-destructive"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setDeletingIntegration(
+                                                            file,
+                                                        );
+                                                    }}
+                                                >
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className={`h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-brand/50 ${selectedFile === file ? "hover:bg-brand/20 text-brand" : ""}`}
-                                                onClick={(e) =>
-                                                    e.stopPropagation()
-                                                }
-                                            >
-                                                <MoreVertical className="h-3 w-3" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem
-                                                className="text-destructive"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setDeletingIntegration(
-                                                        file,
-                                                    );
-                                                }}
-                                            >
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                Delete
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-                            ))}
+                                );
+                            })}
                             {integrations.length === 0 && (
                                 <p className="text-xs text-muted-foreground p-2">
                                     No integrations found
@@ -862,35 +1034,6 @@ export default function IntegrationsPage() {
                                                         ID will be
                                                         auto-generated as a
                                                         unique hash.
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <label className="text-sm font-medium">
-                                                        Integration (Optional)
-                                                    </label>
-                                                    <Input
-                                                        placeholder={selectedFile.replace(
-                                                            ".yaml",
-                                                            "",
-                                                        )}
-                                                        value={
-                                                            newSourceIntegration ||
-                                                            selectedFile.replace(
-                                                                ".yaml",
-                                                                "",
-                                                            )
-                                                        }
-                                                        onChange={(e) =>
-                                                            setNewSourceIntegration(
-                                                                e.target.value,
-                                                            )
-                                                        }
-                                                        className="mt-1"
-                                                    />
-                                                    <p className="text-xs text-muted-foreground mt-1">
-                                                        Leave as the current
-                                                        integration or change to
-                                                        another.
                                                     </p>
                                                 </div>
                                             </div>

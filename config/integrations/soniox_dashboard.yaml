@@ -1,0 +1,63 @@
+name: "Soniox Dashboard (Reverse Engineered)"
+description: "Fetch billing and usage data from Soniox dashboard via reverse-engineered API and cURL header replay."
+
+flow:
+    - id: config_org
+      use: api_key
+      secrets:
+          api_key: "organization_id"
+      args:
+          label: "Organization ID"
+          description: "UUID of your Soniox Organization (from the URL)"
+          message: "Set Soniox Organization ID"
+
+    - id: auth
+      use: curl
+      secrets:
+          header: "curl_headers"
+      args:
+          label: "Paste cURL Command"
+          description: "Copy the 'dashboard' request as cURL from your browser developer tools and paste here"
+          message: "Provide valid session cURL for Soniox"
+          warning_message: "WARNING: Reverse engineering dashboard APIs by replaying cURL requests might violate Soniox's Terms of Service. This action could result in your account being restricted. Use entirely at your own risk."
+
+    - id: fetch_dashboard
+      use: http
+      args:
+          url: "https://console.soniox.com/api/v2/organizations/{organization_id}/dashboard/"
+          method: "GET"
+          headers: "{curl_headers}"
+      outputs:
+          http_response: "dashboard_response"
+
+    - id: parse_billing
+      use: extract
+      args:
+          source: "{dashboard_response}"
+          type: "jsonpath"
+          expr: "$.billing.available_balance_usd"
+      outputs:
+          available_balance: "available_balance"
+
+    - id: parse_usage
+      use: extract
+      args:
+          source: "{dashboard_response}"
+          type: "jsonpath"
+          expr: "$.mtd_usage.total_paid_amount_usd"
+      outputs:
+          total_usage: "total_usage"
+
+templates:
+    - label: "Soniox Quota Panel"
+      type: "source_card"
+      ui:
+          title: "Soniox"
+          icon: "🎙️"
+      widgets:
+          - type: "hero_metric"
+            amount: "{available_balance}"
+            currency: "USD"
+          - type: "key_value_grid"
+            items:
+                "Month Usage": "${total_usage}"

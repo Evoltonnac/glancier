@@ -46,21 +46,20 @@ YAML (Flows + Templates) ──→ API/JSON (Sources + Views) ──→ Bento Gr
 
 ---
 
-## 二、集成配置 (`integrations`)
+## 二、集成配置（单文件单实例）
 
 将通用的 API 请求逻辑抽离为模版，供多个数据源复用。
+每个文件只定义一个 integration，`config/integrations/<filename>.yaml` 的文件名（去扩展名）就是 integration id。
 
 ### 结构
 
 ```yaml
-integrations:
-  - id: <唯一标识符>
-    name: <显示名称>
-    description: <描述>
-    flow:                    # Flow 编排步骤
-      - ...
-    templates:               # 视图模板列表
-      - ...
+name: <显示名称>
+description: <描述>
+flow:                    # Flow 编排步骤
+  - ...
+templates:               # 视图模板列表
+  - ...
 ```
 
 ### 视图模板 (`templates`)
@@ -68,19 +67,17 @@ integrations:
 在 Integration 中定义可复用的 UI 组件模板。
 
 ```yaml
-integrations:
-  - id: openrouter_keys
-    templates:
-      - type: hero_metric        # 核心指标
-        field: total_usage
-        label: "Total Usage"
-        format: "${value:.4f}"
-      - type: progress_bar       # 进度条 (原 quota_bar)
-        field: usage_percent
-        label: "Usage"
-      - type: badge              # 状态信号 (信号)
-        field: status
-        label: "Status"
+templates:
+  - type: hero_metric        # 核心指标
+    field: total_usage
+    label: "Total Usage"
+    format: "${value:.4f}"
+  - type: progress_bar       # 进度条 (原 quota_bar)
+    field: usage_percent
+    label: "Usage"
+  - type: badge              # 状态信号 (信号)
+    field: status
+    label: "Status"
 ```
 
 **支持的模板类型**：
@@ -171,43 +168,41 @@ Flow 执行引擎支持三种变量类型，并按优先级检索：
 ### 2.2 Flow 完整示例
 
 ```yaml
-integrations:
-  - id: openrouter_keys_apikey
-    name: "OpenRouter Keys List (API Key)"
-    description: "Fetch all API keys and their usage via Management API Key"
+name: "OpenRouter Keys List (API Key)"
+description: "Fetch all API keys and their usage via Management API Key"
 
-    flow:
-      # Step 1: Authentication (Get API Key)
-      - id: auth
-        use: api_key
-        secrets:
-          api_key: "access_token" # 显式存储 api_key 到 SecretsController
-        args:
-          label: "Management API Key"
-          description: "Input your OpenRouter Management API Key"
-        outputs:
-          api_key: "access_token"
+flow:
+  # Step 1: Authentication (Get API Key)
+  - id: auth
+    use: api_key
+    secrets:
+      api_key: "access_token" # 显式存储 api_key 到 SecretsController
+    args:
+      label: "Management API Key"
+      description: "Input your OpenRouter Management API Key"
+    outputs:
+      api_key: "access_token"
 
-      # Step 2: Fetch Keys List (with explicit Authorization header)
-      - id: fetch
-        use: http
-        args:
-          url: "https://openrouter.ai/api/v1/keys"
-          method: "GET"
-          headers:
-            Authorization: "Bearer {access_token}"
-        outputs:
-          http_response: "http_response"
+  # Step 2: Fetch Keys List (with explicit Authorization header)
+  - id: fetch
+    use: http
+    args:
+      url: "https://openrouter.ai/api/v1/keys"
+      method: "GET"
+      headers:
+        Authorization: "Bearer {access_token}"
+    outputs:
+      http_response: "http_response"
 
-      # Step 3: Extract Data
-      - id: parse
-        use: extract
-        args:
-          source: "{http_response}"
-          type: "jsonpath"
-          expr: "$.data"
-        outputs:
-          keys_list: "keys_list"
+  # Step 3: Extract Data
+  - id: parse
+    use: extract
+    args:
+      source: "{http_response}"
+      type: "jsonpath"
+      expr: "$.data"
+    outputs:
+      keys_list: "keys_list"
 ```
 
 ### 2.3 步骤类型 (`use`)

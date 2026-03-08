@@ -3,20 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from scripts.generate_schemas import (
-    FLOW_STEP_SCHEMA_MODELS,
-    IntegrationFileSchema,
-    IntegrationYamlConfig,
-)
-
-
-def test_flow_step_schema_models_only_include_integration_yaml_models() -> None:
-    assert set(FLOW_STEP_SCHEMA_MODELS) == {
-        "step_config",
-        "integration_config",
-        "integration_file",
-    }
-    assert "source_config" not in FLOW_STEP_SCHEMA_MODELS
+from scripts.generate_schemas import IntegrationFileSchema, IntegrationYamlConfig
 
 
 def test_integration_yaml_schema_is_flow_only() -> None:
@@ -27,10 +14,11 @@ def test_integration_yaml_schema_is_flow_only() -> None:
     assert "auth" not in properties
     assert "request" not in properties
     assert "parser" not in properties
+    assert "id" not in properties
     assert "flow" in schema.get("required", [])
 
 
-def test_integration_file_schema_rejects_legacy_top_level_auth() -> None:
+def test_integration_file_schema_rejects_legacy_integrations_array() -> None:
     with pytest.raises(ValidationError):
         IntegrationFileSchema.model_validate(
             {
@@ -38,8 +26,17 @@ def test_integration_file_schema_rejects_legacy_top_level_auth() -> None:
                     {
                         "id": "legacy_style",
                         "flow": [],
-                        "auth": {"type": "none"},
                     }
                 ]
+            }
+        )
+
+
+def test_integration_file_schema_rejects_inline_id() -> None:
+    with pytest.raises(ValidationError):
+        IntegrationFileSchema.model_validate(
+            {
+                "id": "legacy_style",
+                "flow": [],
             }
         )

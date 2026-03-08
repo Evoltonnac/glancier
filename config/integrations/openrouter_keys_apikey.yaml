@@ -1,0 +1,107 @@
+name: "OpenRouter"
+description: "Fetch all API keys and their usage via Management API Key"
+
+flow:
+    # Step 1: Authentication (Get API Key)
+    - id: auth
+      use: api_key
+      args:
+          label: "Management API Key"
+          description: "Input your OpenRouter Management API Key"
+      secrets:
+          api_key: "access_token"
+
+    # Step 2: Fetch Keys List (with explicit Authorization header)
+    - id: fetch
+      use: http
+      args:
+          url: "https://openrouter.ai/api/v1/keys"
+          method: "GET"
+          headers:
+              Authorization: "Bearer {access_token}"
+      context:
+          http_response: "http_response"
+
+    # Step 3: Extract Data
+    - id: parse
+      use: extract
+      args:
+          source: "{http_response}"
+          type: "jsonpath"
+          expr: "$.data"
+      outputs:
+          keys_list: "keys_list"
+    # Step 4: Fetch Credits
+    - id: fetch_credits
+      use: http
+      args:
+          url: "https://openrouter.ai/api/v1/credits"
+          method: "GET"
+          headers:
+              Authorization: "Bearer {access_token}"
+      context:
+          http_response: "credits_response"
+
+    # Step 5: Extract Credits Data
+    - id: parse_credits
+      use: extract
+      args:
+          source: "{credits_response}"
+          type: "jsonpath"
+          expr: "$.data"
+      outputs:
+          credits_data: "credits_data"
+
+    # Step 6: Calculate Remaining Credits
+    - id: calc_remaining
+      use: script
+      args:
+          code: |
+              total = credits_data.get("total_credits", 0)
+              usage = credits_data.get("total_usage", 0)
+              credits_data["remaining"] = total - usage
+      outputs:
+          credits_data: "credits_data"
+
+templates:
+    - label: "OpenRouter Quota Panel"
+      type: "source_card"
+      ui:
+          title: "OpenRouter API"
+          icon: "🔑"
+      widgets:
+          - type: "list"
+            data_source: "keys_list"
+            item_alias: "key_item"
+            layout: "grid"
+            columns: 2
+            pagination: true
+            page_size: 4
+
+            # Example filter: only show keys with active limits (can be expanded later)
+            # limit: 5    # uncomment to limit items
+            # sort_by: "key_item.usage"
+            # sort_order: "desc"
+            render:
+                - type: "progress_bar"
+                  area: "progress"
+                  title: "{key_item.name}"
+                  usage: "{key_item.usage}"
+                  limit: "{key_item.limit}"
+                  color_thresholds:
+                      warning_percent: 75
+                      critical_percent: 90
+
+    - label: "OpenRouter Credits Panel"
+      type: "source_card"
+      ui:
+          title: "OpenRouter Credits"
+          icon: "💰"
+      widgets:
+          - type: "hero_metric"
+            amount: "{credits_data.remaining}"
+            currency: "USD"
+          # - type: "key_value_grid"
+          #   items:
+          #       "Total Credits": "{credits_data.total_credits}"
+          #       "Total Usage": "{credits_data.total_usage}"

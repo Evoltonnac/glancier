@@ -4,9 +4,10 @@
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import yaml
+
 
 # 使用与 config_loader 相同的逻辑查找配置根目录
 def find_config_root() -> Path:
@@ -32,80 +33,152 @@ class IntegrationManager:
         # 确保目录存在
         self.integrations_dir.mkdir(parents=True, exist_ok=True)
 
-    def list_integrations(self) -> List[str]:
-        """列出所有集成配置（返回 YAML 文件中定义的 id）。"""
-        integration_ids = []
-        for f in self.integrations_dir.glob("*.yaml"):
-            try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    content = yaml.safe_load(fp)
-                    if content and "integrations" in content:
-                        for integration in content["integrations"]:
-                            if "id" in integration:
-                                integration_ids.append(integration["id"])
-            except Exception as e:
-                print(f"Error reading integration {f}: {e}")
-        return integration_ids
+    def _iter_integration_files(self) -> List[Path]:
+        files = {}
+        for pattern in ("*.yaml", "*.yml"):
+            for file_path in self.integrations_dir.glob(pattern):
+                files[file_path.name] = file_path
+        return [files[name] for name in sorted(files)]
 
-    def _find_integration_file(self, integration_id: str) -> Optional[Path]:
-        """根据 integration id 查找对应的文件路径。"""
-        for f in self.integrations_dir.glob("*.yaml"):
-            try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    content = yaml.safe_load(fp)
-                    if content and "integrations" in content:
-                        for integration in content["integrations"]:
-                            if integration.get("id") == integration_id:
-                                return f
-            except Exception as e:
-                print(f"Error reading integration {f}: {e}")
-        return None
+    def normalize_filename(self, filename: str) -> str:
+        cleaned = Path(filename.strip()).name
+        if not cleaned:
+            raise ValueError("Filename cannot be empty")
+        if cleaned.endswith((".yaml", ".yml")):
+            return cleaned
+        return f"{cleaned}.yaml"
 
-    def get_integration(self, integration_id: str) -> Optional[str]:
-        """读取集成配置文件内容。"""
-        file_path = self._find_integration_file(integration_id)
-        if file_path is None:
+    def _resolve_file_path(self, filename: str) -> Path:
+        normalized = self.normalize_filename(filename)
+        return self.integrations_dir / normalized
+
+    def list_integration_files(self) -> List[str]:
+        """列出所有集成配置文件名。"""
+        return [file_path.name for file_path in self._iter_integration_files()]
+
+    def _read_display_name_from_file(self, file_path: Path) -> Optional[str]:
+        """读取单个 integration 文件的顶层 name 字段。"""
+        try:
+            with open(file_path, "r", encoding="utf-8") as fp:
+                content = yaml.safe_load(fp)
+        except Exception:
             return None
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
 
-    def save_integration(self, integration_id: str, content: str) -> bool:
-        """保存集成配置文件（通过 integration_id 查找文件）。"""
-        file_path = self._find_integration_file(integration_id)
-        if file_path is None:
-            # 如果文件不存在，使用 integration_id 作为文件名
-            file_path = self.integrations_dir / f"{integration_id}.yaml"
+        if not isinstance(content, dict):
+            return None
+
+        raw_name = content.get("name")
+        if not isinstance(raw_name, str):
+            return None
+
+        display_name = raw_name.strip()
+        return display_name or None
+
+    def get_integration_display_name(self, filename: str) -> Optional[str]:
+        """返回 integration 文件的显示名（顶层 name）。"""
+        file_path = self._resolve_file_path(filename)
+        if not file_path.exists():
+            return None
+        return self._read_display_name_from_file(file_path)
+
+    def list_integration_file_metadata(self) -> List[dict[str, Any]]:
+        """列出 integration 文件元数据（filename/id/name）。"""
+        items: List[dict[str, Any]] = []
+        for file_path in self._iter_integration_files():
+            items.append(
+                {
+                    "filename": file_path.name,
+                    "id": file_path.stem,
+                    "name": self._read_display_name_from_file(file_path),
+                }
+            )
+        return items
+
+    def list_integrations(self) -> List[str]:
+        """兼容旧调用：返回文件名列表。"""
+        return self.list_integration_files()
+
+    def get_integration_ids_in_file(self, filename: str) -> List[str]:
+        """返回文件对应的 integration id（文件名去扩展名）。"""
+        file_path = self._resolve_file_path(filename)
+        if not file_path.exists():
+            return []
+
+        integration_id = file_path.stem
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            with open(file_path, "r", encoding="utf-8") as fp:
+                content = yaml.safe_load(fp)
+        except Exception as exc:
+            print(f"Error reading integration ids from {file_path}: {exc}")
+            return []
+
+        # 空文件允许存在，id 仍以文件名为准。
+        if content is None:
+            return [integration_id]
+
+        # 新格式应为对象；对象内的 id 字段会被忽略并由文件名注入。
+        if not isinstance(content, dict):
+            return []
+
+        return [integration_id]
+
+    def find_files_by_integration_id(self, integration_id: str) -> List[str]:
+        """查找与 integration id 同名（stem 匹配）的文件名列表。"""
+        target = integration_id.strip()
+        if not target:
+            return []
+
+        return [
+            filename
+            for filename in self.list_integration_files()
+            if Path(filename).stem == target
+        ]
+
+    def get_integration(self, filename: str) -> Optional[str]:
+        """读取集成配置文件内容（按文件名）。"""
+        file_path = self._resolve_file_path(filename)
+        if not file_path.exists():
+            return None
+        with open(file_path, "r", encoding="utf-8") as file_obj:
+            return file_obj.read()
+
+    def save_integration(self, filename: str, content: str) -> bool:
+        """保存集成配置文件内容（按文件名）。"""
+        file_path = self._resolve_file_path(filename)
+        if not file_path.exists():
+            return False
+        try:
+            with open(file_path, "w", encoding="utf-8") as file_obj:
+                file_obj.write(content)
             return True
-        except Exception as e:
-            print(f"Error saving integration {integration_id}: {e}")
+        except Exception as exc:
+            print(f"Error saving integration {filename}: {exc}")
             return False
 
-    def create_integration(self, integration_id: str, content: str = "") -> bool:
-        """创建新的集成配置文件。"""
-        # 确保文件名以 .yaml 结尾
-        filename = f"{integration_id}.yaml"
-        if not filename.endswith(".yaml"):
-            filename += ".yaml"
-        file_path = self.integrations_dir / filename
+    def create_integration(self, filename: str, content: str = "") -> bool:
+        """创建新的集成配置文件（按文件名）。"""
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            return True
-        except Exception as e:
-            print(f"Error creating integration {filename}: {e}")
+            file_path = self._resolve_file_path(filename)
+        except ValueError as exc:
+            print(f"Error creating integration {filename}: {exc}")
             return False
 
-    def delete_integration(self, integration_id: str) -> bool:
-        """删除集成配置文件。"""
-        file_path = self._find_integration_file(integration_id)
-        if file_path and file_path.exists():
+        try:
+            with open(file_path, "w", encoding="utf-8") as file_obj:
+                file_obj.write(content)
+            return True
+        except Exception as exc:
+            print(f"Error creating integration {file_path.name}: {exc}")
+            return False
+
+    def delete_integration(self, filename: str) -> bool:
+        """删除集成配置文件（按文件名）。"""
+        file_path = self._resolve_file_path(filename)
+        if file_path.exists():
             try:
                 file_path.unlink()
                 return True
-            except Exception as e:
-                print(f"Error deleting integration {integration_id}: {e}")
+            except Exception as exc:
+                print(f"Error deleting integration {filename}: {exc}")
                 return False
         return False

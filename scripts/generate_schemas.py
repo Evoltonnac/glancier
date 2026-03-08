@@ -23,23 +23,18 @@ CONFIG_SCHEMA_ROOT = REPO_ROOT / "config" / "schemas"
 
 
 class IntegrationYamlConfig(BaseModel):
-    """Schema-only model for flow-based integration YAML files."""
+    """Schema-only model for single integration YAML files."""
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str
     name: Optional[str] = None
     description: Optional[str] = None
     flow: list[StepConfig]
     templates: list[ViewComponent] = Field(default_factory=list)
 
 
-class IntegrationFileSchema(BaseModel):
+class IntegrationFileSchema(IntegrationYamlConfig):
     """Top-level schema for integration YAML files."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    integrations: list[IntegrationYamlConfig] = Field(default_factory=list)
 
 
 def write_json(path: Path, payload: dict) -> None:

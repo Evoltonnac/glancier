@@ -225,6 +225,19 @@ class AppConfig(BaseModel):
     # Hidden fields for internal storage of templates
     integrations: List[IntegrationConfig] = Field(default_factory=list, exclude=True)
 
+    @model_validator(mode="after")
+    def ensure_unique_integration_ids(self) -> "AppConfig":
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for integration in self.integrations:
+            if integration.id in seen:
+                duplicates.add(integration.id)
+            seen.add(integration.id)
+        if duplicates:
+            duplicate_list = ", ".join(sorted(duplicates))
+            raise ValueError(f"Duplicate integration ids detected: {duplicate_list}")
+        return self
+
     def get_source(self, source_id: str) -> Optional[SourceConfig]:
         for s in self.sources:
             if s.id == source_id:
@@ -327,7 +340,42 @@ def load_all_yamls(root: Path) -> dict:
                 content = yaml.safe_load(fp)
                 if not content:
                     continue
-                
+
+                if f.parent.name == "integrations":
+                    if not isinstance(content, dict):
+                        logger.warning("Skipping invalid integration file %s: top-level object required", f)
+                        continue
+
+                    integration_payload: dict[str, Any]
+                    if "integrations" in content:
+                        legacy_items = content.get("integrations")
+                        if not isinstance(legacy_items, list) or len(legacy_items) != 1:
+                            logger.warning(
+                                "Skipping integration file %s: expected exactly one item in legacy 'integrations' list",
+                                f,
+                            )
+                            continue
+                        legacy_item = legacy_items[0]
+                        if not isinstance(legacy_item, dict):
+                            logger.warning("Skipping integration file %s: legacy integration item must be object", f)
+                            continue
+                        integration_payload = copy.deepcopy(legacy_item)
+                    else:
+                        integration_payload = copy.deepcopy(content)
+
+                    file_based_id = f.stem
+                    declared_id = integration_payload.pop("id", None)
+                    if declared_id and declared_id != file_based_id:
+                        logger.warning(
+                            "Integration id '%s' in %s is ignored; using filename id '%s'",
+                            declared_id,
+                            f,
+                            file_based_id,
+                        )
+                    integration_payload["id"] = file_based_id
+                    combined["integrations"].append(integration_payload)
+                    continue
+
                 # Merge lists
                 if "sources" in content:
                     combined["sources"].extend(content["sources"])

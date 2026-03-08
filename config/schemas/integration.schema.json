@@ -1,59 +1,5 @@
 {
   "$defs": {
-    "IntegrationYamlConfig": {
-      "additionalProperties": false,
-      "description": "Schema-only model for flow-based integration YAML files.",
-      "properties": {
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Description"
-        },
-        "flow": {
-          "items": {
-            "$ref": "#/$defs/StepConfig"
-          },
-          "title": "Flow",
-          "type": "array"
-        },
-        "templates": {
-          "items": {
-            "$ref": "#/$defs/ViewComponent"
-          },
-          "title": "Templates",
-          "type": "array"
-        }
-      },
-      "required": [
-        "id",
-        "flow"
-      ],
-      "title": "IntegrationYamlConfig",
-      "type": "object"
-    },
     "StepConfig": {
       "properties": {
         "id": {
@@ -262,14 +208,48 @@
   "additionalProperties": false,
   "description": "Schema for Glancier integration YAML files",
   "properties": {
-    "integrations": {
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "flow": {
       "items": {
-        "$ref": "#/$defs/IntegrationYamlConfig"
+        "$ref": "#/$defs/StepConfig"
       },
-      "title": "Integrations",
+      "title": "Flow",
+      "type": "array"
+    },
+    "templates": {
+      "items": {
+        "$ref": "#/$defs/ViewComponent"
+      },
+      "title": "Templates",
       "type": "array"
     }
   },
+  "required": [
+    "flow"
+  ],
   "title": "Glancier Integration Configuration",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema"

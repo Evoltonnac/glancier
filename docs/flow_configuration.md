@@ -87,37 +87,35 @@ Extracts specific **Metrics** or **Signals** from complex data structures into i
 The following example demonstrates a complete flow for the "Soniox" integration. It uses the `webview` step to capture dashboard data, then utilizes multiple `extract` steps to pull specific billing and usage **Metrics**.
 
 ```yaml
-integrations:
-  - id: soniox_dashboard_webview
-    name: "Soniox Dashboard (WebView)"
-    description: "Silently fetches Soniox data via a background webview."
+name: "Soniox Dashboard (WebView)"
+description: "Silently fetches Soniox data via a background webview."
 
-    flow:
-      # Step 1: Background scraping
-      - id: webview_fetch
-        use: webview
-        args:
-          url: "https://console.soniox.com/"
-          intercept_api: "/dashboard/"
-        outputs:
-          dashboard_response: "dashboard_response"
+flow:
+  # Step 1: Background scraping
+  - id: webview_fetch
+    use: webview
+    args:
+      url: "https://console.soniox.com/"
+      intercept_api: "/dashboard/"
+    outputs:
+      dashboard_response: "dashboard_response"
 
-      # Step 2: Extract available balance (Metric)
-      - id: parse_billing
-        use: extract
-        args:
-          source: "{dashboard_response}"
-          type: "jsonpath"
-          expr: "$.billing.available_balance_usd"
-        outputs:
-          available_balance: "available_balance"
+  # Step 2: Extract available balance (Metric)
+  - id: parse_billing
+    use: extract
+    args:
+      source: "{dashboard_response}"
+      type: "jsonpath"
+      expr: "$.billing.available_balance_usd"
+    outputs:
+      available_balance: "available_balance"
 
-      # Step 3: Extract current month usage (Metric)
-      - id: parse_usage
-        use: extract
-        args:
-          source: "{dashboard_response}"
-          type: "jsonpath"
+  # Step 3: Extract current month usage (Metric)
+  - id: parse_usage
+    use: extract
+    args:
+      source: "{dashboard_response}"
+      type: "jsonpath"
           expr: "$.mtd_usage.total_paid_amount_usd"
         outputs:
           total_usage: "total_usage"

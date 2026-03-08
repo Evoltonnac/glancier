@@ -1,5 +1,4 @@
 import { Card } from "./ui/card";
-import { AlertTriangle, Wrench } from "lucide-react";
 import type {
     ViewComponent,
     SourceSummary,
@@ -28,8 +27,6 @@ export function BaseSourceCard({
     component,
     sourceSummary,
     sourceData,
-    onInteract,
-    onShowError,
 }: BaseSourceCardProps) {
     const ui = component.ui || {
         title: component.label || "Untitled",
@@ -42,15 +39,6 @@ export function BaseSourceCard({
         !!sourceSummary?.error_details ||
         (!!sourceSummary?.message && sourceSummary.status === "error") ||
         !!sourceData?.error;
-    const hasActionableInteraction =
-        !!sourceSummary?.interaction &&
-        (sourceSummary.status === "suspended" || sourceSummary.status === "error");
-    const shouldShowError = hasError && !hasActionableInteraction;
-    const errorLabel =
-        sourceSummary?.error ||
-        sourceData?.error ||
-        sourceSummary?.message?.split("\n")[0] ||
-        "Execution failed";
 
     // Determine status for indicator
     const rawStatus = sourceSummary?.status || "disabled";
@@ -91,42 +79,6 @@ export function BaseSourceCard({
                         {ui.title}
                     </span>
                 </div>
-                {hasActionableInteraction && sourceSummary && onInteract && (
-                    <button
-                        type="button"
-                        className={`relative z-10 mr-5 inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
-                            sourceSummary.status === "error"
-                                ? "bg-error/15 text-error hover:bg-error/25"
-                                : "bg-warning/15 text-warning hover:bg-warning/25"
-                        }`}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onInteract(sourceSummary);
-                        }}
-                        title={
-                            sourceSummary.status === "error"
-                                ? "凭证无效，点击修复"
-                                : "等待补充信息"
-                        }
-                    >
-                        <Wrench className="h-3 w-3" />
-                        {sourceSummary.status === "error" ? "修复" : "需操作"}
-                    </button>
-                )}
-                {shouldShowError && sourceSummary && onShowError && (
-                    <button
-                        type="button"
-                        className="relative z-10 mr-5 inline-flex h-6 items-center gap-1 rounded bg-error/15 px-2 text-[11px] font-medium text-error hover:bg-error/25 transition-colors"
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            onShowError(sourceSummary);
-                        }}
-                        title={errorLabel}
-                    >
-                        <AlertTriangle className="h-3 w-3" />
-                        错误
-                    </button>
-                )}
                 {/* Absolute positioned server rack style indicator light in top-left */}
                 <div
                     className={`absolute left-2 top-1/2 -translate-y-1/2 w-[4px] h-3 rounded-full flex-shrink-0 transition-all duration-500 z-20 ${pillClass}`}

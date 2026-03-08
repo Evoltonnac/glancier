@@ -4,9 +4,14 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 const { apiMock } = vi.hoisted(() => ({
     apiMock: {
         listIntegrationFiles: vi.fn(),
+        listIntegrationFileMetadata: vi.fn(),
         getIntegrationFile: vi.fn(),
         getIntegrationSources: vi.fn(),
         saveIntegrationFile: vi.fn(),
+        createIntegrationFile: vi.fn(),
+        deleteIntegrationFile: vi.fn(),
+        createSourceFile: vi.fn(),
+        deleteSourceFile: vi.fn(),
         reloadConfig: vi.fn(),
     },
 }));
@@ -42,13 +47,26 @@ describe("Integrations page", () => {
         useStore.setState(initialState, true);
 
         apiMock.listIntegrationFiles.mockReset();
+        apiMock.listIntegrationFileMetadata.mockReset();
         apiMock.getIntegrationFile.mockReset();
         apiMock.getIntegrationSources.mockReset();
         apiMock.saveIntegrationFile.mockReset();
+        apiMock.createIntegrationFile.mockReset();
+        apiMock.deleteIntegrationFile.mockReset();
+        apiMock.createSourceFile.mockReset();
+        apiMock.deleteSourceFile.mockReset();
         apiMock.reloadConfig.mockReset();
 
         apiMock.listIntegrationFiles.mockResolvedValue(["demo.yaml"]);
-        apiMock.getIntegrationFile.mockResolvedValue({ content: "name: demo" });
+        apiMock.listIntegrationFileMetadata.mockResolvedValue([
+            { filename: "demo.yaml", id: "demo", name: "演示集成" },
+        ]);
+        apiMock.getIntegrationFile.mockResolvedValue({
+            filename: "demo.yaml",
+            content: "name: demo",
+            integration_ids: ["demo"],
+            display_name: "演示集成",
+        });
         apiMock.getIntegrationSources.mockResolvedValue([]);
         apiMock.reloadConfig.mockResolvedValue({
             message: "ok",
@@ -60,6 +78,7 @@ describe("Integrations page", () => {
         apiMock.saveIntegrationFile.mockResolvedValue(undefined);
         render(<IntegrationsPage />);
 
+        expect(await screen.findByText("演示集成")).toBeInTheDocument();
         const fileEntry = await screen.findByText("demo.yaml");
         fireEvent.click(fileEntry);
 

@@ -1,0 +1,24 @@
+name: "TEST - API Key Invalid Credentials"
+description: "Failure test for api_key step: always returns 401 to verify invalid credential re-entry interaction."
+
+# Manual failure input for /api/sources/{source_id}/interact:
+# - test_api_key: "sk-test-invalid"
+flow:
+  - id: auth_api_key
+    use: api_key
+    args:
+      label: "Test API Key"
+      description: "Input any value to trigger 401 invalid-credential path"
+      message: "Provide API key for invalid credential test"
+    secrets:
+      api_key: "test_api_key"
+    outputs:
+      api_key: "test_api_key"
+
+  - id: fetch_unauthorized
+    use: http
+    args:
+      url: "https://httpbin.org/status/401"
+      method: "GET"
+      headers:
+        Authorization: "Bearer {test_api_key}"

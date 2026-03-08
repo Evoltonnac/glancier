@@ -29,26 +29,15 @@ const SCHEMA_URI = "inmemory://schema/integration.schema.json";
 
 const FALLBACK_INTEGRATION_SCHEMA: JsonSchema = bundledSchema || {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  title: "IntegrationFile",
+  title: "Integration",
   type: "object",
   properties: {
-    integrations: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          name: { type: "string" },
-          description: { type: "string" },
-          flow: { type: "array" },
-          templates: { type: "array" },
-        },
-        required: ["id", "flow"],
-        additionalProperties: false,
-      },
-    },
+    name: { type: "string" },
+    description: { type: "string" },
+    flow: { type: "array" },
+    templates: { type: "array" },
   },
-  required: ["integrations"],
+  required: ["flow"],
   additionalProperties: false,
 };
 
