@@ -29,5 +29,5 @@ All frontend development must adhere to the rules in:
 
 - **Metric**: Numeric data point (e.g., usage, balance).
 - **Signal**: State data point (e.g., active, error, success).
-- **Progress Bar**: Replaces legacy quota bars.
-- **Bento Card**: Replaces legacy quota cards.
+- **Progress Bar**: Standard widget for value-vs-limit visualization.
+- **Bento Card**: Standard container for source-level widgets.
