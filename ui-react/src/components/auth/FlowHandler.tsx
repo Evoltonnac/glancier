@@ -407,40 +407,39 @@ export function FlowHandler({
                 return (
                     <div className="py-6 flex flex-col items-center gap-3">
                         {/* Render client_id/client_secret input fields if present */}
-                        {interaction.fields &&
-                            interaction.fields.length > 0 && (
-                                <div className="w-full space-y-4">
-                                    {interaction.fields.map((field) => (
-                                        <div
-                                            key={field.key}
-                                            className="grid gap-2"
+                        {interaction.fields.length > 0 && (
+                            <div className="w-full space-y-4">
+                                {interaction.fields.map((field) => (
+                                    <div
+                                        key={field.key}
+                                        className="grid gap-2"
+                                    >
+                                        <label
+                                            htmlFor={field.key}
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                         >
-                                            <label
-                                                htmlFor={field.key}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                            >
-                                                {field.label}
-                                            </label>
-                                            <Input
-                                                id={field.key}
-                                                type={field.type || "text"}
-                                                placeholder={field.description}
-                                                value={
-                                                    formData[field.key] || ""
-                                                }
-                                                onChange={(e) =>
-                                                    handleInputChange(
-                                                        field.key,
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                disabled={loading}
-                                                className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                            {field.label}
+                                        </label>
+                                        <Input
+                                            id={field.key}
+                                            type={field.type || "text"}
+                                            placeholder={field.description}
+                                            value={
+                                                formData[field.key] || ""
+                                            }
+                                            onChange={(e) =>
+                                                handleInputChange(
+                                                    field.key,
+                                                    e.target.value,
+                                                )
+                                            }
+                                            disabled={loading}
+                                            className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Render doc_url link if available */}
                         {docUrl && (
