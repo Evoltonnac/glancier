@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Mutex;
 use tauri::Emitter;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Window};
 
 const MAX_LOG_MESSAGE_CHARS: usize = 800;
 const MAX_CONSECUTIVE_DUPLICATE_LOGS: usize = 3;
@@ -11,6 +11,23 @@ const LOG_BURST_LIMIT: usize = 180;
 const MAX_TRACKED_TASKS: usize = 256;
 const MAX_ERROR_LOGS_PER_SOURCE: usize = 80;
 const MAX_ERROR_LOG_QUERY: usize = 200;
+const WINDOW_MAIN: &str = "main";
+const WINDOW_SCRAPER_WORKER: &str = "scraper_worker";
+
+fn ensure_invoker_window(
+    window: &Window,
+    allowed_labels: &[&str],
+    command_name: &str,
+) -> Result<(), String> {
+    let current = window.label();
+    if allowed_labels.iter().any(|label| *label == current) {
+        return Ok(());
+    }
+    Err(format!(
+        "IPC denied for command '{}' from window '{}'",
+        command_name, current
+    ))
+}
 
 /// Structured log entry for scraper lifecycle events
 #[derive(Debug, Clone, Serialize)]
@@ -51,7 +68,10 @@ fn sanitize_log_message(message: String) -> String {
     if char_count <= MAX_LOG_MESSAGE_CHARS {
         return message;
     }
-    let mut shortened = message.chars().take(MAX_LOG_MESSAGE_CHARS).collect::<String>();
+    let mut shortened = message
+        .chars()
+        .take(MAX_LOG_MESSAGE_CHARS)
+        .collect::<String>();
     shortened.push_str("...[truncated]");
     shortened
 }
@@ -396,7 +416,8 @@ async fn close_existing_scraper_window(
 }
 
 #[tauri::command]
-pub async fn scraper_log(app: AppHandle, message: String) -> Result<(), String> {
+pub async fn scraper_log(window: Window, app: AppHandle, message: String) -> Result<(), String> {
+    ensure_invoker_window(&window, &[WINDOW_SCRAPER_WORKER], "scraper_log")?;
     let (source_id, task_id) = get_active_task(&app);
     emit_lifecycle_log(
         &app,
@@ -407,9 +428,11 @@ pub async fn scraper_log(app: AppHandle, message: String) -> Result<(), String> 
 
 #[tauri::command]
 pub async fn get_scraper_error_logs(
+    window: Window,
     app: AppHandle,
     source_id: Option<String>,
 ) -> Result<Vec<ScraperLifecycleLog>, String> {
+    ensure_invoker_window(&window, &[WINDOW_MAIN], "get_scraper_error_logs")?;
     let state = app.state::<ScraperState>();
     let store = state.error_logs_by_source.lock().unwrap();
 
@@ -434,6 +457,7 @@ pub async fn get_scraper_error_logs(
 
 #[tauri::command]
 pub async fn push_scraper_task(
+    window: Window,
     app: AppHandle,
     source_id: String,
     url: String,
@@ -442,6 +466,7 @@ pub async fn push_scraper_task(
     secret_key: String,
     foreground: Option<bool>,
 ) -> Result<(), String> {
+    ensure_invoker_window(&window, &[WINDOW_MAIN], "push_scraper_task")?;
     let foreground = foreground.unwrap_or(false);
     let task_id = make_task_id(&source_id);
     set_active_task(&app, source_id.clone(), task_id.clone());
@@ -475,11 +500,32 @@ pub async fn push_scraper_task(
     let final_script = format!(
         r#"
         (function() {{
+            // Safe property override helper
+            // Tries Object.defineProperty first, then direct assignment, then gives up
+            function safeOverride(obj, prop, value) {{
+                try {{
+                    Object.defineProperty(obj, prop, {{
+                        value: value,
+                        writable: true,
+                        configurable: true
+                    }});
+                    return true;
+                }} catch(e1) {{
+                    try {{
+                        obj[prop] = value;
+                        return obj[prop] === value;
+                    }} catch(e2) {{
+                        console.warn('[Scraper] Cannot override ' + prop + ':', e2.message);
+                        return false;
+                    }}
+                }}
+            }}
+
             // Resource blocker
             const blockExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.woff', '.woff2', '.ttf'];
             
             const originalFetch = window.fetch;
-            window.fetch = async function(...args) {{
+            const patchedFetch = async function(...args) {{
                 const reqUrl = (typeof args[0] === 'string' ? args[0] : args[0]?.url) || '';
                 
                 // Block static resources
@@ -514,16 +560,18 @@ pub async fn push_scraper_task(
                 
                 return originalFetch.apply(this, args);
             }};
+            safeOverride(window, 'fetch', patchedFetch);
             
             // XHR overrides (Optional, if target uses XHR instead of Fetch)
             const originalXhrOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, xUrl, ...rest) {{
+            const patchedXhrOpen = function(method, xUrl, ...rest) {{
                 this._url = xUrl;
                 return originalXhrOpen.call(this, method, xUrl, ...rest);
             }};
+            safeOverride(XMLHttpRequest.prototype, 'open', patchedXhrOpen);
 
             const originalXhrSend = XMLHttpRequest.prototype.send;
-            XMLHttpRequest.prototype.send = function(body) {{
+            const patchedXhrSend = function(body) {{
                 this.addEventListener('load', function() {{
                     if (this._url && this._url.includes('{}')) {{
                          if (this.status === 401 || this.status === 403) {{
@@ -544,16 +592,17 @@ pub async fn push_scraper_task(
                 this.addEventListener('error', function() {{}});
                 return originalXhrSend.call(this, body);
             }};
+            safeOverride(XMLHttpRequest.prototype, 'send', patchedXhrSend);
 
             // DOM Blocker for Images
             const observer = new MutationObserver(mutations => {{
                 for (const mutation of mutations) {{
                     for (const node of mutation.addedNodes) {{
                         if (node.tagName === 'IMG') {{
-                            node.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; // 1x1 transparent
+                            try {{ node.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; }} catch(e) {{}}
                         }} else if (node.querySelectorAll) {{
                             const imgs = node.querySelectorAll('img');
-                            imgs.forEach(img => img.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=');
+                            imgs.forEach(img => {{ try {{ img.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; }} catch(e) {{}} }});
                         }}
                     }}
                 }}
@@ -747,16 +796,18 @@ pub async fn push_scraper_task(
 
 #[tauri::command]
 pub async fn handle_scraped_data(
+    window: Window,
     app: AppHandle,
     source_id: String,
     task_id: Option<String>,
     secret_key: String,
     data: serde_json::Value,
 ) -> Result<(), String> {
+    ensure_invoker_window(&window, &[WINDOW_SCRAPER_WORKER], "handle_scraped_data")?;
     let resolved_task_id = task_id.unwrap_or_else(|| {
         let (_, active_task_id) = get_active_task(&app);
         if active_task_id == "unknown" {
-            format!("legacy-{}", source_id)
+            format!("task-{}", source_id)
         } else {
             active_task_id
         }
@@ -846,11 +897,13 @@ pub async fn handle_scraped_data(
 
 #[tauri::command]
 pub async fn handle_scraper_auth(
+    window: Window,
     app: AppHandle,
     source_id: String,
     task_id: Option<String>,
     target_url: String,
 ) -> Result<(), String> {
+    ensure_invoker_window(&window, &[WINDOW_SCRAPER_WORKER], "handle_scraper_auth")?;
     let resolved_task_id = task_id.unwrap_or_else(|| {
         let (_, active_task_id) = get_active_task(&app);
         active_task_id
@@ -906,7 +959,8 @@ pub async fn handle_scraper_auth(
 }
 
 #[tauri::command]
-pub async fn show_scraper_window(app: AppHandle) -> Result<(), String> {
+pub async fn show_scraper_window(window: Window, app: AppHandle) -> Result<(), String> {
+    ensure_invoker_window(&window, &[WINDOW_MAIN], "show_scraper_window")?;
     let (source_id, task_id) = get_active_task(&app);
     println!("[Scraper Debug] show_scraper_window called");
     if let Some(win) = app.get_webview_window("scraper_worker") {
@@ -930,7 +984,8 @@ pub async fn show_scraper_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn cancel_scraper_task(app: AppHandle) -> Result<(), String> {
+pub async fn cancel_scraper_task(window: Window, app: AppHandle) -> Result<(), String> {
+    ensure_invoker_window(&window, &[WINDOW_MAIN], "cancel_scraper_task")?;
     let (source_id, task_id) = get_active_task(&app);
     println!("[Scraper Debug] cancel_scraper_task called");
 
@@ -983,8 +1038,10 @@ mod tests {
             let decision = state.evaluate(&make_log("task-1", "loop", "same"), now + idx as u128);
             assert!(matches!(decision, LogDecision::Emit));
         }
-        let drop_decision =
-            state.evaluate(&make_log("task-1", "loop", "same"), now + MAX_CONSECUTIVE_DUPLICATE_LOGS as u128 + 1);
+        let drop_decision = state.evaluate(
+            &make_log("task-1", "loop", "same"),
+            now + MAX_CONSECUTIVE_DUPLICATE_LOGS as u128 + 1,
+        );
         assert!(matches!(drop_decision, LogDecision::Drop));
     }
 
@@ -999,10 +1056,8 @@ mod tests {
             );
             assert!(matches!(decision, LogDecision::Emit));
         }
-        let kill_decision = state.evaluate(
-            &make_log("task-burst", "spam", "log-overflow"),
-            now + 1,
-        );
+        let kill_decision =
+            state.evaluate(&make_log("task-burst", "spam", "log-overflow"), now + 1);
         assert!(matches!(kill_decision, LogDecision::Kill { .. }));
     }
 }

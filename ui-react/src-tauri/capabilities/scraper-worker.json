@@ -1,0 +1,7 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "scraper-worker",
+    "description": "allow scraper worker webview to access IPC for scraper lifecycle reporting only",
+    "webviews": ["scraper_worker"],
+    "permissions": ["core:default"]
+}

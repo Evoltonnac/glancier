@@ -1,38 +1,76 @@
 {
-    "$schema": "https://schema.tauri.app/config/2",
-    "productName": "Glancier",
-    "version": "0.1.0",
-    "identifier": "com.glancier.app",
-    "build": {
-        "frontendDist": "../dist",
-        "devUrl": "http://localhost:3000",
-        "beforeDevCommand": "npm run dev",
-        "beforeBuildCommand": "npm run build"
-    },
-    "app": {
-        "windows": [
-            {
-                "title": "Glancier",
-                "width": 1200,
-                "height": 800,
-                "resizable": true,
-                "fullscreen": false,
-                "titleBarStyle": "Overlay",
-                "hiddenTitle": true
-            }
-        ],
-        "security": {
-            "csp": null
-        }
-    },
-    "bundle": {
-        "active": true,
-        "targets": "all",
-        "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"]
-    },
-    "plugins": {
-        "shell": {
-            "open": true
-        }
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Glancier",
+  "version": "1.0.0",
+  "identifier": "com.glancier.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Glancier",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; frame-src 'none'; media-src 'none'; worker-src 'none';",
+      "dangerousDisableAssetCspModification": false,
+      "freezePrototype": false
     }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "resources": [
+      "binaries"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "bundleVersion": "1.0.0",
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "background": "icons/dmg-background.png",
+        "windowSize": {
+          "width": 800,
+          "height": 510
+        },
+        "appPosition": {
+          "x": 195,
+          "y": 253
+        },
+        "applicationFolderPosition": {
+          "x": 610,
+          "y": 253
+        }
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": "^https?://"
+    },
+    "updater": {
+        "active": true,      "dialog": false,
+      "endpoints": [
+        "https://example.com/glancier/releases/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY"
+    }
+  }
 }
