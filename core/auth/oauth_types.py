@@ -21,6 +21,7 @@ class CodeChallengeMethod(str, Enum):
 
 # 标准 OAuth 参数名常量
 class OAuthParams:
+    OAUTH_SECRETS = "oauth_secrets"
     CLIENT_ID = "client_id"
     CLIENT_SECRET = "client_secret"
     REDIRECT_URI = "redirect_uri"

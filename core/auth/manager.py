@@ -5,7 +5,15 @@
 import logging
 from typing import Any
 
-from core.config_loader import AppConfig, AuthConfig, AuthType, SourceConfig, StepType, TokenEndpointAuthMethod
+from core.config_loader import (
+    AppConfig,
+    AuthConfig,
+    AuthType,
+    OAuthFlowType,
+    SourceConfig,
+    StepType,
+    TokenEndpointAuthMethod,
+)
 from core.secrets_controller import SecretsController
 from core.auth.oauth_auth import OAuthAuth
 
@@ -45,7 +53,7 @@ class AuthManager:
                 args = step.args
 
                 # 处理 scope 参数（可能是字符串或列表）
-                scope_arg = args.get("scope")
+                scope_arg = args.get("scope") or args.get("scopes")
                 scopes = []
                 if scope_arg:
                     if isinstance(scope_arg, list):
@@ -55,6 +63,19 @@ class AuthManager:
 
                 # 获取 redirect_uri，如果没有则使用默认值
                 redirect_uri = args.get("redirect_uri") or "http://localhost:5173/oauth/callback"
+
+                # OAuth flow type
+                flow_arg = (
+                    args.get("oauth_flow")
+                    or args.get("flow_type")
+                    or args.get("grant_type")
+                    or "code"
+                ).strip().lower()
+                oauth_flow = OAuthFlowType.CODE
+                if flow_arg in {"device", "device_code", "urn:ietf:params:oauth:grant-type:device_code"}:
+                    oauth_flow = OAuthFlowType.DEVICE
+                elif flow_arg in {"client_credentials", "client-credentials"}:
+                    oauth_flow = OAuthFlowType.CLIENT_CREDENTIALS
 
                 # 解析 token_endpoint_auth_method
                 auth_method_str = args.get("token_endpoint_auth_method")
@@ -76,12 +97,36 @@ class AuthManager:
                     # OAuth 自定义字段
                     token_request_type=args.get("token_request_type") or "form",
                     token_field=args.get("token_field") or "access_token",
+                    token_type_field=args.get("token_type_field") or "token_type",
+                    expires_in_field=args.get("expires_in_field") or "expires_in",
+                    refresh_token_field=args.get("refresh_token_field") or "refresh_token",
+                    scope_field=args.get("scope_field") or "scope",
                     redirect_param=args.get("redirect_param") or "redirect_uri",
+                    authorization_code_field=args.get("authorization_code_field") or "code",
+                    authorization_state_field=args.get("authorization_state_field") or "state",
+                    implicit_access_token_field=args.get("implicit_access_token_field") or "access_token",
+                    implicit_token_type_field=args.get("implicit_token_type_field") or "token_type",
+                    implicit_expires_in_field=args.get("implicit_expires_in_field") or "expires_in",
+                    implicit_scope_field=args.get("implicit_scope_field") or "scope",
+                    implicit_state_field=args.get("implicit_state_field") or "state",
                     # PKCE 支持
                     supports_pkce=args.get("supports_pkce", True),
                     code_challenge_method=args.get("code_challenge_method", "S256"),
+                    response_type=args.get("response_type", "code"),
+                    oauth_flow=oauth_flow,
                     # Token Endpoint Auth Method
                     token_endpoint_auth_method=token_endpoint_auth_method,
+                    device_authorization_url=args.get("device_authorization_url") or args.get("device_authorization_endpoint"),
+                    device_code_field=args.get("device_code_field") or "device_code",
+                    device_user_code_field=args.get("device_user_code_field") or "user_code",
+                    device_verification_uri_field=args.get("device_verification_uri_field") or "verification_uri",
+                    device_verification_uri_complete_field=args.get("device_verification_uri_complete_field") or "verification_uri_complete",
+                    device_interval_field=args.get("device_interval_field") or "interval",
+                    device_expires_in_field=args.get("device_expires_in_field") or "expires_in",
+                    oauth_error_field=args.get("oauth_error_field") or "error",
+                    oauth_error_description_field=args.get("oauth_error_description_field") or "error_description",
+                    device_poll_interval=args.get("device_poll_interval", 5),
+                    device_poll_timeout=args.get("device_poll_timeout", 900),
                     # Documentation URL
                     doc_url=args.get("doc_url"),
                 )
@@ -94,17 +139,7 @@ class AuthManager:
         source_id = source.id
 
         try:
-            # 情况1: source.auth 直接定义了 OAuth 配置
-            if source.auth and source.auth.type == AuthType.OAUTH:
-                self._handlers[source_id] = OAuthAuth(
-                    source.auth,
-                    source_id,
-                    self.secrets
-                )
-                logger.info(f"[{source_id}] OAuth 鉴权已注册 (from source.auth)")
-                return
-
-            # 情况2: source 或 integration 的 flow 中包含 OAuth 步骤
+            # source 或 integration 的 flow 中包含 OAuth 步骤
             oauth_step_result = self._find_oauth_step(source)
             if oauth_step_result:
                 step, auth_config = oauth_step_result
@@ -116,11 +151,7 @@ class AuthManager:
                 logger.info(f"[{source_id}] OAuth 鉴权已注册 (from flow)")
                 return
 
-            # 没有 OAuth 配置
-            if source.auth:
-                logger.debug(f"[{source_id}] 鉴权类型 {source.auth.type} 暂未实现专门处理")
-            else:
-                logger.debug(f"[{source_id}] 未配置鉴权")
+            logger.debug(f"[{source_id}] 未配置 OAuth 鉴权流程")
 
         except Exception as e:
             logger.error(f"[{source_id}] 鉴权注册失败: {e}")

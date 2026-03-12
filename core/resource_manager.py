@@ -4,6 +4,7 @@ Resource Manager: Handles JSON-based storage for Sources and Views.
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -12,7 +13,7 @@ from core.models import StoredSource, StoredView
 logger = logging.getLogger(__name__)
 
 # Default paths
-DATA_DIR = Path("data")
+DATA_DIR = Path(os.getenv("GLANCIER_DATA_DIR", ".")) / "data"
 SOURCES_FILE = DATA_DIR / "sources.json"
 VIEWS_FILE = DATA_DIR / "views.json"
 
@@ -134,6 +135,28 @@ class ResourceManager:
             if v.id == view_id:
                 return v
         return None
+
+    def remove_source_references_from_views(self, source_id: str) -> list[str]:
+        """Remove all view items bound to a source_id and return affected view IDs."""
+        views = self.load_views()
+        if not views:
+            return []
+
+        affected_view_ids: list[str] = []
+        updated_views: list[StoredView] = []
+
+        for view in views:
+            retained_items = [item for item in view.items if item.source_id != source_id]
+            if len(retained_items) != len(view.items):
+                affected_view_ids.append(view.id)
+                updated_views.append(view.model_copy(update={"items": retained_items}))
+            else:
+                updated_views.append(view)
+
+        if affected_view_ids:
+            self._save_views(updated_views)
+
+        return affected_view_ids
 
     def _save_views(self, views: List[StoredView]):
         """Save views list to JSON file."""

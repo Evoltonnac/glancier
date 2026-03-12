@@ -8,6 +8,7 @@ import time
 import asyncio
 import httpx
 import shlex
+import re
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from typing import Any, Dict
@@ -19,12 +20,33 @@ from core.source_state import (
     InteractionType,
     InteractionField
 )
-from core.config_loader import SourceConfig, StepConfig, StepType, AuthType
+from core.config_loader import (
+    SourceConfig,
+    StepConfig,
+    StepType,
+    AuthType,
+    AuthConfig,
+    OAuthFlowType,
+    TokenEndpointAuthMethod,
+)
+from core.auth.oauth_auth import OAuthAuth
 from jsonpath_ng import parse
 
 logger = logging.getLogger(__name__)
 _RUNTIME_LOG_LINE_LIMIT = 120
 _RUNTIME_LOG_CHAR_LIMIT = 6000
+_PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
+_MISSING = object()
+
+
+class _DotAccessDict(dict):
+    """dict wrapper that supports dotted attribute lookup in str.format."""
+
+    def __getattr__(self, key: str):
+        try:
+            return self[key]
+        except KeyError as exc:
+            raise AttributeError(key) from exc
 
 class Executor:
     """
@@ -119,21 +141,28 @@ class Executor:
                 data = await self._run_flow(source)
                 self._data_controller.upsert(source.id, data)
                 self._update_state(source.id, SourceStatus.ACTIVE, "Flow execution completed")
-                return
-
-            # Fallback to legacy/simple flow
-            await self._check_auth_requirements(source)
-            
-            # 模拟：执行抓取 (TODO: 真正的 HTTP/Browser 逻辑)
-            # data = await self._run_steps(source)
-            # self._data_controller.upsert(source.id, data)
-            
-            # 暂时只做 Auth Check 演示
-            self._update_state(source.id, SourceStatus.ACTIVE, "Fetch completed (Mock)")
+            else:
+                self._update_state(source.id, SourceStatus.ERROR, "No flow defined for source")
 
         except Exception as e:
             logger.error(f"[{source.id}] Fetch failed: {e}", exc_info=True)
             normalized_error = self._normalize_interaction_error(source, e)
+
+            # For OAuth invalid-credential errors, first attempt token refresh and retry once.
+            if isinstance(normalized_error, InvalidCredentialsError):
+                refreshed = await self._try_refresh_oauth_recovery(source, normalized_error)
+                if refreshed:
+                    logger.info(f"[{source.id}] OAuth refresh succeeded; retrying fetch once")
+                    self._update_state(source.id, SourceStatus.REFRESHING, "OAuth token refreshed, retrying...")
+                    try:
+                        data = await self._run_flow(source)
+                        self._data_controller.upsert(source.id, data)
+                        self._update_state(source.id, SourceStatus.ACTIVE, "Flow execution completed")
+                        return
+                    except Exception as retry_error:
+                        logger.warning(f"[{source.id}] Retry after OAuth refresh failed: {retry_error}")
+                        normalized_error = self._normalize_interaction_error(source, retry_error)
+
             # 将异常转换为交互请求
             interaction = self._exception_to_interaction(source, normalized_error)
             if interaction:
@@ -181,273 +210,29 @@ class Executor:
             outputs = {}
 
             try:
-                await self._check_step_auth_requirements(source, step)
-
                 # Resolve args with priority: outputs > context > secrets
                 args = self._resolve_args(step.args, outputs, context, source.id)
 
                 output = None
 
-                if step.use == StepType.API_KEY:
-                     # Get API Key from secrets
-                     secret_key = step.secrets.get("api_key", "api_key") if step.secrets else "api_key"
+                from core.steps import (
+                    execute_http_step,
+                    execute_browser_step,
+                    execute_auth_step,
+                    execute_extract_step,
+                    execute_script_step
+                )
 
-                     api_key = self._secrets.get_secret(source.id, secret_key)
-
-                     if not api_key:
-                         # Build interaction to ask for key
-                         raise RequiredSecretMissing(
-                            source_id=source.id,
-                            interaction_type=InteractionType.INPUT_TEXT,
-                            fields=[
-                                InteractionField(
-                                    key=secret_key,
-                                    label=args.get("label", "API Key"),
-                                    type="password",
-                                    description=args.get("description", "Please enter the API Key")
-                                )
-                            ],
-                            message=args.get("message", f"Missing API Key for {source.name}")
-                         )
-
-                     # Output into outputs (single step variable)
-                     output = {"api_key": api_key}
-
-                elif step.use == StepType.CURL:
-                     secret_key = step.secrets.get("curl_command", "curl_command") if step.secrets else "curl_command"
-                     curl_command = self._secrets.get_secret(source.id, secret_key)
-                     
-                     if not curl_command:
-                         raise RequiredSecretMissing(
-                             source_id=source.id,
-                             interaction_type=InteractionType.INPUT_TEXT,
-                             fields=[
-                                 InteractionField(
-                                     key=secret_key,
-                                     label=args.get("label", "cURL Request"),
-                                     type="text",
-                                     description=args.get("description", "Paste your cURL command here")
-                                 )
-                             ],
-                             message=args.get("message", f"Provide cURL request for {source.name}"),
-                             warning_message=args.get("warning_message")
-                         )
-                         
-                     extracted_headers = {}
-                     try:
-                         # Split the cURL command safely handling quotes
-                         tokens = shlex.split(curl_command)
-                         for i, token in enumerate(tokens):
-                             if token in ("-H", "--header") and i + 1 < len(tokens):
-                                 header_str = tokens[i + 1]
-                                 if ":" in header_str:
-                                     k, v = header_str.split(":", 1)
-                                     extracted_headers[k.strip()] = v.strip()
-                     except Exception as e:
-                         logger.error(f"Failed to parse cURL command for step {step.id}: {e}")
-                         
-                     output = {"curl_command": curl_command, "headers": extracted_headers}
-                     if step.outputs:
-                         for key, var_name in step.outputs.items():
-                             if key != "headers" and key != "curl_command":
-                                 # search case-insensitively just in case
-                                 val = next((v for k, v in extracted_headers.items() if k.lower() == key.lower()), None)
-                                 if val is not None:
-                                     output[key] = val
-
-                elif step.use == StepType.OAUTH:
-                     # OAuth token always stored under source.id
-                     token_data = self._secrets.get_secrets(source.id)
-                     # access_token may be a dict with token in "access_token" field, or direct token string
-                     token = token_data.get("access_token")
-                     if isinstance(token, dict):
-                         token = token.get("access_token") or token.get("key")
-
-                     # 获取 OAuth 配置参数
-                     oauth_args = args or {}
-
-                     # 检查是否需要 client_id/client_secret
-                     # 如果配置中没有，且 secrets 中也没有，则需要用户输入
-                     client_id = oauth_args.get("client_id")
-                     client_secret = oauth_args.get("client_secret")
-
-                     if not client_id:
-                         client_id = token_data.get("client_id")
-                     if not client_secret:
-                         client_secret = token_data.get("client_secret")
-
-                     # 构建交互请求字段
-                     interaction_fields = []
-                     if not client_id:
-                         interaction_fields.append(InteractionField(
-                             key="client_id",
-                             label="Client ID",
-                             type="text",
-                             description="OAuth Client ID"
-                         ))
-                     if not client_secret:
-                         interaction_fields.append(InteractionField(
-                             key="client_secret",
-                             label="Client Secret",
-                             type="password",
-                             description="OAuth Client Secret"
-                         ))
-
-                     if not token:
-                         # 构建交互数据
-                         interaction_data = {
-                             "oauth_args": oauth_args,
-                             "doc_url": oauth_args.get("doc_url")
-                         }
-
-                         # Trigger OAuth flow interaction
-                         raise RequiredSecretMissing(
-                             source_id=source.id,
-                             interaction_type=InteractionType.OAUTH_START,
-                             fields=interaction_fields,
-                             message=f"Authorization required for step {step.id}. " + ("Please provide client credentials." if interaction_fields else "Click to authorize."),
-                             data=interaction_data
-                         )
-                     # Output into outputs (single step variable)
-                     output = {"access_token": token}
-
+                if step.use in (StepType.API_KEY, StepType.CURL, StepType.OAUTH):
+                    output = await execute_auth_step(step, source, args, context, outputs, self)
                 elif step.use == StepType.HTTP:
-                     # HTTP request - NO auto-injection of Authorization header
-                     # Headers must be explicitly defined in the step config
-                     url = args.get("url")
-                     method = args.get("method", "GET")
-                     headers = args.get("headers", {}).copy()
-
-                     proxy_url = self._get_proxy_url()
-                     client_kwargs = {}
-                     if proxy_url:
-                         client_kwargs["proxy"] = proxy_url
-
-                     async with httpx.AsyncClient(**client_kwargs) as client:
-                         response = await client.request(method, url, headers=headers)
-                         try:
-                             response.raise_for_status()
-                         except httpx.HTTPStatusError as http_status_error:
-                             classified_error = self._classify_http_status_error(
-                                 source=source,
-                                 step=step,
-                                 error=http_status_error,
-                             )
-                             raise classified_error from http_status_error
-
-                         output = {
-                            "http_response": response.json(),
-                            "raw_data": response.text,
-                            "headers": dict(response.headers)
-                         }
-
+                    output = await execute_http_step(step, source, args, context, outputs, self)
                 elif step.use == StepType.EXTRACT:
-                     source_data = args.get("source")
-                     expr = args.get("expr")
-                     extract_type = args.get("type", "jsonpath")
-
-                     if extract_type == "jsonpath":
-                         jsonpath_expr = parse(expr)
-                         matches = jsonpath_expr.find(source_data)
-                         if matches:
-                             # Return the value of the first match
-                             # If we need multiple matches, output logic needs adjustment
-                             # For now assume single value extraction for simplicity
-                             output = {list(step.outputs.values())[0]: matches[0].value}
-                         else:
-                             output = {}
-                     elif extract_type == "key":
-                         # Simple key lookup for dicts
-                         if isinstance(source_data, dict):
-                             # Case-insensitive header lookup if it seems to be headers
-                             if "ratelimit" in str(expr).lower():
-                                 val = next((v for k, v in source_data.items() if k.lower() == expr.lower()), None)
-                                 output = {list(step.outputs.values())[0]: val}
-                             else:
-                                 output = {list(step.outputs.values())[0]: source_data.get(expr)}
-                         else:
-                             output = {}
-
+                    output = await execute_extract_step(step, source, args, context, outputs, self)
                 elif step.use == StepType.SCRIPT:
-                    # Execute provided Python code
-                    script_code = args.get("code")
-                    if not script_code:
-                        raise ValueError(f"Step {step.id} has use=script but no 'code' argument provided.")
-                    
-                    # Provide context as locals
-                    local_env = {**context, **outputs}
-                    
-                    # Redirect stdout to capture if needed, though usually we expect output via variables
-                    # We'll expect the script to either modify local_env or set variables we extract
-                    try:
-                        def on_script_stream(stream: str, chunk: str):
-                            self._append_runtime_logs(execution_logs, step.id, stream, chunk)
-                            self._update_state(
-                                source.id,
-                                SourceStatus.ACTIVE,
-                                self._build_runtime_message(step.id, execution_logs),
-                            )
-
-                        stdout_relay = _RuntimeStreamRelay(
-                            lambda text: on_script_stream("stdout", text),
-                        )
-                        stderr_relay = _RuntimeStreamRelay(
-                            lambda text: on_script_stream("stderr", text),
-                        )
-
-                        # Use compile and exec to run the script
-                        with redirect_stdout(stdout_relay), redirect_stderr(stderr_relay):
-                            compiled = compile(script_code, f"<step_{step.id}>", "exec")
-                            exec(compiled, {}, local_env)
-                        
-                        # Any defined outputs in step config will be extracted from local_env
-                        output = {}
-                        if step.outputs:
-                            for key, var_name in step.outputs.items():
-                                if key in local_env:
-                                    output[key] = local_env[key]
-                        if getattr(step, 'context', None):
-                            for key, var_name in step.context.items():
-                                if key in local_env:
-                                    output[key] = local_env[key]
-                    except Exception as script_e:
-                        logger.error(f"Error executing script in step {step.id}:\n{script_code}")
-                        raise script_e
-
+                    output = await execute_script_step(step, source, args, context, outputs, self)
                 elif step.use == StepType.WEBVIEW:
-                    secret_key = step.secrets.get("webview_data", "webview_data") if step.secrets else "webview_data"
-                    webview_data = self._secrets.get_secret(source.id, secret_key)
-                    
-                    if not webview_data:
-                        url = args.get("url")
-                        script = args.get("script")
-                        intercept_api = args.get("intercept_api")
-                        
-                        if not url:
-                            raise ValueError(f"Step {step.id} has use=webview but no 'url' argument provided.")
-                        
-                        raise RequiredSecretMissing(
-                            source_id=source.id,
-                            interaction_type=InteractionType.WEBVIEW_SCRAPE,
-                            fields=[],
-                            message=f"System background scraping required for {source.id}",
-                            data={
-                                "url": url,
-                                "script": script,
-                                "intercept_api": intercept_api,
-                                "secret_key": secret_key
-                            }
-                        )
-                    
-                    output = {"webview_data": webview_data}
-                    if isinstance(webview_data, dict):
-                        for k, v in webview_data.items():
-                            output[k] = v
-
-                    # Clear webview data from secrets immediately so that
-                    # the next fetch (e.g. manual refresh) will prompt a new webview scrape
-                    self._secrets.delete_secret(source.id, secret_key)
-
+                    output = await execute_browser_step(step, source, args, context, outputs, self)
                 # Process outputs
                 if output and step.outputs:
                     for key, var_name in step.outputs.items():
@@ -467,6 +252,18 @@ class Executor:
                 if step.secrets and output:
                     for key, secret_name in step.secrets.items():
                         if key in output:
+                            if (
+                                step.use == StepType.OAUTH
+                                and key == "access_token"
+                                and secret_name == "access_token"
+                            ):
+                                existing_token_secret = self._secrets.get_secret(source.id, "access_token")
+                                if isinstance(existing_token_secret, dict):
+                                    logger.debug(
+                                        "[%s] Skip overwriting structured OAuth token payload with scalar value",
+                                        source.id,
+                                    )
+                                    continue
                             self._secrets.set_secret(source.id, secret_name, output[key])
                             logger.info(f"[{source.id}] Stored secret '{secret_name}' from step {step.id}")
 
@@ -495,6 +292,41 @@ class Executor:
         # Return final data mapping
         return final_data
 
+    def _wrap_for_format(self, value: Any) -> Any:
+        if isinstance(value, dict):
+            return _DotAccessDict({k: self._wrap_for_format(v) for k, v in value.items()})
+        if isinstance(value, list):
+            return [self._wrap_for_format(v) for v in value]
+        return value
+
+    def _resolve_dotted_value(self, scope: Dict[str, Any], key: str) -> Any:
+        if key in scope:
+            return scope[key]
+
+        if "." not in key:
+            return _MISSING
+
+        current: Any = scope
+        for segment in key.split("."):
+            if isinstance(current, dict) and segment in current:
+                current = current[segment]
+                continue
+            return _MISSING
+        return current
+
+    def _resolve_reference(
+        self,
+        key: str,
+        outputs: Dict[str, Any],
+        context: Dict[str, Any],
+        secrets_data: Dict[str, Any],
+    ) -> Any:
+        for scope in (outputs, context, secrets_data):
+            value = self._resolve_dotted_value(scope, key)
+            if value is not _MISSING:
+                return value
+        return _MISSING
+
     def _resolve_args(self, args: Dict[str, Any], outputs: Dict[str, Any], context: Dict[str, Any], source_id: str) -> Dict[str, Any]:
         """Recursive string substitution with priority: outputs > context > secrets.
 
@@ -504,33 +336,39 @@ class Executor:
         """
         if isinstance(args, str):
             try:
+                secrets_data = self._secrets.get_secrets(source_id) or {}
+
                 # Optimized: if args is exactly "{key}", return the object directly
                 # This preserves types (dict, list, etc) instead of stringifying
-                if args.startswith("{") and args.endswith("}") and args.count("{") == 1:
-                     key = args[1:-1]
-                     # Priority 1: outputs
-                     if key in outputs:
-                         return outputs[key]
-                     # Priority 2: context
-                     if key in context:
-                         return context[key]
-                     # Priority 3: secrets
-                     secret_val = self._secrets.get_secret(source_id, key)
-                     if secret_val is not None:
-                         return secret_val
+                exact_match = _PLACEHOLDER_PATTERN.fullmatch(args)
+                if exact_match:
+                     key = exact_match.group(1).strip()
+                     resolved = self._resolve_reference(key, outputs, context, secrets_data)
+                     if resolved is not _MISSING:
+                         return resolved
                      return args
+
+                def replace(match: re.Match[str]) -> str:
+                    key = match.group(1).strip()
+                    resolved = self._resolve_reference(key, outputs, context, secrets_data)
+                    if resolved is _MISSING:
+                        return match.group(0)
+                    return str(resolved)
+
+                replaced = _PLACEHOLDER_PATTERN.sub(replace, args)
+                if replaced != args:
+                    return replaced
 
                 # Fallback to format with combined scope
                 # Build combined dict with priority: outputs > context > secrets
                 combined = {}
                 # Add secrets to combined (lowest priority)
-                secrets_data = self._secrets.get_secrets(source_id)
                 if secrets_data:
-                    combined.update(secrets_data)
+                    combined.update({k: self._wrap_for_format(v) for k, v in secrets_data.items()})
                 # Add context (medium priority - will override secrets)
-                combined.update(context)
+                combined.update({k: self._wrap_for_format(v) for k, v in context.items()})
                 # Add outputs (highest priority - will override context)
-                combined.update(outputs)
+                combined.update({k: self._wrap_for_format(v) for k, v in outputs.items()})
 
                 return args.format(**combined)
             except:
@@ -540,51 +378,6 @@ class Executor:
         elif isinstance(args, list):
             return [self._resolve_args(v, outputs, context, source_id) for v in args]
         return args
-
-    async def _check_auth_requirements(self, source: SourceConfig):
-        """检查鉴权所需凭证是否存在。"""
-        if not source.auth:
-            return
-
-        # API Key Check
-        if source.auth.type == AuthType.API_KEY:
-            key = self._secrets.get_secret(source.id, "api_key")
-
-            if not key:
-                raise RequiredSecretMissing(
-                    source_id=source.id,
-                    interaction_type=InteractionType.INPUT_TEXT,
-                    fields=[
-                        InteractionField(key="api_key", label="API Key", type="password")
-                    ],
-                    message=f"Missing API Key for {source.name}"
-                )
-
-        # OAuth Check
-        elif source.auth.type == AuthType.OAUTH:
-            # OAuth token always stored under source.id
-            token_data = self._secrets.get_secrets(source.id)
-            # access_token may be a dict with token in "access_token" field, or direct token string
-            token = token_data.get("access_token")
-            if isinstance(token, dict):
-                token = token.get("access_token") or token.get("key")
-
-            if not token:
-                raise RequiredSecretMissing(
-                    source_id=source.id,
-                    interaction_type=InteractionType.OAUTH_START,
-                    fields=[], # OAuth start usually has no fields, just a button
-                    message=f"Authorization required for {source.name}",
-                    data={"auth_url": f"/api/oauth/authorize/{source.id}"}
-                )
-
-    async def _check_step_auth_requirements(self, source: SourceConfig, step: StepConfig):
-        """在执行高风险步骤前先做一次鉴权兜底，避免脚本/cURL进入不可恢复失败。"""
-        if step.use not in {StepType.CURL, StepType.SCRIPT}:
-            return
-        if not source.auth or source.auth.type == AuthType.NONE:
-            return
-        await self._check_auth_requirements(source)
 
     def _append_runtime_logs(
         self,
@@ -697,92 +490,238 @@ class Executor:
             return SourceStatus.ERROR
         return SourceStatus.SUSPENDED
 
-    def _build_invalid_credentials_interaction(self, source: SourceConfig) -> InteractionRequest:
-        if source.flow:
-            for step in source.flow:
-                if step.use == StepType.OAUTH:
-                    return InteractionRequest(
-                        type=InteractionType.OAUTH_START,
-                        step_id=step.id,
-                        source_id=source.id,
-                        title="Authorization Invalid",
-                        message="Current OAuth authorization is invalid. Please reconnect.",
-                        fields=[],
-                        data={"oauth_args": step.args or {}, "doc_url": (step.args or {}).get("doc_url")},
-                    )
-                if step.use == StepType.API_KEY:
-                    api_key = step.secrets.get("api_key", "api_key") if step.secrets else "api_key"
-                    return InteractionRequest(
-                        type=InteractionType.INPUT_TEXT,
-                        step_id=step.id,
-                        source_id=source.id,
-                        title="Credentials Invalid",
-                        message="The API key appears invalid. Please update it and retry.",
-                        fields=[
-                            InteractionField(
-                                key=api_key,
-                                label=(step.args or {}).get("label", "API Key"),
-                                type="password",
-                                description=(step.args or {}).get("description", "Enter a valid API key"),
-                            )
-                        ],
-                    )
-                if step.use == StepType.CURL:
-                    curl_key = step.secrets.get("curl_command", "curl_command") if step.secrets else "curl_command"
-                    return InteractionRequest(
-                        type=InteractionType.INPUT_TEXT,
-                        step_id=step.id,
-                        source_id=source.id,
-                        title="Credentials Invalid",
-                        message="Session credentials expired or invalid. Please paste a fresh cURL command.",
-                        fields=[
-                            InteractionField(
-                                key=curl_key,
-                                label=(step.args or {}).get("label", "cURL Request"),
-                                type="text",
-                                description=(step.args or {}).get(
-                                    "description",
-                                    "Paste a new authenticated cURL command",
-                                ),
-                            )
-                        ],
-                        warning_message=(step.args or {}).get("warning_message"),
-                    )
-                if step.use == StepType.WEBVIEW:
-                    return InteractionRequest(
-                        type=InteractionType.WEBVIEW_SCRAPE,
-                        step_id=step.id,
-                        source_id=source.id,
-                        title="Web Scraper Blocked",
-                        message="Web scraper was blocked. Please resume in foreground mode.",
-                        fields=[],
-                        data={
-                            "url": (step.args or {}).get("url"),
-                            "script": (step.args or {}).get("script"),
-                            "intercept_api": (step.args or {}).get("intercept_api"),
-                            "secret_key": step.secrets.get("webview_data", "webview_data") if step.secrets else "webview_data",
-                            "force_foreground": True,
-                            "manual_only": True,
-                        },
-                    )
+    def _resolve_recovery_step(
+        self,
+        source: SourceConfig,
+        failed_step_id: str | None,
+    ) -> StepConfig | None:
+        if not source.flow:
+            return None
 
-        if source.auth and source.auth.type == AuthType.OAUTH:
-            return InteractionRequest(
-                type=InteractionType.OAUTH_START,
-                step_id="auth_check",
-                source_id=source.id,
-                title="Authorization Invalid",
-                message="Current OAuth authorization is invalid. Please reconnect.",
-                fields=[],
-            )
+        recovery_types = {
+            StepType.OAUTH,
+            StepType.API_KEY,
+            StepType.CURL,
+            StepType.WEBVIEW,
+        }
+        flow = source.flow
+        auth_indices = [idx for idx, step in enumerate(flow) if step.use in recovery_types]
+        if not auth_indices:
+            return None
+
+        failed_index = next(
+            (idx for idx, step in enumerate(flow) if step.id == failed_step_id),
+            None,
+        )
+        if failed_index is None:
+            failed_index = len(flow) - 1
+
+        for idx in range(failed_index, -1, -1):
+            if flow[idx].use in recovery_types:
+                return flow[idx]
+
+        return flow[auth_indices[0]]
+
+    def _build_oauth_auth_config(self, step: StepConfig) -> AuthConfig:
+        args = step.args or {}
+        scope_arg = args.get("scope") or args.get("scopes")
+        scopes: list[str] = []
+        if scope_arg:
+            if isinstance(scope_arg, list):
+                scopes = scope_arg
+            else:
+                scopes = [scope_arg]
+
+        flow_arg = (
+            args.get("oauth_flow")
+            or args.get("flow_type")
+            or args.get("grant_type")
+            or "code"
+        ).strip().lower()
+        oauth_flow = OAuthFlowType.CODE
+        if flow_arg in {"device", "device_code", "urn:ietf:params:oauth:grant-type:device_code"}:
+            oauth_flow = OAuthFlowType.DEVICE
+        elif flow_arg in {"client_credentials", "client-credentials"}:
+            oauth_flow = OAuthFlowType.CLIENT_CREDENTIALS
+
+        auth_method_str = args.get("token_endpoint_auth_method")
+        token_endpoint_auth_method = TokenEndpointAuthMethod.NONE
+        if auth_method_str:
+            try:
+                token_endpoint_auth_method = TokenEndpointAuthMethod(auth_method_str)
+            except ValueError:
+                logger.warning("[%s] Invalid token_endpoint_auth_method: %s", step.id, auth_method_str)
+
+        return AuthConfig(
+            type=AuthType.OAUTH,
+            auth_url=args.get("auth_url"),
+            token_url=args.get("token_url"),
+            client_id=args.get("client_id"),
+            client_secret=args.get("client_secret"),
+            redirect_uri=args.get("redirect_uri") or "http://localhost:5173/oauth/callback",
+            scopes=scopes,
+            token_request_type=args.get("token_request_type") or "form",
+            token_field=args.get("token_field") or "access_token",
+            token_type_field=args.get("token_type_field") or "token_type",
+            expires_in_field=args.get("expires_in_field") or "expires_in",
+            refresh_token_field=args.get("refresh_token_field") or "refresh_token",
+            scope_field=args.get("scope_field") or "scope",
+            redirect_param=args.get("redirect_param") or "redirect_uri",
+            authorization_code_field=args.get("authorization_code_field") or "code",
+            authorization_state_field=args.get("authorization_state_field") or "state",
+            implicit_access_token_field=args.get("implicit_access_token_field") or "access_token",
+            implicit_token_type_field=args.get("implicit_token_type_field") or "token_type",
+            implicit_expires_in_field=args.get("implicit_expires_in_field") or "expires_in",
+            implicit_scope_field=args.get("implicit_scope_field") or "scope",
+            implicit_state_field=args.get("implicit_state_field") or "state",
+            supports_pkce=args.get("supports_pkce", True),
+            code_challenge_method=args.get("code_challenge_method", "S256"),
+            response_type=args.get("response_type", "code"),
+            oauth_flow=oauth_flow,
+            token_endpoint_auth_method=token_endpoint_auth_method,
+            device_authorization_url=args.get("device_authorization_url") or args.get("device_authorization_endpoint"),
+            device_code_field=args.get("device_code_field") or "device_code",
+            device_user_code_field=args.get("device_user_code_field") or "user_code",
+            device_verification_uri_field=args.get("device_verification_uri_field") or "verification_uri",
+            device_verification_uri_complete_field=args.get("device_verification_uri_complete_field") or "verification_uri_complete",
+            device_interval_field=args.get("device_interval_field") or "interval",
+            device_expires_in_field=args.get("device_expires_in_field") or "expires_in",
+            oauth_error_field=args.get("oauth_error_field") or "error",
+            oauth_error_description_field=args.get("oauth_error_description_field") or "error_description",
+            device_poll_interval=args.get("device_poll_interval", 5),
+            device_poll_timeout=args.get("device_poll_timeout", 900),
+            doc_url=args.get("doc_url"),
+        )
+
+    async def _try_refresh_oauth_recovery(
+        self,
+        source: SourceConfig,
+        error: "InvalidCredentialsError",
+    ) -> bool:
+        recovery_step = self._resolve_recovery_step(source, error.step_id)
+        if recovery_step is None or recovery_step.use != StepType.OAUTH:
+            return False
+
+        auth_config = self._build_oauth_auth_config(recovery_step)
+        handler = OAuthAuth(auth_config, source.id, self._secrets)
+        try:
+            refreshed = await handler.try_refresh_token(force=True)
+        except Exception as exc:
+            logger.warning(f"[{source.id}] OAuth refresh attempt failed: {exc}")
+            return False
+
+        return refreshed
+
+    def _build_invalid_credentials_interaction(
+        self,
+        source: SourceConfig,
+        error: "InvalidCredentialsError",
+        recovery_step: StepConfig | None,
+    ) -> InteractionRequest:
+        if recovery_step:
+            step = recovery_step
+            if step.use == StepType.OAUTH:
+                oauth_args = step.args or {}
+                flow_type = (
+                    oauth_args.get("oauth_flow")
+                    or oauth_args.get("flow_type")
+                    or oauth_args.get("grant_type")
+                    or "code"
+                ).strip().lower()
+                interaction_type = (
+                    InteractionType.OAUTH_DEVICE_FLOW
+                    if flow_type in {"device", "device_code"}
+                    else InteractionType.OAUTH_START
+                )
+                return InteractionRequest(
+                    type=interaction_type,
+                    step_id=step.id,
+                    source_id=source.id,
+                    title="Authorization Invalid",
+                    message="Current OAuth authorization is invalid. Please reconnect.",
+                    fields=[],
+                    data={
+                        "oauth_args": oauth_args,
+                        "doc_url": oauth_args.get("doc_url"),
+                        "oauth_flow": flow_type,
+                        "failed_step_id": error.step_id,
+                        "recovery_step_id": step.id,
+                    },
+                )
+            if step.use == StepType.API_KEY:
+                api_key = step.secrets.get("api_key", "api_key") if step.secrets else "api_key"
+                return InteractionRequest(
+                    type=InteractionType.INPUT_TEXT,
+                    step_id=step.id,
+                    source_id=source.id,
+                    title="Credentials Invalid",
+                    message="The API key appears invalid. Please update it and retry.",
+                    fields=[
+                        InteractionField(
+                            key=api_key,
+                            label=(step.args or {}).get("label", "API Key"),
+                            type="password",
+                            description=(step.args or {}).get("description", "Enter a valid API key"),
+                        )
+                    ],
+                    data={
+                        "failed_step_id": error.step_id,
+                        "recovery_step_id": step.id,
+                    },
+                )
+            if step.use == StepType.CURL:
+                curl_key = step.secrets.get("curl_command", "curl_command") if step.secrets else "curl_command"
+                return InteractionRequest(
+                    type=InteractionType.INPUT_TEXT,
+                    step_id=step.id,
+                    source_id=source.id,
+                    title="Credentials Invalid",
+                    message="Session credentials expired or invalid. Please paste a fresh cURL command.",
+                    fields=[
+                        InteractionField(
+                            key=curl_key,
+                            label=(step.args or {}).get("label", "cURL Request"),
+                            type="text",
+                            description=(step.args or {}).get(
+                                "description",
+                                "Paste a new authenticated cURL command",
+                            ),
+                        )
+                    ],
+                    warning_message=(step.args or {}).get("warning_message"),
+                    data={
+                        "failed_step_id": error.step_id,
+                        "recovery_step_id": step.id,
+                    },
+                )
+            if step.use == StepType.WEBVIEW:
+                return InteractionRequest(
+                    type=InteractionType.WEBVIEW_SCRAPE,
+                    step_id=step.id,
+                    source_id=source.id,
+                    title="Web Scraper Blocked",
+                    message="Web scraper was blocked. Please resume in foreground mode.",
+                    fields=[],
+                    data={
+                        "url": (step.args or {}).get("url"),
+                        "script": (step.args or {}).get("script"),
+                        "intercept_api": (step.args or {}).get("intercept_api"),
+                        "secret_key": step.secrets.get("webview_data", "webview_data") if step.secrets else "webview_data",
+                        "force_foreground": True,
+                        "manual_only": True,
+                        "failed_step_id": error.step_id,
+                        "recovery_step_id": step.id,
+                    },
+                )
 
         return InteractionRequest(
             type=InteractionType.RETRY,
-            step_id="auth_check",
+            step_id="flow_retry",
             source_id=source.id,
             title="Retry Required",
             message="Credentials are invalid. Please update credentials and retry.",
             fields=[],
+            data={"failed_step_id": error.step_id},
         )
 
     def _exception_to_interaction(self, source: SourceConfig, error: Exception) -> InteractionRequest | None:
@@ -801,7 +740,12 @@ class Executor:
             )
 
         if isinstance(error, InvalidCredentialsError):
-            return self._build_invalid_credentials_interaction(source)
+            recovery_step = self._resolve_recovery_step(source, error.step_id)
+            return self._build_invalid_credentials_interaction(
+                source,
+                error,
+                recovery_step,
+            )
 
         if isinstance(error, WebScraperBlockedError):
             webview_step = None

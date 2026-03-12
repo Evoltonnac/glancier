@@ -4,7 +4,7 @@
 设计：
 - 每个加密值使用 `ENC:` 前缀标识，兼容明文值（自适应读取）
 - 使用 AES-256-GCM 算法（authenticated encryption）
-- 主密钥（Master Key）存储在本地 settings.json 中（不纳入多端同步）
+- 主密钥优先存储在系统 Keychain（keyring），本地 settings.json 仅作兼容回退
 - 多端同步时，主密钥通过用户手动"导出同步通行码"共享
 """
 
@@ -18,17 +18,74 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 logger = logging.getLogger(__name__)
 
 ENC_PREFIX = "ENC:"
+MASTER_KEY_BYTES = 32
+KEYCHAIN_SERVICE = os.getenv("GLANCIER_KEYCHAIN_SERVICE", "com.glancier.app")
+KEYCHAIN_ACCOUNT = os.getenv("GLANCIER_KEYCHAIN_ACCOUNT", "master-key")
+
+try:
+    import keyring
+except Exception:  # pragma: no cover - import failure depends on runtime env
+    keyring = None
 
 
 def generate_master_key() -> str:
     """生成一个随机 256-bit 主密钥，返回 base64 编码字符串。"""
-    raw_key = os.urandom(32)  # 256 bits
+    raw_key = os.urandom(MASTER_KEY_BYTES)  # 256 bits
     return base64.b64encode(raw_key).decode("utf-8")
 
 
 def _load_raw_key(master_key_b64: str) -> bytes:
-    """将 base64 编码的主密钥还原为 bytes。"""
-    return base64.b64decode(master_key_b64)
+    """将 base64 编码的主密钥还原为 bytes，并做长度校验。"""
+    try:
+        raw_key = base64.b64decode(master_key_b64, validate=True)
+    except Exception as e:
+        raise ValueError("主密钥格式非法，必须是 base64 编码。") from e
+    if len(raw_key) != MASTER_KEY_BYTES:
+        raise ValueError("主密钥长度非法，必须是 256-bit。")
+    return raw_key
+
+
+def get_keychain_master_key(
+    service: str = KEYCHAIN_SERVICE,
+    account: str = KEYCHAIN_ACCOUNT,
+) -> str | None:
+    """从系统 keychain 读取主密钥。读取失败或不可用时返回 None。"""
+    if keyring is None:
+        return None
+    try:
+        value = keyring.get_password(service, account)
+    except Exception as e:
+        logger.warning(f"读取 keychain 主密钥失败: {e}")
+        return None
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        _load_raw_key(value)
+    except Exception:
+        logger.warning("Keychain 中主密钥格式非法，已忽略。")
+        return None
+    return value
+
+
+def set_keychain_master_key(
+    master_key_b64: str,
+    service: str = KEYCHAIN_SERVICE,
+    account: str = KEYCHAIN_ACCOUNT,
+) -> bool:
+    """写入主密钥到系统 keychain。成功返回 True，失败返回 False。"""
+    if keyring is None:
+        return False
+    try:
+        normalized_key = master_key_b64.strip()
+        _load_raw_key(normalized_key)
+        keyring.set_password(service, account, normalized_key)
+        return True
+    except Exception as e:
+        logger.warning(f"写入 keychain 主密钥失败: {e}")
+        return False
 
 
 def encrypt_value(plaintext: str, master_key_b64: str) -> str:

@@ -11,11 +11,19 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from core.models import StoredSource, StoredView, ViewItem
 from core.integration_manager import IntegrationManager
-from core.source_state import SourceStatus, InteractionRequest
+from core.source_state import SourceStatus, InteractionType
 import yaml
 
 class FileContentRequest(BaseModel):
     content: str
+
+
+class IntegrationPresetPayload(BaseModel):
+    id: str
+    label: str
+    description: str
+    filename_hint: str
+    content_template: str
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +54,14 @@ def init_api(executor, data_controller, config, auth_manager, secrets_controller
     _settings_manager = settings_manager
 
 
+def _apply_runtime_log_level(debug_enabled: bool) -> None:
+    level = logging.DEBUG if debug_enabled else logging.INFO
+    logging.getLogger().setLevel(level)
+    logging.getLogger("uvicorn").setLevel(level)
+    logging.getLogger("uvicorn.error").setLevel(level)
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+
+
 # ── 数据源列表 ────────────────────────────────────────
 
 @router.get("/sources")
@@ -72,10 +88,10 @@ async def list_sources() -> list[dict]:
             "id": source.id,
             "name": source.name,
             "integration_id": source.integration_id,
-            "description": source.config.get("description", ""),
-            "icon": source.config.get("icon"),
+            "description": "", # Integration doesn't have description at top level in StoredSource config usually
+            "icon": None,
             "enabled": True,  # StoredSource 默认启用
-            "auth_type": source.config.get("auth_type", "none"),
+            "auth_type": "none", # Will be updated below
             "has_data": has_data,
             "updated_at": latest_data.get("updated_at") if latest_data else None,
             "error": error,
@@ -84,6 +100,18 @@ async def list_sources() -> list[dict]:
             "message": state.message if state else None,
             "interaction": state.interaction.model_dump() if state and state.interaction else None,
         }
+
+        # Try to determine auth_type from flow
+        integration = _config.get_integration(source.integration_id)
+        if integration and integration.flow:
+            for step in integration.flow:
+                if step.use.value == "oauth":
+                    summary["auth_type"] = "oauth"
+                    break
+                elif step.use.value == "api_key":
+                    summary["auth_type"] = "api_key"
+                    break
+
         result.append(summary)
 
     return result
@@ -124,13 +152,13 @@ async def get_history(source_id: str, limit: int = 100) -> list[dict]:
 
 # ── 手动刷新 ──────────────────────────────────────────
 
-def _resolve_stored_source(stored: "StoredSource"):
+def _resolve_stored_source_with_config(stored: "StoredSource", config):
     """将 StoredSource 解析为可执行的 SourceConfig。"""
     import copy
-    from core.config_loader import SourceConfig, ScheduleConfig
+    from core.config_loader import SourceConfig
 
     # 查找对应的集成配置
-    integration = _config.get_integration(stored.integration_id) if stored.integration_id else None
+    integration = config.get_integration(stored.integration_id) if stored.integration_id else None
 
     if not integration:
         logger.warning(f"[{stored.id}] 集成 '{stored.integration_id}' 未找到")
@@ -169,19 +197,151 @@ def _resolve_stored_source(stored: "StoredSource"):
     return SourceConfig.model_validate(base)
 
 
+def _resolve_stored_source(stored: "StoredSource"):
+    return _resolve_stored_source_with_config(stored, _config)
+
+
+def _resume_source_after_oauth(source_id: str, background_tasks: BackgroundTasks, message: str) -> None:
+    """
+    OAuth 成功后自动恢复 source 主流程执行。
+    仅当 source 当前处于 OAuth 交互挂起状态时触发，避免重复拉取。
+    """
+    if _executor is None:
+        return
+
+    if not hasattr(_executor, "get_source_state"):
+        return
+
+    state = _executor.get_source_state(source_id)
+    if not state or state.status != SourceStatus.SUSPENDED:
+        return
+
+    interaction_type = state.interaction.type if state.interaction else None
+    if interaction_type not in {InteractionType.OAUTH_START, InteractionType.OAUTH_DEVICE_FLOW}:
+        return
+
+    stored = _get_stored_source(source_id)
+    if stored is None:
+        logger.warning(f"[{source_id}] OAuth authorized but stored source missing; skip auto resume")
+        return
+
+    source = _resolve_stored_source(stored)
+    if source is None:
+        logger.warning(f"[{source_id}] OAuth authorized but source resolve failed; skip auto resume")
+        return
+
+    if hasattr(_executor, "_update_state"):
+        _executor._update_state(source_id, SourceStatus.REFRESHING, message)
+    if hasattr(_executor, "fetch_source"):
+        background_tasks.add_task(_executor.fetch_source, source)
+
+
+def create_stored_source_record(
+    source: StoredSource,
+    resource_manager,
+    *,
+    executor=None,
+    config=None,
+    background_tasks: BackgroundTasks | None = None,
+) -> StoredSource:
+    saved = resource_manager.save_source(source)
+    if executor is not None and config is not None and background_tasks is not None:
+        resolved = _resolve_stored_source_with_config(saved, config)
+        if resolved:
+            background_tasks.add_task(executor.fetch_source, resolved)
+    return saved
+
+
+def build_template_lookup_from_config(config) -> dict[str, dict[str, dict[str, Any]]]:
+    template_lookup: dict[str, dict[str, dict[str, Any]]] = {}
+    integrations = getattr(config, "integrations", []) if config is not None else []
+    for integration in integrations:
+        templates_by_id: dict[str, dict[str, Any]] = {}
+        for template in integration.templates:
+            template_payload = template.model_dump(exclude_none=True)
+            template_id = str(template_payload.get("id", "")).strip()
+            if not template_id:
+                continue
+            templates_by_id[template_id] = template_payload
+        if templates_by_id:
+            template_lookup[integration.id] = templates_by_id
+    return template_lookup
+
+
+def inject_view_item_props_from_templates(
+    view: StoredView,
+    *,
+    source_by_id: dict[str, StoredSource],
+    template_lookup_by_integration: dict[str, dict[str, dict[str, Any]]],
+) -> StoredView:
+    hydrated_items: list[ViewItem] = []
+    for item in view.items:
+        if item.props:
+            hydrated_items.append(item)
+            continue
+
+        source = source_by_id.get(item.source_id)
+        if source is None:
+            hydrated_items.append(item)
+            continue
+
+        integration_templates = template_lookup_by_integration.get(source.integration_id, {})
+        template_payload = integration_templates.get(item.template_id)
+        if template_payload is None:
+            hydrated_items.append(item)
+            continue
+
+        hydrated_items.append(item.model_copy(update={"props": dict(template_payload)}))
+
+    return view.model_copy(update={"items": hydrated_items})
+
+
+def create_stored_view_record(
+    view: StoredView,
+    resource_manager,
+    *,
+    config=None,
+    source_by_id: dict[str, StoredSource] | None = None,
+    template_lookup_by_integration: dict[str, dict[str, dict[str, Any]]] | None = None,
+) -> StoredView:
+    prepared_view = view
+    if source_by_id is None:
+        source_by_id = {source.id: source for source in resource_manager.load_sources()}
+
+    if template_lookup_by_integration is None and config is not None:
+        template_lookup_by_integration = build_template_lookup_from_config(config)
+
+    if source_by_id and template_lookup_by_integration:
+        prepared_view = inject_view_item_props_from_templates(
+            view,
+            source_by_id=source_by_id,
+            template_lookup_by_integration=template_lookup_by_integration,
+        )
+
+    return resource_manager.save_view(prepared_view)
+
+
 @router.post("/refresh/{source_id}")
 async def refresh_source(source_id: str, background_tasks: BackgroundTasks) -> dict:
     """手动触发单个数据源刷新。"""
     # 从 JSON 存储中获取
     stored_sources = _resource_manager.load_sources()
+    matched_stored = None
     source = None
     for stored in stored_sources:
         if stored.id == source_id:
+            matched_stored = stored
             source = _resolve_stored_source(stored)
             break
 
-    if source is None:
+    if matched_stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
+    if source is None:
+        integration_id = matched_stored.integration_id if hasattr(matched_stored, "integration_id") else ""
+        raise HTTPException(
+            409,
+            f"数据源 '{source_id}' 的集成配置 '{integration_id}' 未找到或无效，无法刷新",
+        )
 
     # 同步更新状态为正在刷新，防止前端立即请求 loadData 时读到旧状态
     _executor._update_state(source_id, SourceStatus.REFRESHING, "Fetching latest data...")
@@ -193,6 +353,7 @@ async def refresh_source(source_id: str, background_tasks: BackgroundTasks) -> d
 async def refresh_all(background_tasks: BackgroundTasks) -> dict:
     """手动触发所有数据源刷新。"""
     source_ids = []
+    skipped_sources = []
 
     # 刷新 JSON 存储的数据源
     stored_sources = _resource_manager.load_sources()
@@ -203,10 +364,18 @@ async def refresh_all(background_tasks: BackgroundTasks) -> dict:
             _executor._update_state(stored.id, SourceStatus.REFRESHING, "Refreshing all sources...")
             background_tasks.add_task(_executor.fetch_source, resolved)
             source_ids.append(stored.id)
+        else:
+            _executor._update_state(
+                stored.id,
+                SourceStatus.ERROR,
+                f"Integration '{stored.integration_id}' is missing or invalid",
+            )
+            skipped_sources.append(stored.id)
 
     return {
         "message": f"已触发刷新 {len(source_ids)} 个数据源",
         "source_ids": source_ids,
+        "skipped_source_ids": skipped_sources,
     }
 
 
@@ -221,10 +390,14 @@ async def get_config() -> dict[str, Any]:
     for s in stored_sources:
         integration = _config.get_integration(s.integration_id) if s.integration_id else None
         auth_type = "none"
-        if integration and integration.auth:
-            auth_type = integration.auth.type.value
-        elif s.config.get("auth"):
-            auth_type = s.config.get("auth", {}).get("type", "none")
+        if integration and integration.flow:
+            for step in integration.flow:
+                if step.use.value == "oauth":
+                    auth_type = "oauth"
+                    break
+                elif step.use.value == "api_key":
+                    auth_type = "api_key"
+                    break
         sources.append({
             "id": s.id,
             "name": s.name,
@@ -245,7 +418,7 @@ async def get_config() -> dict[str, Any]:
 
 @router.get("/oauth/authorize/{source_id}")
 async def oauth_authorize(source_id: str, redirect_uri: Optional[str] = None) -> dict:
-    """重定向到 OAuth 授权页面。"""
+    """Start OAuth authorization. Supports code/device/client-credentials flows."""
     handler = _auth_manager.get_oauth_handler(source_id)
     if handler is None:
         stored = _get_stored_source(source_id)
@@ -257,8 +430,86 @@ async def oauth_authorize(source_id: str, redirect_uri: Optional[str] = None) ->
 
     if handler is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不是 OAuth 类型")
-    url = handler.get_authorize_url(redirect_uri=redirect_uri)
-    return {"authorize_url": url, "message": "请在浏览器中打开此 URL 进行授权"}
+    try:
+        logger.info(f"[{source_id}] Starting OAuth authorization with redirect_uri: {redirect_uri}")
+        result = await handler.start_authorization(redirect_uri=redirect_uri)
+        logger.info(f"[{source_id}] OAuth authorization result: {result}")
+    except ValueError as exc:
+        logger.error(f"[{source_id}] OAuth authorization ValueError: {exc}")
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"[{source_id}] OAuth authorize start failed: {exc}")
+        raise HTTPException(400, f"OAuth start failed: {exc}") from exc
+
+    if result.get("flow") == "code":
+        result.setdefault("message", "请在浏览器中打开授权链接")
+    elif result.get("flow") == "device":
+        result.setdefault("message", "请在设备授权页面输入验证码")
+    elif result.get("flow") == "client_credentials":
+        result.setdefault("message", "Client Credentials token acquired")
+
+    return result
+
+
+@router.get("/oauth/device/poll/{source_id}")
+async def oauth_device_poll(source_id: str, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    """Poll one round of device flow token exchange."""
+    handler = _auth_manager.get_oauth_handler(source_id)
+    if handler is None:
+        raise HTTPException(404, f"数据源 '{source_id}' 不是 OAuth 类型")
+
+    try:
+        result = await handler.poll_device_token()
+        if result.get("status") == "authorized":
+            _resume_source_after_oauth(
+                source_id,
+                background_tasks,
+                "OAuth 授权成功，正在继续执行数据拉取...",
+            )
+        return result
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"[{source_id}] Device flow poll failed: {exc}")
+        raise HTTPException(400, f"Device flow poll failed: {exc}") from exc
+
+
+@router.get("/oauth/device/status/{source_id}")
+async def oauth_device_status(source_id: str, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    """Get current device flow status without implicit polling."""
+    handler = _auth_manager.get_oauth_handler(source_id)
+    if handler is None:
+        stored = _get_stored_source(source_id)
+        if stored:
+            source = _resolve_stored_source(stored)
+            if source:
+                _auth_manager.register_source(source)
+                handler = _auth_manager.get_oauth_handler(source_id)
+
+    if handler is None:
+        raise HTTPException(404, f"数据源 '{source_id}' 不是 OAuth 类型")
+
+    try:
+        # Check if handler has get_device_flow_status method
+        if hasattr(handler, "get_device_flow_status"):
+            result = await handler.get_device_flow_status()
+        else:
+            # Fallback: try polling
+            result = await handler.poll_device_token()
+
+        if result.get("status") == "authorized":
+            _resume_source_after_oauth(
+                source_id,
+                background_tasks,
+                "OAuth 授权成功，正在继续执行数据拉取...",
+            )
+        return result
+    except ValueError as exc:
+        # No pending device flow - return idle
+        return {"status": "idle"}
+    except Exception as exc:
+        logger.error(f"[{source_id}] Device flow status check failed: {exc}")
+        raise HTTPException(400, f"Device flow status check failed: {exc}") from exc
 
 
 
@@ -282,7 +533,9 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
     state = _executor.get_source_state(source_id)
     
     # Special Handling: OAuth Code Exchange (Client-Side Callback)
-    if data.get("type") == "oauth_code_exchange":
+    interaction_type = data.get("type")
+
+    if interaction_type == "oauth_code_exchange":
         handler = _auth_manager.get_oauth_handler(source_id)
         if not handler:
             _auth_manager.register_source(source)
@@ -291,10 +544,13 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         if not handler:
              raise HTTPException(400, "Source is not OAuth type")
         
+        code_field = getattr(getattr(handler, "config", None), "authorization_code_field", "code") or "code"
         code = data.get("code")
+        if not code and code_field != "code":
+            code = data.get(code_field)
         redirect_uri = data.get("redirect_uri")
         if not code:
-            raise HTTPException(400, "Missing 'code' in interaction data")
+            raise HTTPException(400, f"Missing OAuth authorization code in interaction data (field: {code_field})")
             
         try:
             await handler.exchange_code(code, redirect_uri=redirect_uri)
@@ -304,6 +560,29 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         
         background_tasks.add_task(_executor.fetch_source, source)
         return {"message": "OAuth 授权成功", "source_id": source_id}
+
+    if interaction_type == "oauth_implicit_token":
+        handler = _auth_manager.get_oauth_handler(source_id)
+        if not handler:
+            _auth_manager.register_source(source)
+            handler = _auth_manager.get_oauth_handler(source_id)
+
+        if not handler:
+            raise HTTPException(400, "Source is not OAuth type")
+
+        token_payload = handler.build_implicit_token_payload(data)
+        access_token = token_payload.get("access_token")
+        if not access_token:
+            raise HTTPException(400, "Missing access_token in interaction data")
+
+        try:
+            handler.store_implicit_token(token_payload)
+        except Exception as exc:
+            logger.error(f"[{source_id}] OAuth implicit token store failed: {exc}")
+            raise HTTPException(400, f"授权失败: {exc}") from exc
+
+        background_tasks.add_task(_executor.fetch_source, source)
+        return {"message": "OAuth Token 已保存", "source_id": source_id}
     
     # 检查是否有挂起的交互请求
     if not state.interaction:
@@ -354,9 +633,7 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
     # 获取 integration 配置来确定 auth 类型
     auth_type = "none"
     if source:
-        if source.auth and source.auth.type.value != "none":
-            auth_type = source.auth.type.value
-        elif source.flow:
+        if source.flow:
             for step in source.flow:
                 if step.use.value == "oauth":
                     auth_type = "oauth"
@@ -385,6 +662,27 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
                 "status": "ok",
             }
         else:
+            # Check for pending device flow
+            if handler and hasattr(handler, "get_device_flow_status"):
+                try:
+                    device_status = await handler.get_device_flow_status()
+                    if device_status.get("status") == "pending":
+                        return {
+                            "source_id": source_id,
+                            "auth_type": auth_type,
+                            "status": "pending",
+                            "message": "等待设备授权确认",
+                            "device": device_status.get("device"),
+                        }
+                    if device_status.get("status") == "expired":
+                        return {
+                            "source_id": source_id,
+                            "auth_type": auth_type,
+                            "status": "error",
+                            "message": "设备授权已过期，请重新发起授权",
+                        }
+                except Exception:
+                    pass  # Fall through to missing
             return {
                 "source_id": source_id,
                 "auth_type": auth_type,
@@ -400,71 +698,18 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
     }
 
 
-# ── 运行时鉴权更新 ────────────────────────────────────
-
-@router.post("/auth/apikey/{source_id}")
-async def update_api_key(source_id: str, api_key: str) -> dict:
-    """运行时更新 API Key（仅用于前端临时填写，不持久化）。"""
-    stored = _get_stored_source(source_id)
-    if stored is None:
-        raise HTTPException(404, f"数据源 '{source_id}' 不存在")
-
-    # 检查是否是 API Key 认证类型
-    integration = _config.get_integration(stored.integration_id) if stored.integration_id else None
-    auth_type = stored.config.get("auth", {}).get("type")
-    if not auth_type and integration and integration.auth:
-        auth_type = integration.auth.type.value
-
-    if auth_type != "api_key":
-        raise HTTPException(400, f"数据源 '{source_id}' 不是 API Key 认证类型")
-    
-    # 持久化到 Secrets
-    _secrets.set_secrets(source_id, {"api_key": api_key})
-    
-    # 重新注册鉴权 (AuthManager handles reading from secrets)
-    # _auth_manager.register_source(source) # Not strictly needed if get_client reads every time?
-    # But register_source updates the map of handlers. 
-    # ApiKeyAuth is stateless mostly, but let's refresh.
-    
-    logger.info(f"[{source_id}] API Key 已更新")
-    return {"message": f"API Key 已更新: {source_id}"}
-
-
-@router.post("/auth/cookie/refresh/{source_id}")
-async def refresh_browser_cookie(source_id: str) -> dict:
-    """触发重新读取浏览器 Cookie。"""
-    stored = _get_stored_source(source_id)
-    if stored is None:
-        raise HTTPException(404, f"数据源 '{source_id}' 不存在")
-
-    # 检查是否是浏览器 Cookie 认证类型
-    integration = _config.get_integration(stored.integration_id) if stored.integration_id else None
-    auth_type = stored.config.get("auth", {}).get("type")
-    if not auth_type and integration and integration.auth:
-        auth_type = integration.auth.type.value
-
-    if auth_type != "browser":
-        raise HTTPException(400, f"数据源 '{source_id}' 不是浏览器 Cookie 认证类型")
-
-    # 将 StoredSource 解析为 SourceConfig 并注册
-    source = _resolve_stored_source(stored)
-    if source:
-        _auth_manager.register_source(source)
-
-    logger.info(f"[{source_id}] 浏览器 Cookie 已刷新")
-    return {"message": f"Cookie 已刷新: {source_id}"}
-
-
 # ── Stored Sources (JSON-based) ──────────────────────────────────────────
 
 @router.post("/sources")
 async def create_stored_source(source: StoredSource, background_tasks: BackgroundTasks) -> StoredSource:
     """创建新的存储数据源。"""
-    saved = _resource_manager.save_source(source)
-    resolved = _resolve_stored_source(saved)
-    if resolved:
-        background_tasks.add_task(_executor.fetch_source, resolved)
-    return saved
+    return create_stored_source_record(
+        source,
+        _resource_manager,
+        executor=_executor,
+        config=_config,
+        background_tasks=background_tasks,
+    )
 
 
 @router.put("/sources/{source_id}")
@@ -478,9 +723,71 @@ async def update_stored_source(source_id: str, source: StoredSource) -> StoredSo
 @router.delete("/sources/{source_id}")
 async def delete_stored_source(source_id: str) -> dict:
     """删除存储的数据源。"""
-    if _resource_manager.delete_source(source_id):
-        return {"message": f"Source {source_id} deleted"}
-    raise HTTPException(404, f"Source {source_id} not found")
+    if not _resource_manager.delete_source(source_id):
+        raise HTTPException(404, f"Source {source_id} not found")
+
+    cleanup_warnings: list[str] = []
+    affected_view_ids: list[str] = []
+
+    try:
+        if _data_controller and hasattr(_data_controller, "clear_source"):
+            _data_controller.clear_source(source_id)
+    except Exception as exc:
+        logger.warning(
+            "[%s] Failed to clear source data during source deletion: %s",
+            source_id,
+            exc,
+        )
+        cleanup_warnings.append("data")
+
+    try:
+        if _secrets and hasattr(_secrets, "delete_secrets"):
+            _secrets.delete_secrets(source_id)
+    except Exception as exc:
+        logger.warning(
+            "[%s] Failed to clear source secrets during source deletion: %s",
+            source_id,
+            exc,
+        )
+        cleanup_warnings.append("secrets")
+
+    try:
+        if _resource_manager and hasattr(_resource_manager, "remove_source_references_from_views"):
+            affected_view_ids = _resource_manager.remove_source_references_from_views(source_id)
+    except Exception as exc:
+        logger.warning(
+            "[%s] Failed to clear source references from views: %s",
+            source_id,
+            exc,
+        )
+        cleanup_warnings.append("views")
+
+    # 尽量清理运行时内存态，避免继续显示已删除 source 的状态。
+    try:
+        if _executor and hasattr(_executor, "_states"):
+            _executor._states.pop(source_id, None)
+    except Exception:
+        pass
+
+    try:
+        if _auth_manager and hasattr(_auth_manager, "_handlers"):
+            _auth_manager._handlers.pop(source_id, None)
+        if _auth_manager and hasattr(_auth_manager, "clear_error"):
+            _auth_manager.clear_error(source_id)
+    except Exception:
+        pass
+
+    return {
+        "message": f"Source {source_id} deleted",
+        "source_id": source_id,
+        "cleanup": {
+            "data_cleared": "data" not in cleanup_warnings,
+            "secrets_cleared": "secrets" not in cleanup_warnings,
+            "affected_view_ids": affected_view_ids,
+            "affected_view_count": len(affected_view_ids),
+            "warnings": cleanup_warnings,
+        },
+    }
 
 
 # ── Stored Views (JSON-based) ─────────────────────────────────────────────
@@ -494,7 +801,7 @@ async def list_stored_views() -> list[StoredView]:
 @router.post("/views")
 async def create_stored_view(view: StoredView) -> StoredView:
     """创建新的存储视图。"""
-    return _resource_manager.save_view(view)
+    return create_stored_view_record(view, _resource_manager, config=_config)
 
 
 @router.put("/views/{view_id}")
@@ -502,7 +809,7 @@ async def update_stored_view(view_id: str, view: StoredView) -> StoredView:
     """更新存储的视图。"""
     if view.id != view_id:
         raise HTTPException(400, "ID mismatch")
-    return _resource_manager.save_view(view)
+    return create_stored_view_record(view, _resource_manager, config=_config)
 
 
 @router.delete("/views/{view_id}")
@@ -538,6 +845,59 @@ async def list_integration_file_metadata() -> list[dict]:
     return _integration_manager.list_integration_file_metadata()
 
 
+@router.get("/integrations/presets")
+async def list_integration_presets() -> list[IntegrationPresetPayload]:
+    """列出集成创建 Preset（来自 config/presets/*.yaml）。"""
+    config_root = getattr(_integration_manager, "config_root", None)
+    if not config_root:
+        return []
+
+    presets_dir = Path(config_root) / "presets"
+    if not presets_dir.is_dir():
+        return []
+
+    files: dict[str, Path] = {}
+    for pattern in ("*.yaml", "*.yml"):
+        for file_path in presets_dir.glob(pattern):
+            files[file_path.name] = file_path
+
+    presets: list[IntegrationPresetPayload] = []
+    for filename in sorted(files):
+        file_path = files[filename]
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            payload = yaml.safe_load(content)
+        except Exception as exc:
+            logger.warning("Skipping invalid preset file %s: %s", file_path, exc)
+            continue
+
+        if not isinstance(payload, dict):
+            logger.warning("Skipping preset %s: top-level must be a mapping", file_path)
+            continue
+
+        preset_id = str(payload.get("id") or file_path.stem).strip()
+        label = str(payload.get("label") or preset_id).strip()
+        description = str(payload.get("description") or "").strip()
+        filename_hint = str(payload.get("filename_hint") or f"{preset_id}_example").strip()
+        content_template = str(payload.get("content_template") or "").rstrip()
+
+        if not preset_id or not content_template:
+            logger.warning("Skipping preset %s: missing required id/content_template", file_path)
+            continue
+
+        presets.append(
+            IntegrationPresetPayload(
+                id=preset_id,
+                label=label,
+                description=description,
+                filename_hint=filename_hint,
+                content_template=content_template,
+            )
+        )
+
+    return presets
+
+
 @router.get("/integrations/files/{filename}")
 async def get_integration_file(filename: str) -> dict:
     """获取集成 YAML 文件内容。"""
@@ -549,6 +909,7 @@ async def get_integration_file(filename: str) -> dict:
         "content": content,
         "integration_ids": _integration_manager.get_integration_ids_in_file(filename),
         "display_name": _integration_manager.get_integration_display_name(filename),
+        "resolved_path": _integration_manager.get_integration_path(filename),
     }
 
 
@@ -559,6 +920,10 @@ async def create_integration_file(filename: str, request: FileContentRequest) ->
         normalized_filename = _integration_manager.normalize_filename(filename)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+    existing_files = _integration_manager.list_integration_files()
+    if normalized_filename in existing_files:
+        raise HTTPException(409, f"Integration {normalized_filename} already exists")
 
     success = _integration_manager.create_integration(filename, request.content)
     if not success:
@@ -580,13 +945,6 @@ async def update_integration_file(filename: str, request: FileContentRequest) ->
             raise HTTPException(400, "Empty YAML content")
         if not isinstance(parsed, dict):
             raise HTTPException(400, "YAML top-level must be an object")
-
-        # 单文件单实例：不再接受 legacy integrations 数组结构
-        if "integrations" in parsed:
-            raise HTTPException(
-                400,
-                "Legacy 'integrations' array is no longer supported. Use a single integration object per file.",
-            )
 
         # 运行时 id 由文件名决定
         file_based_id = Path(filename).stem
@@ -658,6 +1016,12 @@ async def delete_integration_file(filename: str) -> dict:
 
 
 # ── Config Reload ─────────────────────────────────────────────────────
+
+@router.get("/system/health")
+async def system_health() -> dict:
+    """轻量健康检查，用于前端等待后端就绪。"""
+    return {"status": "ok"}
+
 
 @router.post("/system/reload")
 async def reload_config() -> dict:
@@ -740,6 +1104,7 @@ async def get_system_settings() -> SystemSettings:
 async def update_system_settings(settings: SystemSettings) -> SystemSettings:
     """更新所有系统设置，并在加密开关变更时触发全量迁移。"""
     if _settings_manager is None:
+        _apply_runtime_log_level(settings.debug_logging_enabled)
         return settings
 
     old = _settings_manager.load_settings()
@@ -752,6 +1117,7 @@ async def update_system_settings(settings: SystemSettings) -> SystemSettings:
         settings.master_key = _settings_manager.get_or_create_master_key()
 
     _settings_manager.save_settings(settings)
+    _apply_runtime_log_level(settings.debug_logging_enabled)
 
     # 将新 master_key 注入 secrets_controller（以防刚切换）
     # secrets_controller 会在 _master_key() 中重新读取 settings.json，

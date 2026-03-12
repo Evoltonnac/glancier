@@ -1,332 +1,868 @@
 """
-OAuth 2.0 授权流程管理器 (支持 PKCE).
-
-不仅处理标准的 OAuth 流程 (RFC 7636)，还支持 OpenRouter 等平台的自定义扩展
-(如参数重命名、JSON Token 请求等)。
+OAuth 2.0 auth flow manager based on Authlib AsyncOAuth2Client.
 """
+
+from __future__ import annotations
 
 import logging
 import time
+from typing import Any, Optional
+from urllib.parse import parse_qs
+
 import httpx
-from urllib.parse import urlencode
-from typing import Optional, Any
+from authlib.common.security import generate_token
+from authlib.integrations.base_client.errors import InvalidTokenError
+from authlib.integrations.httpx_client import AsyncOAuth2Client
 
 from core.config_loader import AuthConfig
 from core.secrets_controller import SecretsController
-from .oauth_types import OAuthParams, CodeChallengeMethod, GrantType, ResponseType
+from .oauth_types import CodeChallengeMethod, GrantType, OAuthParams, ResponseType
 from .pkce import PKCEUtils
 
 logger = logging.getLogger(__name__)
 
+DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+JSON_STYLE_TOKEN_REQUEST_TYPES = {"json", "json_body", "json_request"}
+
 
 class OAuthAuth:
-    """
-    OAuth 2.0 授权流程管理器。
-    """
+    """Unified OAuth flow handler with token persistence."""
 
     def __init__(self, auth_config: AuthConfig, source_id: str, secrets_controller: SecretsController):
         self.config = auth_config
         self.source_id = source_id
         self.secrets = secrets_controller
-        self._token_data: dict | None = None
+        self._token_data: dict[str, Any] | None = None
         self._load_token()
 
-    # ── Token 持久化 ──────────────────────────────────
+    def _first_non_none(self, *values: Any) -> Any:
+        for value in values:
+            if value is not None:
+                return value
+        return None
 
-    def _load_token(self):
-        """从 SecretsController 加载 token。"""
+    def _token_value(self, payload: dict[str, Any], key: str, fallback_key: str) -> Any:
+        return self._first_non_none(payload.get(key), payload.get(fallback_key))
+
+    # -- Token persistence -------------------------------------------------
+
+    def _load_token(self) -> None:
         secrets = self.secrets.get_secrets(self.source_id)
-        # 兼容旧版和新版存储
-        self._token_data = secrets.get(OAuthParams.ACCESS_TOKEN) or secrets.get("oauth_token")
-        if self._token_data:
-            # 确保 access_token 字段存在
-            if OAuthParams.ACCESS_TOKEN not in self._token_data:
-                # 尝试从自定义字段回复
-                field = self.config.token_field or "access_token"
-                if field in self._token_data:
-                    self._token_data[OAuthParams.ACCESS_TOKEN] = self._token_data[field]
+        raw_token = secrets.get(OAuthParams.OAUTH_SECRETS)
+        if raw_token is None:
+            # Backward-compat for legacy storage layout
+            raw_token = secrets.get(OAuthParams.ACCESS_TOKEN)
 
-            logger.info(f"[{self.source_id}] 已加载 OAuth Token")
+        if isinstance(raw_token, str):
+            raw_token = {OAuthParams.ACCESS_TOKEN: raw_token}
 
-    def _save_token(self, token_data: dict[str, Any]):
-        """保存 Token 到 SecretsController。"""
-        # 标准化：确保包含保存时间
-        token_data["saved_at"] = time.time()
+        if isinstance(raw_token, dict):
+            self._token_data = self._normalize_token(raw_token)
+            logger.debug(f"[{self.source_id}] Loaded OAuth token")
+            return
 
-        # 确保关键字段存在（从 token_field 复制到 access_token）
-        if self.config.token_field and self.config.token_field in token_data:
-            token = token_data[self.config.token_field]
-            # 清理：移除原始的 provider 特定字段，只保留标准化字段
-            clean_data = {
-                "access_token": token,
-                "saved_at": token_data["saved_at"]
-            }
-            # 如果有 refresh_token 也保留
-            if "refresh_token" in token_data:
-                clean_data["refresh_token"] = token_data["refresh_token"]
-            token_data = clean_data
+        self._token_data = None
 
-        # 保存为标准结构
-        self.secrets.set_secrets(self.source_id, {
-            OAuthParams.ACCESS_TOKEN: token_data
-        })
-        self._token_data = token_data
-        logger.info(f"[{self.source_id}] OAuth Token 已保存")
+    def _normalize_token(self, token_data: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(token_data)
+        token_field = self.config.token_field or OAuthParams.ACCESS_TOKEN
+        token_type_field = self.config.token_type_field or "token_type"
+        refresh_token_field = self.config.refresh_token_field or OAuthParams.REFRESH_TOKEN
+        expires_in_field = self.config.expires_in_field or OAuthParams.EXPIRES_IN
+        scope_field = self.config.scope_field or OAuthParams.SCOPE
+
+        access_token = self._first_non_none(
+            normalized.get(OAuthParams.ACCESS_TOKEN),
+            normalized.get(token_field),
+            normalized.get(self.config.implicit_access_token_field),
+        )
+        if access_token is not None:
+            normalized[OAuthParams.ACCESS_TOKEN] = access_token
+
+        token_type = self._token_value(normalized, token_type_field, "token_type")
+        if token_type is not None:
+            normalized["token_type"] = token_type
+
+        refresh_token = self._token_value(normalized, refresh_token_field, OAuthParams.REFRESH_TOKEN)
+        if refresh_token is not None:
+            normalized[OAuthParams.REFRESH_TOKEN] = refresh_token
+
+        expires_in = self._token_value(normalized, expires_in_field, OAuthParams.EXPIRES_IN)
+        if expires_in is not None:
+            normalized[OAuthParams.EXPIRES_IN] = expires_in
+
+        scope_value = self._token_value(normalized, scope_field, OAuthParams.SCOPE)
+        if scope_value is not None:
+            normalized[OAuthParams.SCOPE] = scope_value
+
+        # Normalize expires_at if provider only returns expires_in.
+        if OAuthParams.EXPIRES_IN in normalized:
+            try:
+                normalized["expires_at"] = int(time.time()) + int(normalized[OAuthParams.EXPIRES_IN])
+            except (TypeError, ValueError):
+                pass
+
+        normalized["saved_at"] = time.time()
+        return normalized
+
+    def _save_token(self, token_data: dict[str, Any]) -> None:
+        normalized = self._normalize_token(token_data)
+        self.secrets.set_secrets(self.source_id, {OAuthParams.OAUTH_SECRETS: normalized})
+        legacy_access_token = self.secrets.get_secret(self.source_id, OAuthParams.ACCESS_TOKEN)
+        if isinstance(legacy_access_token, dict):
+            self.secrets.delete_secret(self.source_id, OAuthParams.ACCESS_TOKEN)
+        self._token_data = normalized
+        logger.info(f"[{self.source_id}] Saved OAuth token")
+
+    def store_implicit_token(self, token_data: dict[str, Any]) -> None:
+        """Persist fragment-based implicit flow token payload."""
+        self._save_token(token_data)
+
+    def build_implicit_token_payload(self, interaction_data: dict[str, Any]) -> dict[str, Any]:
+        payload_data = interaction_data.get("oauth_payload")
+        payload = dict(payload_data) if isinstance(payload_data, dict) else {}
+
+        implicit_access_token_field = self.config.implicit_access_token_field or OAuthParams.ACCESS_TOKEN
+        implicit_token_type_field = self.config.implicit_token_type_field or "token_type"
+        implicit_expires_in_field = self.config.implicit_expires_in_field or OAuthParams.EXPIRES_IN
+        implicit_scope_field = self.config.implicit_scope_field or OAuthParams.SCOPE
+        implicit_state_field = self.config.implicit_state_field or OAuthParams.STATE
+
+        access_token = self._first_non_none(
+            interaction_data.get(OAuthParams.ACCESS_TOKEN),
+            payload.get(implicit_access_token_field),
+            payload.get(self.config.token_field),
+            payload.get(OAuthParams.ACCESS_TOKEN),
+        )
+        if access_token is not None:
+            payload[OAuthParams.ACCESS_TOKEN] = access_token
+
+        token_type = self._first_non_none(
+            interaction_data.get("token_type"),
+            payload.get(implicit_token_type_field),
+            payload.get("token_type"),
+        )
+        if token_type is not None:
+            payload["token_type"] = token_type
+
+        expires_in = self._first_non_none(
+            interaction_data.get(OAuthParams.EXPIRES_IN),
+            payload.get(implicit_expires_in_field),
+            payload.get(OAuthParams.EXPIRES_IN),
+        )
+        if expires_in is not None:
+            try:
+                payload[OAuthParams.EXPIRES_IN] = int(expires_in)
+            except (TypeError, ValueError):
+                payload[OAuthParams.EXPIRES_IN] = expires_in
+
+        scope_value = self._first_non_none(
+            interaction_data.get(OAuthParams.SCOPE),
+            payload.get(implicit_scope_field),
+            payload.get(OAuthParams.SCOPE),
+        )
+        if scope_value is not None:
+            payload[OAuthParams.SCOPE] = scope_value
+
+        state_value = self._first_non_none(
+            interaction_data.get(OAuthParams.STATE),
+            payload.get(implicit_state_field),
+            payload.get(OAuthParams.STATE),
+        )
+        if state_value is not None:
+            payload[OAuthParams.STATE] = state_value
+
+        return payload
+
+    # -- PKCE/device states -----------------------------------------------
 
     def _save_pkce_state(self, verifier: str, state: str) -> None:
-        """保存 PKCE Verifier (用于后续换 Token)。存储到同一 source_id 下。"""
-        self.secrets.set_secrets(self.source_id, {
-            "oauth_pkce": {
-                "verifier": verifier,
-                "state": state,
-                "created_at": time.time()
-            }
-        })
+        self.secrets.set_secrets(
+            self.source_id,
+            {
+                "oauth_pkce": {
+                    "verifier": verifier,
+                    "state": state,
+                    "created_at": time.time(),
+                }
+            },
+        )
 
     def _get_pkce_verifier(self) -> str | None:
-        """获取并清除保存的 PKCE Verifier。"""
         secrets = self.secrets.get_secrets(self.source_id)
         pkce_data = secrets.get("oauth_pkce") if secrets else None
 
         if not pkce_data:
             return None
-
-        # 验证过期 (例如 10 分钟)
         if time.time() - pkce_data.get("created_at", 0) > 600:
-            logger.warning(f"[{self.source_id}] PKCE Verifier 已过期")
+            logger.warning(f"[{self.source_id}] PKCE verifier expired")
             return None
 
-        # 获取后清除 oauth_pkce，防止重放
         self.secrets.delete_secret(self.source_id, "oauth_pkce")
         return pkce_data.get("verifier")
 
-    # ── Token 刷新 ────────────────────────────────────
+    def _save_device_state(self, payload: dict[str, Any]) -> None:
+        self.secrets.set_secrets(self.source_id, {"oauth_device": payload})
 
-    def _is_expired(self) -> bool:
-        """检查 Token 是否过期。"""
-        if not self._token_data:
-            return True
-            
-        # 如果没有 expires_at 且没有 expires_in，假设不过期 (如长期 Key)
-        if "expires_at" not in self._token_data:
-            return False
-            
-        expires_at = self._token_data.get("expires_at", 0)
-        return time.time() >= expires_at - 60  # 提前 60 秒刷新
+    def _get_device_state(self) -> dict[str, Any] | None:
+        secrets = self.secrets.get_secrets(self.source_id)
+        return secrets.get("oauth_device") if secrets else None
 
-    async def _refresh_token(self):
-        """使用 refresh_token 刷新 access_token。"""
-        if not self._token_data:
-             return
+    def _clear_device_state(self) -> None:
+        self.secrets.delete_secret(self.source_id, "oauth_device")
+        self.secrets.delete_secret(self.source_id, "oauth_device_status")
 
-        refresh_token = self._token_data.get(OAuthParams.REFRESH_TOKEN)
-        if not refresh_token:
-            logger.warning(f"[{self.source_id}] Token 已过期且无 refresh_token")
-            # 不抛出异常，让上层处理重新授权
-            return
+    def _save_device_flow_status(self, status: str, extra: dict[str, Any] | None = None) -> None:
+        """Save device flow status to secrets for persistence across sessions."""
+        data = {"status": status, "updated_at": time.time()}
+        if extra:
+            data.update(extra)
+        self.secrets.set_secrets(self.source_id, {"oauth_device_status": data})
 
-        # 获取凭据
-        client_id, client_secret = self._get_client_credentials()
+    async def get_device_flow_status(self) -> dict[str, Any]:
+        """Get current device flow status from secrets without triggering polling."""
+        secrets = self.secrets.get_secrets(self.source_id)
+        status_data = secrets.get("oauth_device_status") if secrets else None
+        device_state = self._get_device_state()
 
-        async with httpx.AsyncClient() as client:
-            # 准备参数
-            data = {
-                OAuthParams.GRANT_TYPE: GrantType.REFRESH_TOKEN.value,
-                OAuthParams.REFRESH_TOKEN: refresh_token,
-            }
-            if client_id:
-                data[OAuthParams.CLIENT_ID] = client_id
-            if client_secret:
-                data[OAuthParams.CLIENT_SECRET] = client_secret
+        # If we have a token, user is authorized
+        if self.has_token:
+            return {"status": "authorized"}
 
-            try:
-                if self.config.token_request_type == "json":
-                    resp = await client.post(self.config.token_url, json=data)
-                else:
-                    resp = await client.post(self.config.token_url, data=data)
+        # If no device state, no flow in progress
+        if not device_state:
+            return {"status": "idle"}
 
-                resp.raise_for_status()
-                new_token = resp.json()
+        # Check if device code expired
+        if int(device_state.get("expires_at", 0)) <= int(time.time()):
+            self._clear_device_state()
+            return {"status": "expired"}
 
-                # 合并旧数据
-                merged_token = self._token_data.copy()
-                merged_token.update(new_token)
+        # Return saved status if available
+        if status_data:
+            if status_data.get("status") == "pending" and "device" not in status_data:
+                merged = dict(status_data)
+                merged["device"] = device_state
+                return merged
+            return status_data
 
-                self._save_token(merged_token)
-                logger.info(f"[{self.source_id}] Token 已刷新")
+        # Default to pending if device state exists
+        return {"status": "pending", "device": device_state}
 
-            except Exception as e:
-                logger.error(f"[{self.source_id}] 刷新 token 失败: {e}")
-                # 可能需要重新授权
-
-    # ── 授权流程 (Client-Side Driven) ────────────────
+    # -- Client bootstrap --------------------------------------------------
 
     def _get_client_credentials(self) -> tuple[str | None, str | None]:
-        """
-        获取客户端凭据。
-        优先从配置获取，其次从 Secrets 获取。
-        """
         client_id = self.config.client_id
         client_secret = self.config.client_secret
 
-        # 如果配置中没有，从 Secrets 中获取
         if not client_id or not client_secret:
             secrets = self.secrets.get_secrets(self.source_id)
             if secrets:
-                if not client_id:
-                    client_id = secrets.get(OAuthParams.CLIENT_ID) or secrets.get("client_id")
-                if not client_secret:
-                    client_secret = secrets.get(OAuthParams.CLIENT_SECRET) or secrets.get("client_secret")
+                client_id = client_id or secrets.get(OAuthParams.CLIENT_ID) or secrets.get("client_id")
+                client_secret = client_secret or secrets.get(OAuthParams.CLIENT_SECRET) or secrets.get("client_secret")
 
         return client_id, client_secret
 
+    def _flow_type(self) -> str:
+        flow = (self.config.oauth_flow or "code").strip().lower()
+        if flow in {"device", "device_code"}:
+            return "device"
+        if flow in {"client_credentials", "client-credentials"}:
+            return "client_credentials"
+        return "code"
+
+    def _build_oauth_client(
+        self,
+        *,
+        token: dict[str, Any] | None = None,
+        grant_type: str | None = None,
+        redirect_uri: Optional[str] = None,
+    ) -> AsyncOAuth2Client:
+        client_id, client_secret = self._get_client_credentials()
+        scope = " ".join(self.config.scopes) if self.config.scopes else None
+
+        async def update_token(token_payload: dict[str, Any], refresh_token=None, access_token=None) -> None:
+            _ = refresh_token
+            _ = access_token
+            if self._token_data:
+                merged = dict(self._token_data)
+                merged.update(token_payload)
+                self._save_token(merged)
+            else:
+                self._save_token(token_payload)
+
+        token_endpoint_auth_method = self.config.token_endpoint_auth_method.value
+        metadata: dict[str, Any] = {"token_endpoint": self.config.token_url}
+        if grant_type:
+            metadata["grant_type"] = grant_type
+
+        return AsyncOAuth2Client(
+            client_id=client_id,
+            client_secret=client_secret,
+            token_endpoint_auth_method=token_endpoint_auth_method,
+            scope=scope,
+            redirect_uri=redirect_uri or self.config.redirect_uri,
+            token=token,
+            update_token=update_token,
+            leeway=60,
+            **metadata,
+        )
+
+    async def _fetch_token_json(self, payload: dict[str, Any]) -> dict[str, Any]:
+        client_id, client_secret = self._get_client_credentials()
+        req_payload = dict(payload)
+        if client_id and OAuthParams.CLIENT_ID not in req_payload:
+            req_payload[OAuthParams.CLIENT_ID] = client_id
+        if client_secret and OAuthParams.CLIENT_SECRET not in req_payload:
+            req_payload[OAuthParams.CLIENT_SECRET] = client_secret
+
+        request_type = (self.config.token_request_type or "form").strip().lower()
+        request_kwargs: dict[str, Any]
+        headers: dict[str, str] = {"Accept": "application/json"}
+        if request_type in {"json_body", "json_request"}:
+            request_kwargs = {"json": req_payload}
+            headers["Content-Type"] = "application/json"
+        else:
+            # Backward-compatible path: "json" keeps form payload but asks JSON response.
+            request_kwargs = {"data": req_payload}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.config.token_url,
+                headers=headers,
+                **request_kwargs,
+            )
+            response.raise_for_status()
+            parsed = self._parse_oauth_payload(response)
+            if isinstance(parsed, dict):
+                return parsed
+            raise ValueError(f"[{self.source_id}] OAuth token endpoint returned an invalid payload")
+
+    # -- Authorization startup --------------------------------------------
+
+    async def start_authorization(self, redirect_uri: Optional[str] = None) -> dict[str, Any]:
+        flow = self._flow_type()
+
+        if flow == "device":
+            device_payload = await self.start_device_flow()
+            return {"flow": "device", "device": device_payload}
+
+        if flow == "client_credentials":
+            token = await self.fetch_client_credentials_token()
+            return {
+                "flow": "client_credentials",
+                "status": "authorized",
+                "token_type": token.get("token_type"),
+            }
+
+        url = self.get_authorize_url(redirect_uri=redirect_uri)
+        return {"flow": "code", "authorize_url": url}
+
     def get_authorize_url(self, redirect_uri: Optional[str] = None) -> str:
-        """
-        生成 OAuth 授权 URL。
-        根据 supports_pkce 配置决定是否使用 PKCE。
+        final_redirect_uri = redirect_uri or self.config.redirect_uri
+        if not final_redirect_uri:
+            raise ValueError(f"[{self.source_id}] OAuth authorization requires redirect_uri")
+        if not self.config.auth_url:
+            raise ValueError(f"[{self.source_id}] OAuth authorization requires auth_url")
 
-        对于公共客户端，回调地址由前端动态决定（当前前端域名 + /oauth/callback）。
-        这样无论客户端部署在哪里，OAuth 回调都能正确返回。
+        state = self.source_id
+        kwargs: dict[str, Any] = {"response_type": self.config.response_type or ResponseType.CODE.value}
+        client = self._build_oauth_client(redirect_uri=final_redirect_uri)
 
-        Returns:
-            str: 授权 URL
-
-        Raises:
-            ValueError: 如果缺少必要的 client_id
-        """
-        # 0. 获取凭据
-        client_id, _ = self._get_client_credentials()
-
-        # 1. 确定 Redirect URI - 优先使用前端传递的地址，其次使用配置中的默认值
-        if not redirect_uri:
-            redirect_uri = self.config.redirect_uri
-        if not redirect_uri:
-            raise ValueError(f"[{self.source_id}] OAuth 授权需要回调地址 (redirect_uri)")
-        final_redirect_uri = redirect_uri
-
-        # 2. 生成 PKCE (仅当 supports_pkce 为 True)
-        verifier = None
         if self.config.supports_pkce:
-            verifier = PKCEUtils.generate_verifier()
-            challenge = PKCEUtils.generate_challenge(verifier, CodeChallengeMethod(self.config.code_challenge_method))
-
-            # 3. 保存状态 (Verifier)
-            # 简单起见使用 source_id 作为 state，增强安全性可使用随机串并映射
-            state = self.source_id
+            verifier = generate_token(64)
+            method = CodeChallengeMethod(self.config.code_challenge_method or "S256")
+            kwargs["code_verifier"] = verifier
+            kwargs["code_challenge_method"] = method.value
+            kwargs["code_challenge"] = PKCEUtils.generate_challenge(verifier, method)
             self._save_pkce_state(verifier, state)
 
-        # 4. 构建参数
-        params = {}
+        authorize_url, resolved_state = client.create_authorization_url(
+            self.config.auth_url,
+            state=state,
+            **kwargs,
+        )
+        _ = resolved_state
 
-        # 添加 PKCE 参数 (仅当 supports_pkce 为 True)
-        if self.config.supports_pkce and verifier:
-            params[OAuthParams.CODE_CHALLENGE] = challenge
-            params[OAuthParams.CODE_CHALLENGE_METHOD] = self.config.code_challenge_method
+        return authorize_url
 
-        # 添加 client_id (某些 OAuth Provider 需要)
-        if client_id:
-            params[OAuthParams.CLIENT_ID] = client_id
+    # -- Code flow exchange ------------------------------------------------
 
-        # 添加 response_type (标准 OAuth 参数)
-        params[OAuthParams.RESPONSE_TYPE] = ResponseType.CODE.value
+    async def exchange_code(self, code: str, redirect_uri: Optional[str] = None) -> None:
+        if not self.config.token_url:
+            raise ValueError(f"[{self.source_id}] OAuth token_url is required")
 
-        # 处理参数重命名 (如 OpenRouter callback_url)
-        # 注意: 某些 Provider (如 OpenRouter) 可能要求 key 为 callback_url
-        redirect_key = self.config.redirect_param or OAuthParams.REDIRECT_URI
-        params[redirect_key] = final_redirect_uri
-
-        if self.config.scopes:
-            params[OAuthParams.SCOPE] = " ".join(self.config.scopes)
-
-        # 添加 state 参数
-        state = self.source_id
-        params[OAuthParams.STATE] = state
-
-        return f"{self.config.auth_url}?{urlencode(params)}"
-
-    async def exchange_code(self, code: str, redirect_uri: Optional[str] = None):
-        """
-        用授权码交换 Token。
-        根据 supports_pkce 配置决定是否使用 PKCE。
-
-        通常由前端回调后调用此接口。
-
-        OpenRouter OAuth 流程需要 (PKCE):
-        - code: 授权码
-        - code_verifier: PKCE verifier
-        - code_challenge_method: S256 (必须与授权时一致)
-
-        注意: OpenRouter 不需要 redirect_uri 在 token 交换中。
-        """
-        # 1. 获取并验证 Verifier (仅当 supports_pkce 为 True)
-        verifier = None
-        if self.config.supports_pkce:
-            verifier = self._get_pkce_verifier()
-            # 注意：如果 verifier 丢失，可能是过期或被清除。
-            if not verifier:
-                logger.warning(f"[{self.source_id}] PKCE Verifier 丢失或过期")
-
-        # 2. 获取凭据
-        client_id, client_secret = self._get_client_credentials()
-
-        # 3. 准备请求参数
-        data = {
-            OAuthParams.CODE: code,
+        final_redirect_uri = redirect_uri or self.config.redirect_uri
+        code_field = self.config.authorization_code_field or OAuthParams.CODE
+        payload = {
+            code_field: code,
             OAuthParams.GRANT_TYPE: GrantType.AUTHORIZATION_CODE.value,
         }
 
-        # 添加 redirect_uri (某些 Provider 需要，如 HuggingFace)
-        if redirect_uri:
-            redirect_key = self.config.redirect_param or OAuthParams.REDIRECT_URI
-            data[redirect_key] = redirect_uri
-
-        # 添加 PKCE 参数 (仅当 supports_pkce 为 True)
+        verifier = None
         if self.config.supports_pkce:
-            data["code_challenge_method"] = self.config.code_challenge_method
+            verifier = self._get_pkce_verifier()
             if verifier:
-                data[OAuthParams.CODE_VERIFIER] = verifier
+                payload[OAuthParams.CODE_VERIFIER] = verifier
 
-        # 补充 Client Info
+        if final_redirect_uri:
+            payload[self.config.redirect_param or OAuthParams.REDIRECT_URI] = final_redirect_uri
+
+        requires_manual_token_exchange = (
+            (self.config.token_request_type or "form").strip().lower() in JSON_STYLE_TOKEN_REQUEST_TYPES
+            or code_field != OAuthParams.CODE
+            or (self.config.redirect_param or OAuthParams.REDIRECT_URI) != OAuthParams.REDIRECT_URI
+        )
+
+        if requires_manual_token_exchange:
+            token = await self._fetch_token_json(payload)
+            self._save_token(token)
+            return
+
+        client = self._build_oauth_client(redirect_uri=final_redirect_uri)
+        token = await client.fetch_token(
+            url=self.config.token_url,
+            grant_type=GrantType.AUTHORIZATION_CODE.value,
+            code=code,
+            redirect_uri=final_redirect_uri,
+            code_verifier=verifier,
+        )
+        self._save_token(dict(token))
+
+    # -- Device flow -------------------------------------------------------
+
+    async def start_device_flow(self) -> dict[str, Any]:
+        logger.info(f"[{self.source_id}] Starting device flow")
+        try:
+            device_url = self.config.device_authorization_url
+            if not device_url:
+                raise ValueError(f"[{self.source_id}] device_authorization_url is required for device flow")
+            if not self.config.token_url:
+                raise ValueError(f"[{self.source_id}] token_url is required for device flow")
+
+            client_id, client_secret = self._get_client_credentials()
+            logger.info(f"[{self.source_id}] Client ID: {client_id}, has secret: {bool(client_secret)}")
+            if not client_id:
+                raise ValueError(f"[{self.source_id}] client_id is required for device flow")
+
+            scope = " ".join(self.config.scopes) if self.config.scopes else None
+            payload: dict[str, Any] = {OAuthParams.CLIENT_ID: client_id}
+            if scope:
+                payload[OAuthParams.SCOPE] = scope
+            if client_secret and self.config.token_endpoint_auth_method.value == "client_secret_post":
+                payload[OAuthParams.CLIENT_SECRET] = client_secret
+
+            async with httpx.AsyncClient() as client:
+                logger.info(f"[{self.source_id}] Posting to device URL: {device_url} with payload: {payload}")
+                response = await client.post(device_url, data=payload, headers={"Accept": "application/json"})
+                logger.info(f"[{self.source_id}] Response status: {response.status_code}, content: {response.text[:200] if response.text else 'empty'}")
+                response.raise_for_status()
+                parsed_payload = self._parse_oauth_payload(response)
+                if not isinstance(parsed_payload, dict):
+                    raise ValueError(f"[{self.source_id}] device authorization endpoint returned invalid payload")
+                device_payload = parsed_payload
+                logger.info(f"[{self.source_id}] Device flow response: {device_payload}")
+
+            device_code = self._first_non_none(
+                device_payload.get(self.config.device_code_field),
+                device_payload.get("device_code"),
+            )
+            if not device_code:
+                raise ValueError(f"[{self.source_id}] device authorization payload missing device_code")
+
+            user_code = self._first_non_none(
+                device_payload.get(self.config.device_user_code_field),
+                device_payload.get("user_code"),
+            )
+            verification_uri = self._first_non_none(
+                device_payload.get(self.config.device_verification_uri_field),
+                device_payload.get("verification_uri"),
+            )
+            verification_uri_complete = self._first_non_none(
+                device_payload.get(self.config.device_verification_uri_complete_field),
+                device_payload.get("verification_uri_complete"),
+            )
+            interval_raw = self._first_non_none(
+                device_payload.get(self.config.device_interval_field),
+                device_payload.get("interval"),
+            )
+            expires_in_raw = self._first_non_none(
+                device_payload.get(self.config.device_expires_in_field),
+                device_payload.get("expires_in"),
+            )
+            interval = int(interval_raw or self.config.device_poll_interval or 5)
+            expires_in = int(expires_in_raw or self.config.device_poll_timeout or 900)
+            stored_payload = dict(device_payload)
+            stored_payload["device_code"] = device_code
+            if user_code is not None:
+                stored_payload["user_code"] = user_code
+            if verification_uri is not None:
+                stored_payload["verification_uri"] = verification_uri
+            if verification_uri_complete is not None:
+                stored_payload["verification_uri_complete"] = verification_uri_complete
+            stored_payload["interval"] = interval
+            stored_payload["expires_in"] = expires_in
+            stored_payload["expires_at"] = int(time.time()) + expires_in
+            logger.info(f"[{self.source_id}] Saving device state: {stored_payload}")
+            self._save_device_state(stored_payload)
+            # Save initial pending status
+            self._save_device_flow_status("pending", {
+                "device": stored_payload,
+                "expires_at": stored_payload.get("expires_at"),
+            })
+            logger.info(f"[{self.source_id}] Device flow started successfully")
+            return stored_payload
+        except Exception as e:
+            logger.exception(f"[{self.source_id}] Device flow failed with exception: {type(e).__name__}: {e}")
+            raise
+
+    async def poll_device_token(self) -> dict[str, Any]:
+        device_state = self._get_device_state()
+        if not device_state:
+            raise ValueError(f"[{self.source_id}] no pending device flow")
+        if int(device_state.get("expires_at", 0)) <= int(time.time()):
+            self._clear_device_state()
+            self._save_device_flow_status("expired")
+            return {"status": "expired"}
+
+        if not self.config.token_url:
+            raise ValueError(f"[{self.source_id}] OAuth token_url is required")
+
+        client_id, client_secret = self._get_client_credentials()
+        device_code = self._first_non_none(
+            device_state.get(self.config.device_code_field),
+            device_state.get("device_code"),
+        )
+        if not device_code:
+            self._clear_device_state()
+            self._save_device_flow_status("error", {
+                "status": "error",
+                "error": "invalid_device_state",
+                "error_description": "Missing device_code in stored state",
+            })
+            return {
+                "status": "error",
+                "error": "invalid_device_state",
+                "error_description": "Missing device_code in stored state",
+            }
+        payload = {
+            OAuthParams.GRANT_TYPE: DEVICE_CODE_GRANT,
+            (self.config.device_code_field or "device_code"): device_code,
+        }
         if client_id:
-            data[OAuthParams.CLIENT_ID] = client_id
-        if client_secret:
-            data[OAuthParams.CLIENT_SECRET] = client_secret
+            payload[OAuthParams.CLIENT_ID] = client_id
+        if client_secret and self.config.token_endpoint_auth_method.value == "client_secret_post":
+            payload[OAuthParams.CLIENT_SECRET] = client_secret
 
-        # 4. 发送请求
         async with httpx.AsyncClient() as client:
-            logger.info(f"[{self.source_id}] Exchanging code for token at {self.config.token_url}")
-            logger.info(f"[{self.source_id}] Token request data: {data}")
+            response = await client.post(self.config.token_url, data=payload, headers={"Accept": "application/json"})
+
+        response_payload = self._parse_oauth_payload(response)
+        if isinstance(response_payload, dict):
+            logger.info(
+                "[%s] Device poll parsed payload keys=%s status_code=%s",
+                self.source_id,
+                sorted(response_payload.keys()),
+                response.status_code,
+            )
+        else:
+            logger.warning(
+                "[%s] Device poll payload parse failed status_code=%s content_type=%s",
+                self.source_id,
+                response.status_code,
+                response.headers.get("content-type"),
+            )
+
+        is_error_response = response.status_code >= 400 or (
+            isinstance(response_payload, dict) and bool(
+                response_payload.get(self.config.oauth_error_field or "error")
+                or response_payload.get("error")
+            )
+        )
+        if is_error_response:
+            error_payload: dict[str, Any]
+            if isinstance(response_payload, dict):
+                error_payload = response_payload
+            else:
+                error_payload = {"error": "oauth_error", "error_description": response.text}
+
+            error_code = self._first_non_none(
+                error_payload.get(self.config.oauth_error_field),
+                error_payload.get("error"),
+            )
+            error_description = self._first_non_none(
+                error_payload.get(self.config.oauth_error_description_field),
+                error_payload.get("error_description"),
+            )
+            provider_interval = self._coerce_positive_int(
+                self._first_non_none(
+                    error_payload.get(self.config.device_interval_field),
+                    error_payload.get("interval"),
+                )
+            )
+            current_interval = (
+                provider_interval
+                or self._coerce_positive_int(
+                    self._first_non_none(
+                        device_state.get(self.config.device_interval_field),
+                        device_state.get("interval"),
+                    )
+                )
+                or self.config.device_poll_interval
+                or 5
+            )
+            logger.info(
+                "[%s] Device poll error code=%s interval=%s description=%s",
+                self.source_id,
+                error_code,
+                current_interval,
+                error_description,
+            )
+            if error_code == "authorization_pending":
+                device_state["interval"] = current_interval
+                self._save_device_state(device_state)
+                self._save_device_flow_status("pending", {"retry_after": current_interval})
+                return {"status": "pending", "retry_after": current_interval}
+            if error_code == "slow_down":
+                current_interval = provider_interval or (current_interval + 5)
+                device_state["interval"] = current_interval
+                self._save_device_state(device_state)
+                self._save_device_flow_status("pending", {"retry_after": current_interval})
+                return {"status": "pending", "retry_after": current_interval}
+            if error_code in {"expired_token", "invalid_grant"}:
+                self._clear_device_state()
+                self._save_device_flow_status("expired")
+                return {"status": "expired"}
+            if error_code == "access_denied":
+                self._clear_device_state()
+                self._save_device_flow_status("denied")
+                return {"status": "denied"}
+            error_result = {
+                "status": "error",
+                "error": error_code or "oauth_error",
+                "error_description": error_description,
+            }
+            self._save_device_flow_status("error", error_result)
+            return error_result
+
+        if not isinstance(response_payload, dict):
+            error_result = {
+                "status": "error",
+                "error": "oauth_error",
+                "error_description": "OAuth token endpoint returned non-JSON response",
+            }
+            self._save_device_flow_status("error", error_result)
+            return error_result
+
+        token_payload = dict(response_payload)
+        access_token = token_payload.get(OAuthParams.ACCESS_TOKEN)
+        token_field = self.config.token_field or OAuthParams.ACCESS_TOKEN
+        if not access_token:
+            access_token = self._first_non_none(
+                token_payload.get(token_field),
+                token_payload.get(self.config.implicit_access_token_field),
+            )
+            if access_token:
+                token_payload[OAuthParams.ACCESS_TOKEN] = access_token
+
+        if not access_token:
+            error_result = {
+                "status": "error",
+                "error": "invalid_token_response",
+                "error_description": "OAuth token response missing access_token",
+            }
+            self._save_device_flow_status("error", error_result)
+            return error_result
+
+        self._save_token(token_payload)
+        self._clear_device_state()
+        self._save_device_flow_status("authorized")
+        return {"status": "authorized"}
+
+    def _parse_oauth_payload(self, response: httpx.Response) -> dict[str, Any] | None:
+        """
+        Parse OAuth endpoint response payload.
+        Supports both JSON and x-www-form-urlencoded formats.
+        """
+        try:
+            payload = response.json()
+            if isinstance(payload, dict):
+                return payload
+        except Exception:
+            pass
+
+        text = response.text or ""
+        if not text:
+            return None
+
+        content_type = (response.headers.get("content-type") or "").lower()
+        if (
+            "application/x-www-form-urlencoded" not in content_type
+            and "text/plain" not in content_type
+            and "=" not in text
+        ):
+            return None
+
+        parsed = parse_qs(text, keep_blank_values=True)
+        if not parsed:
+            return None
+
+        flattened: dict[str, Any] = {}
+        for key, values in parsed.items():
+            if not values:
+                continue
+            flattened[key] = values[0] if len(values) == 1 else values
+        return flattened
+
+    def _coerce_positive_int(self, value: Any) -> int | None:
+        try:
+            parsed = int(value)
+            return parsed if parsed > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    # -- Refresh/client credentials ---------------------------------------
+
+    async def fetch_client_credentials_token(self) -> dict[str, Any]:
+        if not self.config.token_url:
+            raise ValueError(f"[{self.source_id}] OAuth token_url is required")
+
+        payload = {OAuthParams.GRANT_TYPE: GrantType.CLIENT_CREDENTIALS.value}
+        if self.config.scopes:
+            payload[OAuthParams.SCOPE] = " ".join(self.config.scopes)
+
+        if (self.config.token_request_type or "form").strip().lower() in JSON_STYLE_TOKEN_REQUEST_TYPES:
+            token = await self._fetch_token_json(payload)
+            self._save_token(token)
+            return token
+
+        client = self._build_oauth_client(grant_type=GrantType.CLIENT_CREDENTIALS.value)
+        token = await client.fetch_token(
+            url=self.config.token_url,
+            grant_type=GrantType.CLIENT_CREDENTIALS.value,
+        )
+        token_dict = dict(token)
+        self._save_token(token_dict)
+        return token_dict
+
+    async def _refresh_token(self) -> None:
+        if not self._token_data:
+            return
+
+        refresh_token = self._token_data.get(OAuthParams.REFRESH_TOKEN)
+        if not refresh_token:
+            logger.warning(f"[{self.source_id}] token expired and refresh_token missing")
+            return
+
+        if (self.config.token_request_type or "form").strip().lower() in JSON_STYLE_TOKEN_REQUEST_TYPES:
+            payload = {
+                OAuthParams.GRANT_TYPE: GrantType.REFRESH_TOKEN.value,
+                OAuthParams.REFRESH_TOKEN: refresh_token,
+            }
+            refreshed = await self._fetch_token_json(payload)
+            merged = dict(self._token_data)
+            merged.update(refreshed)
+            self._save_token(merged)
+            return
+
+        client = self._build_oauth_client(token=self._token_data)
+        token = await client.refresh_token(self.config.token_url, refresh_token=refresh_token)
+        merged = dict(self._token_data)
+        merged.update(dict(token))
+        self._save_token(merged)
+
+    async def try_refresh_token(self, force: bool = False) -> bool:
+        """Try to refresh OAuth token in-place. Returns True only when refresh updated token data."""
+        self._load_token()
+        if not self._token_data:
+            return False
+
+        refresh_token = self._token_data.get(OAuthParams.REFRESH_TOKEN)
+        if not refresh_token:
+            return False
+
+        before_access = self._token_data.get(OAuthParams.ACCESS_TOKEN)
+        before_saved_at = self._token_data.get("saved_at")
+        before_refresh = refresh_token
+
+        try:
+            if force:
+                await self._refresh_token()
+            else:
+                await self.ensure_fresh_token()
+        except Exception as exc:
+            logger.warning("[%s] OAuth refresh failed: %s", self.source_id, exc)
+            return False
+
+        self._load_token()
+        if not self._token_data:
+            return False
+
+        after_access = self._token_data.get(OAuthParams.ACCESS_TOKEN)
+        after_saved_at = self._token_data.get("saved_at")
+        after_refresh = self._token_data.get(OAuthParams.REFRESH_TOKEN)
+
+        return bool(
+            after_access
+            and (
+                after_access != before_access
+                or after_saved_at != before_saved_at
+                or after_refresh != before_refresh
+            )
+        )
+
+    async def ensure_fresh_token(self) -> None:
+        if not self._token_data:
+            return
+
+        flow = self._flow_type()
+        expires_at = self._token_data.get("expires_at")
+        if expires_at is not None:
             try:
-                if self.config.token_request_type == "json":
-                    # OpenRouter: JSON body
-                    resp = await client.post(self.config.token_url, json=data)
-                else:
-                    # Standard: Form Data
-                    resp = await client.post(self.config.token_url, data=data)
+                expired = time.time() >= float(expires_at) - 60
+            except (TypeError, ValueError):
+                expired = False
+            if expired:
+                if flow == "client_credentials":
+                    await self.fetch_client_credentials_token()
+                    return
+                if self._token_data.get(OAuthParams.REFRESH_TOKEN):
+                    await self._refresh_token()
+                    return
 
-                resp.raise_for_status()
-                token_data = resp.json()
+        grant_type = GrantType.CLIENT_CREDENTIALS.value if flow == "client_credentials" else None
+        client = self._build_oauth_client(token=self._token_data, grant_type=grant_type)
+        previous_access_token = self._token_data.get(OAuthParams.ACCESS_TOKEN)
 
-                self._save_token(token_data)
+        try:
+            await client.ensure_active_token(self._token_data)
+            if client.token and client.token.get(OAuthParams.ACCESS_TOKEN) != previous_access_token:
+                self._save_token(dict(client.token))
+        except InvalidTokenError:
+            if flow == "client_credentials":
+                await self.fetch_client_credentials_token()
+            elif self._token_data.get(OAuthParams.REFRESH_TOKEN):
+                await self._refresh_token()
 
-            except httpx.HTTPStatusError as e:
-                logger.error(f"[{self.source_id}] Token 交换失败: {e.response.text}")
-                raise
+    async def ensure_valid_token(self) -> None:
+        flow = self._flow_type()
 
-    # ── 应用到客户端 ──────────────────────────────────
+        if flow == "client_credentials" and not self.has_token:
+            await self.fetch_client_credentials_token()
+            return
 
-    async def ensure_valid_token(self):
-        """确保 Token 有效，必要时刷新。"""
-        if self._is_expired():
-            await self._refresh_token()
+        if self._token_data:
+            await self.ensure_fresh_token()
+
+    # -- HTTP integration --------------------------------------------------
 
     def apply(self, client: httpx.AsyncClient) -> httpx.AsyncClient:
-        """将 access_token 注入到 httpx 客户端 Header。"""
         if self._token_data and OAuthParams.ACCESS_TOKEN in self._token_data:
-            token = self._token_data[OAuthParams.ACCESS_TOKEN]
-            client.headers["Authorization"] = f"Bearer {token}"
+            client.headers["Authorization"] = f"Bearer {self._token_data[OAuthParams.ACCESS_TOKEN]}"
         return client
 
     @property
     def has_token(self) -> bool:
-        return self._token_data is not None and OAuthParams.ACCESS_TOKEN in self._token_data
+        # Keep in-memory cache consistent with persisted secrets.
+        self._load_token()
+        return bool(self._token_data and OAuthParams.ACCESS_TOKEN in self._token_data)

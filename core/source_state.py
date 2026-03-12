@@ -21,6 +21,7 @@ class SourceStatus(str, Enum):
 class InteractionType(str, Enum):
     INPUT_TEXT = "input_text"
     OAUTH_START = "oauth_start"
+    OAUTH_DEVICE_FLOW = "oauth_device_flow"
     COOKIES_REFRESH = "cookies_refresh"
     CAPTCHA = "captcha"
     CONFIRM = "confirm"

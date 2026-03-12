@@ -1,0 +1,85 @@
+"""
+Script Step Module.
+
+This module handles the execution of arbitrary Python scripts within a source flow.
+It redirects stdout and stderr to capture runtime logs and updates the source state
+with these logs during execution.
+
+Args Schema:
+    code (str): The Python code to execute.
+
+Return Structure:
+    dict: Any variables defined in `step.outputs` or `step.context` that were set
+          within the script's local environment during execution.
+"""
+
+import logging
+from contextlib import redirect_stderr, redirect_stdout
+from typing import Dict, Any, TYPE_CHECKING
+from core.source_state import SourceStatus
+
+if TYPE_CHECKING:
+    from core.config_loader import StepConfig, SourceConfig
+    from core.executor import Executor
+
+logger = logging.getLogger(__name__)
+
+
+async def execute_script_step(
+    step: "StepConfig",
+    source: "SourceConfig",
+    args: Dict[str, Any],
+    context: Dict[str, Any],
+    outputs: Dict[str, Any],
+    executor: "Executor",
+) -> Dict[str, Any]:
+    """
+    Executes a script step.
+    
+    Returns:
+        Dict[str, Any]: output dictionary with the script results.
+    """
+    # Import locally
+    from core.executor import _RuntimeStreamRelay
+
+    script_code = args.get("code")
+    if not script_code:
+        raise ValueError(f"Step {step.id} has use=script but no 'code' argument provided.")
+    
+    local_env = {**context, **outputs}
+    execution_logs: list[str] = []
+
+    try:
+        def on_script_stream(stream: str, chunk: str):
+            executor._append_runtime_logs(execution_logs, step.id, stream, chunk)
+            executor._update_state(
+                source.id,
+                SourceStatus.ACTIVE,
+                executor._build_runtime_message(step.id, execution_logs),
+            )
+
+        stdout_relay = _RuntimeStreamRelay(
+            lambda text: on_script_stream("stdout", text),
+        )
+        stderr_relay = _RuntimeStreamRelay(
+            lambda text: on_script_stream("stderr", text),
+        )
+
+        with redirect_stdout(stdout_relay), redirect_stderr(stderr_relay):
+            compiled = compile(script_code, f"<step_{step.id}>", "exec")
+            exec(compiled, {}, local_env)
+        
+        output = {}
+        if step.outputs:
+            for key, var_name in step.outputs.items():
+                if key in local_env:
+                    output[key] = local_env[key]
+        if getattr(step, 'context', None):
+            for key, var_name in step.context.items():
+                if key in local_env:
+                    output[key] = local_env[key]
+                    
+        return output
+    except Exception as script_e:
+        logger.error(f"Error executing script in step {step.id}:\n{script_code}")
+        raise script_e

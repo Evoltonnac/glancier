@@ -4,9 +4,12 @@ Glancier 主入口：启动 FastAPI 后端服务。
 
 import asyncio
 import copy
+import json
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -14,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config_loader import load_config, AppConfig, SourceConfig
 from core.models import StoredSource
+from core.bootstrap import seed_first_launch_workspace
 from core.data_controller import DataController
 from core.secrets_controller import SecretsController
 from core.executor import Executor
@@ -22,6 +26,17 @@ from core.resource_manager import ResourceManager
 from core.integration_manager import IntegrationManager
 from core.settings_manager import SettingsManager
 from core import api
+
+
+def resolve_initial_log_level() -> int:
+    data_root = Path(os.getenv("GLANCIER_DATA_DIR", "."))
+    settings_file = data_root / "data" / "settings.json"
+    try:
+        payload = json.loads(settings_file.read_text(encoding="utf-8"))
+        debug_enabled = bool(payload.get("debug_logging_enabled", False))
+        return logging.DEBUG if debug_enabled else logging.INFO
+    except Exception:
+        return logging.INFO
 
 
 def resolve_stored_source(stored: "StoredSource", config: AppConfig) -> SourceConfig | None:
@@ -63,37 +78,41 @@ def resolve_stored_source(stored: "StoredSource", config: AppConfig) -> SourceCo
 
 # 日志配置
 logging.basicConfig(
-    level=logging.INFO,
+    level=resolve_initial_log_level(),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+class StartupBackgroundTasks:
+    """Runtime-compatible background task collector for startup seeding."""
+
+    def __init__(self) -> None:
+        self._tasks: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+
+    def add_task(self, func, *args, **kwargs) -> None:
+        self._tasks.append((func, args, kwargs))
+
+    def drain(self) -> list[tuple[object, tuple[object, ...], dict[str, object]]]:
+        tasks = list(self._tasks)
+        self._tasks.clear()
+        return tasks
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan 事件处理：启动时和关闭时的逻辑。"""
 
-    # 启动时：自动刷新 JSON 存储的所有数据源
-    executor = app.state.executor
-    resource_manager = app.state.resource_manager
-    config = app.state.config
-
-    # 刷新 JSON 存储的数据源 (StoredSource)
-    stored_sources = resource_manager.load_sources()
-    if stored_sources:
-        logger.info(f"启动时自动刷新 {len(stored_sources)} 个存储数据源...")
-        for stored in stored_sources:
-            try:
-                # 将 StoredSource 解析为 SourceConfig
-                resolved = resolve_stored_source(stored, config)
-                if resolved:
-                    asyncio.create_task(executor.fetch_source(resolved))
-                else:
-                    logger.warning(f"[{stored.id}] 无法解析 StoredSource，跳过刷新")
-            except Exception as e:
-                logger.error(f"[{stored.id}] 启动刷新失败: {e}")
-    else:
-        logger.info("没有存储的数据源，跳过启动刷新")
+    startup_tasks = getattr(app.state, "startup_background_tasks", None)
+    if startup_tasks is not None:
+        scheduled = 0
+        for func, args, kwargs in startup_tasks.drain():
+            result = func(*args, **kwargs)
+            if asyncio.iscoroutine(result):
+                asyncio.create_task(result)
+            scheduled += 1
+        if scheduled:
+            logger.info("启动时已调度 %d 个 bootstrap source 刷新任务", scheduled)
 
     yield  # 应用运行中
 
@@ -114,13 +133,27 @@ def create_app() -> FastAPI:
     # CORS 中间件
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:5173"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # ── 初始化核心组件 ────────────────────────────────────────
+    # ── 初始化资源管理器（用于首启样例） ───────────────────────
+    resource_manager = ResourceManager()
+    integration_manager = IntegrationManager()
+    existing_source_ids_before_seed = {source.id for source in resource_manager.load_sources()}
+    seeded = seed_first_launch_workspace(integration_manager, resource_manager)
+
+    # ── 加载配置 ──────────────────────────────────────────────
     logger.info("正在加载配置...")
     try:
         config = load_config()
@@ -144,14 +177,22 @@ def create_app() -> FastAPI:
     # 执行器
     executor = Executor(data_controller, secrets_controller, settings_manager)
 
-    # 资源管理器 (JSON-based storage)
-    resource_manager = ResourceManager()
-
-    # 集成管理器 (YAML 文件管理)
-    integration_manager = IntegrationManager()
-
     # 将 SettingsManager 注入 SecretsController，开启自适应加解密
     secrets_controller.inject_settings_manager(settings_manager)
+
+    # 使用与 API 创建 source 一致的核心流程，为 bootstrap 新建 source 自动触发刷新
+    startup_background_tasks = StartupBackgroundTasks()
+    if seeded:
+        source_by_id = {source.id: source for source in resource_manager.load_sources()}
+        new_source_ids = sorted(set(source_by_id) - existing_source_ids_before_seed)
+        for source_id in new_source_ids:
+            api.create_stored_source_record(
+                source_by_id[source_id],
+                resource_manager,
+                executor=executor,
+                config=config,
+                background_tasks=startup_background_tasks,
+            )
 
     # 注入依赖到 API 模块
     api.init_api(
@@ -173,6 +214,7 @@ def create_app() -> FastAPI:
     app.state.executor = executor
     app.state.data_controller = data_controller
     app.state.resource_manager = resource_manager
+    app.state.startup_background_tasks = startup_background_tasks
 
     return app
 

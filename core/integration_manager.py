@@ -37,6 +37,8 @@ class IntegrationManager:
         files = {}
         for pattern in ("*.yaml", "*.yml"):
             for file_path in self.integrations_dir.glob(pattern):
+                if file_path.name.startswith("."):
+                    continue
                 files[file_path.name] = file_path
         return [files[name] for name in sorted(files)]
 
@@ -81,6 +83,16 @@ class IntegrationManager:
             return None
         return self._read_display_name_from_file(file_path)
 
+    def get_integration_path(self, filename: str) -> Optional[str]:
+        """返回 integration 文件的绝对路径。"""
+        file_path = self._resolve_file_path(filename)
+        if not file_path.exists():
+            return None
+        try:
+            return str(file_path.resolve())
+        except Exception:
+            return str(file_path)
+
     def list_integration_file_metadata(self) -> List[dict[str, Any]]:
         """列出 integration 文件元数据（filename/id/name）。"""
         items: List[dict[str, Any]] = []
@@ -93,10 +105,6 @@ class IntegrationManager:
                 }
             )
         return items
-
-    def list_integrations(self) -> List[str]:
-        """兼容旧调用：返回文件名列表。"""
-        return self.list_integration_files()
 
     def get_integration_ids_in_file(self, filename: str) -> List[str]:
         """返回文件对应的 integration id（文件名去扩展名）。"""

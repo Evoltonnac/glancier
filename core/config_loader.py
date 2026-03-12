@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import copy
 import yaml
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,11 @@ class TokenEndpointAuthMethod(str, Enum):
     CLIENT_SECRET_POST = "client_secret_post"
     NONE = "none"
 
+class OAuthFlowType(str, Enum):
+    CODE = "code"
+    DEVICE = "device"
+    CLIENT_CREDENTIALS = "client_credentials"
+
 
 class AuthConfig(BaseModel):
     type: AuthType = AuthType.NONE
@@ -78,14 +83,38 @@ class AuthConfig(BaseModel):
     # OAuth PKCE Support
     supports_pkce: bool = True
     code_challenge_method: str = "S256"
+    response_type: str = "code"
+    oauth_flow: OAuthFlowType = OAuthFlowType.CODE
 
     # OAuth Token Endpoint Auth Method
     token_endpoint_auth_method: TokenEndpointAuthMethod = TokenEndpointAuthMethod.NONE
 
     # OAuth Customization (for non-standard providers like OpenRouter)
-    token_request_type: str = "form"  # form / json
+    token_request_type: str = "form"  # form / json(response) / json_body(request body)
     token_field: str = "access_token"  # The field in response to use as token
+    token_type_field: str = "token_type"
+    expires_in_field: str = "expires_in"
+    refresh_token_field: str = "refresh_token"
+    scope_field: str = "scope"
     redirect_param: str = "redirect_uri"  # The query param for redirect url
+    authorization_code_field: str = "code"
+    authorization_state_field: str = "state"
+    implicit_access_token_field: str = "access_token"
+    implicit_token_type_field: str = "token_type"
+    implicit_expires_in_field: str = "expires_in"
+    implicit_scope_field: str = "scope"
+    implicit_state_field: str = "state"
+    device_authorization_url: Optional[str] = None
+    device_code_field: str = "device_code"
+    device_user_code_field: str = "user_code"
+    device_verification_uri_field: str = "verification_uri"
+    device_verification_uri_complete_field: str = "verification_uri_complete"
+    device_interval_field: str = "interval"
+    device_expires_in_field: str = "expires_in"
+    oauth_error_field: str = "error"
+    oauth_error_description_field: str = "error_description"
+    device_poll_interval: int = 5
+    device_poll_timeout: int = 900
 
     # Documentation URL for user to create OAuth client
     doc_url: Optional[str] = None
@@ -153,11 +182,12 @@ class StepConfig(BaseModel):
 # ── 视图组件配置 ──────────────────────────────────────
 
 class ViewComponent(BaseModel):
+    id: str
     type: ViewComponentType = ViewComponentType.METRIC
     source_id: Optional[str] = None  # Make optional for templates/groups
     field: Optional[str] = None
     icon: Optional[str] = None
-    label: str = ""
+    label: Optional[str] = None
     format: Optional[str] = None
     delta_field: Optional[str] = None
 
@@ -173,10 +203,11 @@ class ViewComponent(BaseModel):
 # ── Integration Configuration ────────────────────────────────────────
 
 class IntegrationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str
-    auth: AuthConfig = Field(default_factory=AuthConfig)
-    request: Optional[RequestConfig] = None
-    parser: ParserConfig = Field(default_factory=ParserConfig)
+    name: Optional[str] = None
+    description: Optional[str] = None
     flow: Optional[List[StepConfig]] = None
     # View Templates - defined in Integration YAML
     templates: List[ViewComponent] = Field(default_factory=list)
@@ -187,7 +218,7 @@ class IntegrationConfig(BaseModel):
 class SourceConfig(BaseModel):
     id: str
     name: str
-    description: str = ""
+    description: Optional[str] = ""
     icon: Optional[str] = None
     enabled: bool = True
 
@@ -195,10 +226,6 @@ class SourceConfig(BaseModel):
     integration: Optional[str] = None  # Reference to an integration ID
     vars: Dict[str, Any] = Field(default_factory=dict) # Variables for template substitution
 
-    # Specific configs (can override integration)
-    auth: Optional[AuthConfig] = None
-    request: Optional[RequestConfig] = None
-    parser: Optional[ParserConfig] = None
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
 
     # Flow Configuration (New)
@@ -206,11 +233,10 @@ class SourceConfig(BaseModel):
 
     @model_validator(mode='after')
     def check_config_completeness(self) -> "SourceConfig":
-        # Note: This runs AFTER resolution, so auth/request/parser should be populated
-        # But if we validate raw objects before resolution, we need to be careful.
-        # Here we assume this model is used validates the FINAL object.
-        if not self.flow and not self.auth and not self.integration:
-             # It's possible auth is optional/none default, but request is usually required.
+        # Note: This runs AFTER resolution, so flow should be populated
+        if not self.flow and not self.integration:
+             # It's possible flow is optional for some very basic integrations?
+             # But usually it should be required now.
              pass 
         return self
 
@@ -324,12 +350,23 @@ def load_all_yamls(root: Path) -> dict:
     }
     
     files = []
+
+    def _is_visible_yaml(path: Path) -> bool:
+        return path.is_file() and not path.name.startswith(".")
+
     if root.is_file():
-        files.append(root)
+        if _is_visible_yaml(root):
+            files.append(root)
     elif root.is_dir():
-        # Recursive glob
-        files.extend(root.glob("**/*.yaml"))
-        files.extend(root.glob("**/*.yml"))
+        # Only load direct children and specific config directories
+        files.extend(path for path in root.glob("*.yaml") if _is_visible_yaml(path))
+        files.extend(path for path in root.glob("*.yml") if _is_visible_yaml(path))
+        
+        integrations_dir = root / "integrations"
+        if integrations_dir.is_dir():
+            files.extend(path for path in integrations_dir.glob("*.yaml") if _is_visible_yaml(path))
+            files.extend(path for path in integrations_dir.glob("*.yml") if _is_visible_yaml(path))
+            
         # Sort to ensure deterministic order (e.g. config.yaml first?)
         # Let's just sort by name
         files.sort()
@@ -346,22 +383,7 @@ def load_all_yamls(root: Path) -> dict:
                         logger.warning("Skipping invalid integration file %s: top-level object required", f)
                         continue
 
-                    integration_payload: dict[str, Any]
-                    if "integrations" in content:
-                        legacy_items = content.get("integrations")
-                        if not isinstance(legacy_items, list) or len(legacy_items) != 1:
-                            logger.warning(
-                                "Skipping integration file %s: expected exactly one item in legacy 'integrations' list",
-                                f,
-                            )
-                            continue
-                        legacy_item = legacy_items[0]
-                        if not isinstance(legacy_item, dict):
-                            logger.warning("Skipping integration file %s: legacy integration item must be object", f)
-                            continue
-                        integration_payload = copy.deepcopy(legacy_item)
-                    else:
-                        integration_payload = copy.deepcopy(content)
+                    integration_payload = copy.deepcopy(content)
 
                     file_based_id = f.stem
                     declared_id = integration_payload.pop("id", None)
