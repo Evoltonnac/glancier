@@ -5,7 +5,7 @@
 ## Directory Layout
 
 ```
-quota-board/
+glancier/
 ├── main.py                  # FastAPI application entrypoint and dependency wiring
 ├── core/                    # Backend domain/services (API, executor, auth, storage)
 ├── config/                  # YAML integration definitions
@@ -32,7 +32,7 @@ quota-board/
 **`config/integrations/`:**
 - Purpose: Integration definitions and templates
 - Contains: provider YAMLs and flow definitions
-- Key files: `config/integrations/openrouter_quota.yaml`, `config/integrations/soniox_quota.yaml`
+- Key files: `config/integrations/openrouter_keys_apikey.yaml`, `config/integrations/soniox_dashboard.yaml`
 
 **`ui-react/src/`:**
 - Purpose: Frontend UI and client logic

@@ -1,4 +1,4 @@
-# Glancier (formerly Quota Board)
+# Glancier
 
 **Glancier** 是一个**配置驱动**的通用型**个人数据聚合器与中心 (Personal Data Aggregator & Hub)**。
 
@@ -67,8 +67,19 @@ cd ui-react && npm install
 ### 2. 运行开发服务器
 
 ```bash
-cd ui-react
-npm run dev:all  # 同时启动前端与后端 (默认端口: 3000 & 8400)
+make dev         # 同时启动前端与后端 (默认端口: 3000 & 8400)
+# 或
+make dev-tauri   # 同时启动后端与 Tauri dev
+```
+
+### 2.1 统一命令入口（推荐）
+
+```bash
+make help                     # 查看所有统一命令
+make build-backend            # 仅准备 Python sidecar
+make build-desktop            # 打包桌面应用
+make test-impacted            # 按变更文件执行测试门禁
+make clean-artifacts          # 清理构建产物
 ```
 
 ### 3. 创建您的第一个集成
@@ -92,16 +103,16 @@ npm run dev:all  # 同时启动前端与后端 (默认端口: 3000 & 8400)
 
 ```bash
 # Backend core gate
-bash scripts/test_backend_core.sh
+make test-backend
 
 # Frontend core gate
-bash scripts/test_frontend_core.sh
+make test-frontend
 
 # Frontend type gate
-bash scripts/test_frontend_core.sh --with-typecheck
+make test-typecheck
 
 # Impacted-only gate (changed-file driven)
-bash scripts/test_impacted.sh
+make test-impacted
 
 # Minimal smoke path
 python -m pytest tests/smoke/test_phase11_smoke.py -q
@@ -113,6 +124,7 @@ python -m pytest tests/smoke/test_phase11_smoke.py -q
 
 - **UI 规范与设计红线**：[`docs/view_micro_widget_architecture.md`](docs/view_micro_widget_architecture.md)
 - **配置架构详解**：[`CONFIG.md`](CONFIG.md)
+- **构建路径与命令契约**：[`docs/build-path-contract.md`](docs/build-path-contract.md)
 - **AI 助手编程规范**：[`Agent.md`](Agent.md)
 
 ## 许可

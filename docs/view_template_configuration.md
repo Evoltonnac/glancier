@@ -13,6 +13,10 @@ All fields within widget configurations that need to display dynamic data must u
 *   **Syntax:** Enclose the data path in curly braces `{}`. Provide the path matching the output of your integration's extraction steps.
 *   **Direct Value:** If a field is exactly `"{path.to.value}"`, it will be replaced by the typed value (e.g., number, boolean) from the data.
 *   **Interpolation:** If a field is a string containing templates like `"Usage: {path.to.value} units"`, it will be evaluated into a final string.
+*   **Expressions:** Template blocks support common expressions, e.g.:
+    *   `"{fixed((usage ?? 0), 2)}"`
+    *   `"{usage > 80 ? 'High' : 'Normal'}"`
+*   **Expression Specification:** See `sdui/03_template_expression_spec.md` for the full syntax, operators, helper functions, and safety boundaries.
 
 ### Examples
 
@@ -54,7 +58,11 @@ widgets:
 ### `hero_metric`
 Highlights a single, critical numeric **Metric**.
 
-### `progress_bar` (formerly quota_bar)
+### `TextBlock`
+Universal text widget for labels, annotations, and metrics.
+- `maxLines` / `max_lines`: clamps long text to `n` lines.
+
+### `progress_bar`
 A linear progress bar showing usage against a limit.
 *   `title`: The title of the bar.
 *   `usage`: The current usage value.
@@ -70,7 +78,7 @@ A condensed grid for displaying properties.
 
 ```yaml
 templates:
-  - label: "My Metrics Overview"
+  - id: "template_my_metrics"
     type: "source_card"
     ui:
       title: "Platform Usage"

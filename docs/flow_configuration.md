@@ -116,19 +116,18 @@ flow:
     args:
       source: "{dashboard_response}"
       type: "jsonpath"
-          expr: "$.mtd_usage.total_paid_amount_usd"
-        outputs:
-          total_usage: "total_usage"
+      expr: "$.mtd_usage.total_paid_amount_usd"
+    outputs:
+      total_usage: "total_usage"
 
-    # View templates can now utilize {available_balance} and {total_usage}
-    templates:
-      - label: "Soniox Metrics"
-        type: "bento_card"
-        ui:
-          title: "Soniox"
-          icon: "🎙️"
-        widgets:
-          - type: "hero_metric"
-            amount: "{available_balance}"
-            currency: "USD"
+templates:
+  - label: "Soniox Metrics"
+    type: "source_card"
+    ui:
+      title: "Soniox"
+      icon: "🎙️"
+    widgets:
+      - type: "hero_metric"
+        amount: "{available_balance}"
+        currency: "USD"
 ```

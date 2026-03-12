@@ -1,4 +1,4 @@
-# REQUIREMENTS - Glancier v1.0 (formerly Quota Board)
+# REQUIREMENTS - Glancier v1.0
 
 ## 1. 核心需求描述与痛点定义 (Problem & Solution)
 
@@ -14,7 +14,7 @@
 ## 2. 目标与范围 (Scope)
 
 **In Scope:**
-- 品牌重塑：从 Quota Board 更名为 Glancier，重构项目文档、术语表。
+- 品牌重塑：统一项目文档与术语表到 Glancier 标准命名。
 - 代码库更新：替换环境变量、存储键名、本地数据目录等项目级别的命名空间。
 - UI 重构：梳理 React 组件，应用更通用的抽象（如 MetricCard, BentoWidget），契合高密度极简风格。
 - 测试覆盖规范 (TDD)：为后端核心引擎（Flow 执行器、状态机、加密层）与前端核心组件编写单元与集成测试。

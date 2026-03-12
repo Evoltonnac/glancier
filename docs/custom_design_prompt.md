@@ -140,4 +140,5 @@ These colors are often used as thin progress bar tracks or as **Server Rack Styl
 3. **Tabular Nums Everywhere**: Prevent horizontal layout jank during real-time updates.
 4. **Tooltips**: Every icon-only button or truncated text must have a high-contrast tooltip.
 5. **Data Update Animation**: Apply a 150ms background flash to metrics when they update to catch the user's eye without being distracting.
+6. **Scrollbar Policy**: Hide native scrollbars globally across the UI; Monaco Editor is the only explicit exception and must keep its editor scrollbar behavior visible/usable.
 </design-system>

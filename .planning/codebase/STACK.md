@@ -60,7 +60,7 @@
 ## Configuration
 
 **Environment:**
-- Config root resolved via `QUOTA_BOARD_ROOT` in `core/config_loader.py`, `core/data_controller.py`, `core/secrets_controller.py`, `core/settings_manager.py`
+- Config root resolved via `GLANCIER_DATA_DIR` in `core/config_loader.py`, `core/data_controller.py`, `core/secrets_controller.py`, `core/settings_manager.py`
 - API key placeholders support `${ENV_VAR}` via `core/auth/apikey_auth.py`
 
 **Build:**

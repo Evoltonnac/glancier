@@ -1,6 +1,6 @@
 Milestone 1.0: 跃迁 —— Glancier 正式版发布计划
 一、 里程碑目标 (Milestone Objective)
-将项目从局限于“配额监控”的 Quota Board，战略演进为面向重度数字用户的个人全能数据枢纽 (Personal Data Aggregator & Hub) —— Glancier。 通过完成品牌重塑、文档重构、代码语义统一，并引入严格的 TDD (测试驱动开发) 规范，最终构建出一个稳定、高可用、可作为个人开源代表作展示的 v1.0 Release 版本。
+将项目战略定位为面向重度数字用户的个人全能数据枢纽 (Personal Data Aggregator & Hub) —— Glancier。通过完成品牌重塑、文档重构、代码语义统一，并引入严格的 TDD (测试驱动开发) 规范，最终构建出一个稳定、高可用、可作为个人开源代表作展示的 v1.0 Release 版本。
 
 二、 核心需求描述与痛点定义 (Problem & Solution)
 1. 核心痛点：平台疲劳 (Platform Fatigue)
@@ -22,7 +22,7 @@ Phase 1: 品牌与精神重塑 (Rebranding & Documentation)
 核心目标：清理旧有心智模型，确立新的术语标准并体现在文档中。
 
 1.1 术语表更新 (Glossary Refactoring):
-取消 Quota 的狭隘定义，统一重构为更有泛用性的 Metric、Signal 或 Integration Data。
+统一术语定义为更有泛用性的 Metric、Signal 与 Integration Data。
 明确 Flow、Agent、Widget 在 Glancier 语境下的精准定义。
 1.2 文档全面翻新:
 重写 /docs/ 下的架构说明，引入上述提到的竞品分析思路。
@@ -32,10 +32,10 @@ Phase 2: 代码语义更新与组件重构 (Codebase Semantic Update)
 
 2.1 品牌更名，ICON更新，品牌色更新。
 2.2 全局变量与配置更名:
-替换项目级别的命名空间（如本地数据目录从 ~/.quota-board 迁移或更名为 ~/.Glancier）。
-替换环境变量前缀、存储键名（如 QUOTA_ 变更为 GLANCIER_）。
+统一项目级别命名空间（本地数据目录统一为 `~/.glancier`）。
+统一环境变量前缀与存储键命名为 `GLANCIER_`。
 2.3 UI 组件与路由优化:
-梳理 React 组件，将带有强 Quota 业务色彩的类名/文件名（如 QuotaCard, QuotaList）重构为通用抽象（如 MetricCard, BentoWidget）。
+梳理 React 组件，将历史业务色彩较强的类名/文件名重构为通用抽象（如 MetricCard, BentoWidget）。
 优化 AppHeader 与侧边栏/顶栏，确保视觉契合“高密度极简”风格。
 Phase 3: 测试覆盖与 TDD 规范确立 (Test Coverage & TDD)
 核心目标：为 1.0 稳定版保驾护航，建立一套可持续集成的现代测试流程。

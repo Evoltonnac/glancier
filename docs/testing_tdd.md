@@ -27,10 +27,11 @@ This document defines the release-blocking testing baseline introduced in Phase 
 
 ### Local baseline
 
-- Backend baseline: `python -m pytest tests -q`
+- Backend baseline: `make test-backend`
 - Backend targeted checks: `python -m pytest tests -q -k "interaction or auth or encryption"`
-- Frontend baseline: `cd ui-react && npm run test -- --run`
-- Frontend type safety: `cd ui-react && npm run typecheck`
+- Frontend baseline: `make test-frontend`
+- Frontend type safety: `make test-typecheck`
+- Impacted-only gate: `make test-impacted`
 
 ### CI blocking checks
 
@@ -49,8 +50,9 @@ This document defines the release-blocking testing baseline introduced in Phase 
 
 | Layer | Command | Purpose |
 | --- | --- | --- |
-| Backend | `python -m pytest tests -q` | Core backend baseline |
+| Backend | `make test-backend` | Core backend baseline |
 | Backend | `python -m pytest tests/api/test_auth_status.py -q` | Auth status route gate |
-| Frontend | `cd ui-react && npm run test -- --run` | Frontend behavior baseline |
-| Frontend | `cd ui-react && npm run test:core -- --run` | Core component/page contracts |
-| Frontend | `cd ui-react && npm run typecheck` | Type-level gate |
+| Frontend | `make test-frontend` | Frontend behavior baseline |
+| Frontend | `npm --prefix ui-react run test:core` | Core component/page contracts (direct npm form) |
+| Frontend | `make test-typecheck` | Type-level gate |
+| Cross-layer | `make test-impacted` | Changed-file driven gate |

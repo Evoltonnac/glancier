@@ -4,11 +4,11 @@
 
 ## APIs & External Services
 
-**Quota Provider APIs:**
-- OpenRouter - quota/keys endpoints configured in `config/integrations/openrouter_quota.yaml`
+**Provider APIs:**
+- OpenRouter - keys/credits endpoints configured in `config/integrations/openrouter_keys_apikey.yaml`
   - SDK/Client: `httpx` via flow execution in `core/executor.py`
   - Auth: API key/OAuth secrets handled by `core/secrets_controller.py`, `core/auth/oauth_auth.py`
-- Soniox - dashboard/API and webview scrape targets configured in `config/integrations/soniox_quota.yaml` and `config/integrations/soniox_quota_webview.yaml`
+- Soniox - dashboard/API and webview scrape targets configured in `config/integrations/soniox_dashboard.yaml` and `config/integrations/soniox_dashboard_webview.yaml`
   - SDK/Client: `httpx` and Tauri WebView bridge via `core/executor.py`, `ui-react/src-tauri/src/scraper.rs`
   - Auth: browser cookie / flow interactions via `core/auth/browser_auth.py` and `core/source_state.py`
 
@@ -21,7 +21,7 @@
 
 **Databases:**
 - TinyDB local JSON database in `data/data.json`
-  - Connection: filesystem path from `QUOTA_BOARD_ROOT` in `core/data_controller.py`
+  - Connection: filesystem path from `GLANCIER_DATA_DIR` in `core/data_controller.py`
   - Client: `tinydb` in `core/data_controller.py`
 
 **File Storage:**
@@ -57,7 +57,7 @@
 ## Environment Configuration
 
 **Required env vars:**
-- `QUOTA_BOARD_ROOT` - base path override used by `core/config_loader.py`, `core/data_controller.py`, `core/secrets_controller.py`, `core/settings_manager.py`
+- `GLANCIER_DATA_DIR` - base path override used by `core/config_loader.py`, `core/data_controller.py`, `core/secrets_controller.py`, `core/settings_manager.py`
 - Provider key env vars referenced via `${ENV_VAR}` resolution in `core/auth/apikey_auth.py` and examples in `README.md`
 
 **Secrets location:**
