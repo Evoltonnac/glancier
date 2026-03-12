@@ -26,13 +26,21 @@
 
 ## 2. 数据处理类步骤
 
+### 输出映射格式
+- `outputs` 统一使用：`目标变量: 来源路径`。
+- 来源路径支持：
+  - 直接键名（如 `http_response`）
+  - 点路径（如 `headers.Authorization`）
+  - JSONPath（如 `$.data[0].id`，适用于支持结构化输出的步骤）
+
 ### `http`
 - 用途：标准 HTTP 请求。
 - 典型输出：`http_response`、`raw_data`、`headers`。
 
 ### `extract`
 - 用途：从结构化数据中提取字段。
-- 常见 `args`：`source`、`type`（`jsonpath`/`key`）、`expr`。
+- 常见 `args`：`source`、`type`（`jsonpath`/`key`）。
+- 支持多输出：在 `outputs` 中为每个目标变量声明来源路径/表达式。
 
 ### `script`
 - 用途：执行轻量脚本转换数据（受运行时策略约束）。
@@ -47,16 +55,16 @@ flow:
       url: "https://console.soniox.com/"
       intercept_api: "/dashboard/"
     outputs:
-      dashboard_response: "dashboard_response"
+      dashboard_response: "webview_data"
 
   - id: parse_balance
     use: extract
     args:
       source: "{dashboard_response}"
       type: "jsonpath"
-      expr: "$.billing.available_balance_usd"
     outputs:
-      available_balance: "available_balance"
+      available_balance: "$.billing.available_balance_usd"
+      currency: "$.billing.currency"
 ```
 
 ## 4. 失败回放样例

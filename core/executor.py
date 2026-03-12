@@ -197,6 +197,7 @@ class Executor:
         execution_logs: list[str] = []
 
         final_data = {}
+        previous_outputs: Dict[str, Any] = {}
 
         for step in source.flow:
             logger.info(f"[{source.id}] Running step {step.id} ({step.use})")
@@ -206,12 +207,12 @@ class Executor:
                 self._build_runtime_message(step.id, execution_logs),
             )
 
-            # Outputs from previous step - only valid for this step
-            outputs = {}
+            # Previous step outputs are a short-lived scope for argument resolution.
+            step_inputs = previous_outputs
 
             try:
                 # Resolve args with priority: outputs > context > secrets
-                args = self._resolve_args(step.args, outputs, context, source.id)
+                args = self._resolve_args(step.args, step_inputs, context, source.id)
 
                 output = None
 
@@ -224,37 +225,40 @@ class Executor:
                 )
 
                 if step.use in (StepType.API_KEY, StepType.CURL, StepType.OAUTH):
-                    output = await execute_auth_step(step, source, args, context, outputs, self)
+                    output = await execute_auth_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.HTTP:
-                    output = await execute_http_step(step, source, args, context, outputs, self)
+                    output = await execute_http_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.EXTRACT:
-                    output = await execute_extract_step(step, source, args, context, outputs, self)
+                    output = await execute_extract_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.SCRIPT:
-                    output = await execute_script_step(step, source, args, context, outputs, self)
+                    output = await execute_script_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.WEBVIEW:
-                    output = await execute_browser_step(step, source, args, context, outputs, self)
+                    output = await execute_browser_step(step, source, args, context, step_inputs, self)
+
+                current_outputs: Dict[str, Any] = {}
+
                 # Process outputs
                 if output and step.outputs:
-                    for key, var_name in step.outputs.items():
-                        if key in output:
-                            # Store in outputs (single step variable)
-                            outputs[var_name] = output[key]
-                            # Store in final_data to be saved to data.json
-                            final_data[var_name] = output[key]
+                    for target_var, source_path in step.outputs.items():
+                        resolved = self._resolve_output_path(output, source_path)
+                        if resolved is not _MISSING:
+                            current_outputs[target_var] = resolved
+                            final_data[target_var] = resolved
 
                 # Process context
                 if output and getattr(step, 'context', None):
-                    for key, var_name in step.context.items():
-                        if key in output:
-                            outputs[var_name] = output[key]
+                    for target_var, source_path in step.context.items():
+                        resolved = self._resolve_output_path(output, source_path)
+                        if resolved is not _MISSING:
+                            current_outputs[target_var] = resolved
 
                 # Explicitly store secrets if specified in step config
                 if step.secrets and output:
-                    for key, secret_name in step.secrets.items():
-                        if key in output:
+                    for secret_name, source_path in step.secrets.items():
+                        resolved = self._resolve_output_path(output, source_path)
+                        if resolved is not _MISSING:
                             if (
                                 step.use == StepType.OAUTH
-                                and key == "access_token"
                                 and secret_name == "access_token"
                             ):
                                 existing_token_secret = self._secrets.get_secret(source.id, "access_token")
@@ -264,12 +268,15 @@ class Executor:
                                         source.id,
                                     )
                                     continue
-                            self._secrets.set_secret(source.id, secret_name, output[key])
+                            self._secrets.set_secret(source.id, secret_name, resolved)
                             logger.info(f"[{source.id}] Stored secret '{secret_name}' from step {step.id}")
 
                 # Update context with outputs (promote to global context)
-                if outputs:
-                    context.update(outputs)
+                if current_outputs:
+                    context.update(current_outputs)
+
+                # Only the current step's mapped outputs participate in next-step priority 1.
+                previous_outputs = current_outputs
 
             except Exception as step_error:
                 if isinstance(
@@ -325,6 +332,24 @@ class Executor:
             value = self._resolve_dotted_value(scope, key)
             if value is not _MISSING:
                 return value
+        return _MISSING
+
+    def _resolve_output_path(self, output: Dict[str, Any], source_path: str) -> Any:
+        if not isinstance(source_path, str) or not source_path:
+            return _MISSING
+
+        value = self._resolve_dotted_value(output, source_path)
+        if value is not _MISSING:
+            return value
+
+        if source_path.startswith("$"):
+            try:
+                matches = parse(source_path).find(output)
+                if matches:
+                    return matches[0].value
+            except Exception:
+                return _MISSING
+
         return _MISSING
 
     def _resolve_args(self, args: Dict[str, Any], outputs: Dict[str, Any], context: Dict[str, Any], source_id: str) -> Dict[str, Any]:

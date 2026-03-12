@@ -11,10 +11,9 @@ flow:
       intercept_api: "/api/session"
       script: ""
     secrets:
-      webview_data: "test_webview_data"
+      test_webview_data: "webview_data"
     outputs:
-      webview_data: "webview_payload"
-
+      webview_payload: "webview_data"
   - id: fetch_blocked
     use: http
     args:

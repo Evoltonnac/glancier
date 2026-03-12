@@ -24,7 +24,7 @@ flow:
               Authorization: "token {oauth_secrets.access_token}"
               Accept: "application/vnd.github.v3+json"
       outputs:
-          http_response: "user_payload"
+          user_payload: "http_response"
     - id: parse_login
       use: extract
       args:
@@ -32,7 +32,7 @@ flow:
           type: "jsonpath"
           expr: "$.login"
       outputs:
-          login: "login"
+          login: "$.login"
     - id: parse_name
       use: extract
       args:
@@ -40,7 +40,7 @@ flow:
           type: "jsonpath"
           expr: "$.name"
       outputs:
-          name: "name"
+          name: "$.name"
     - id: parse_followers
       use: extract
       args:
@@ -48,7 +48,7 @@ flow:
           type: "jsonpath"
           expr: "$.followers"
       outputs:
-          followers: "followers"
+          followers: "$.followers"
 templates:
     - id: "github_pkce_snapshot"
       type: "source_card"

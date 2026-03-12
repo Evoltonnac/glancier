@@ -6,10 +6,8 @@ flow:
       args:
           label: "OpenRouter Management API Key"
           description: "Paste your OpenRouter key."
-      outputs:
-          api_key: "api_key"
       secrets:
-          api_key: "openrouter_api_key"
+          openrouter_api_key: "api_key"
     - id: fetch_keys
       use: http
       args:
@@ -18,15 +16,14 @@ flow:
           headers:
               Authorization: "Bearer {openrouter_api_key}"
       outputs:
-          http_response: "keys_payload"
+          keys_payload: "http_response"
     - id: parse_keys
       use: extract
       args:
           source: "{keys_payload}"
           type: "jsonpath"
-          expr: "$.data"
       outputs:
-          keys_data: "keys_data"
+          keys_data: "$.data"
     - id: count_keys
       use: script
       args:

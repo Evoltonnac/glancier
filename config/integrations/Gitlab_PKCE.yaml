@@ -22,7 +22,7 @@ flow:
           headers:
               Authorization: "Bearer {oauth_secrets.access_token}"
       outputs:
-          http_response: "user_payload"
+          user_payload: "http_response"
     - id: parse_username
       use: extract
       args:
@@ -30,7 +30,7 @@ flow:
           type: "jsonpath"
           expr: "$.username"
       outputs:
-          username: "username"
+          username: "$.username"
     - id: parse_name
       use: extract
       args:
@@ -38,7 +38,7 @@ flow:
           type: "jsonpath"
           expr: "$.name"
       outputs:
-          name: "name"
+          name: "$.name"
     - id: parse_web_url
       use: extract
       args:
@@ -46,7 +46,7 @@ flow:
           type: "jsonpath"
           expr: "$.web_url"
       outputs:
-          web_url: "web_url"
+          web_url: "$.web_url"
 templates:
     - id: "gitlab_pkce_snapshot"
       type: "source_card"

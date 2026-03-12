@@ -13,7 +13,7 @@ content_template: |
         description: "Paste a complete cURL command copied from browser devtools."
         message: "Please paste your cURL command."
       outputs:
-        headers: "request_headers"
+        request_headers: "headers"
     # cURL tutorial notes:
     # 1) Replace the URL with your target endpoint.
     # 2) Keep only required headers (for example: Authorization, Accept, X-Trace-Id).
@@ -26,7 +26,7 @@ content_template: |
         method: "GET"
         headers: "{request_headers}"
       outputs:
-        http_response: "usage_payload"
+        usage_payload: "http_response"
     - id: parse_result_count
       use: extract
       args:
@@ -34,7 +34,7 @@ content_template: |
         type: "jsonpath"
         expr: "$.results.length()"
       outputs:
-        result_count: "result_count"
+        result_count: "$.results.length()"
   templates:
     - id: "curl_usage"
       type: "source_card"

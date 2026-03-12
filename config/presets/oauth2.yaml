@@ -25,7 +25,7 @@ content_template: |
         headers:
           Authorization: "Bearer {access_token}"
       outputs:
-        http_response: "profile_payload"
+        profile_payload: "http_response"
     - id: parse_username
       use: extract
       args:
@@ -33,7 +33,7 @@ content_template: |
         type: "jsonpath"
         expr: "$.name"
       outputs:
-        username: "username"
+        username: "$.name"
   templates:
     - id: "oauth_profile"
       type: "source_card"

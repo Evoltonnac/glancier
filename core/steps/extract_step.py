@@ -6,20 +6,58 @@ like JSON responses or dictionaries, typically using JSONPath or direct key look
 
 Args Schema:
     source (Any): The source data to extract from (e.g., dict or list).
-    expr (str): The extraction expression (e.g., JSONPath string or dictionary key).
     type (str, optional): The extraction method. 'jsonpath' or 'key'. Defaults to 'jsonpath'.
 
 Return Structure:
-    dict: A dictionary where the key is defined by step.outputs (first value)
-          and the value is the extracted data.
+    dict: Extracted values for all mapped outputs.
 """
 
+import logging
 from jsonpath_ng import parse
 from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.config_loader import StepConfig, SourceConfig
     from core.executor import Executor
+
+logger = logging.getLogger(__name__)
+_MISSING = object()
+
+
+def _extract_jsonpath(source_data: Any, expr: str) -> Any:
+    try:
+        jsonpath_expr = parse(expr)
+    except Exception:
+        return _MISSING
+
+    matches = jsonpath_expr.find(source_data)
+    if not matches:
+        return _MISSING
+    return matches[0].value
+
+
+def _extract_key(source_data: Any, expr: str) -> Any:
+    if not isinstance(source_data, dict):
+        return _MISSING
+
+    # Case-insensitive header lookup if it seems to be headers (ratelimit)
+    if "ratelimit" in str(expr).lower():
+        for k, v in source_data.items():
+            if k.lower() == str(expr).lower():
+                return v
+        return _MISSING
+
+    if expr in source_data:
+        return source_data[expr]
+    return _MISSING
+
+
+def _extract_value(source_data: Any, expr: str, extract_type: str) -> Any:
+    if extract_type == "jsonpath":
+        return _extract_jsonpath(source_data, expr)
+    if extract_type == "key":
+        return _extract_key(source_data, expr)
+    return _MISSING
 
 
 async def execute_extract_step(
@@ -37,28 +75,28 @@ async def execute_extract_step(
         Dict[str, Any]: output dictionary with the extracted value.
     """
     source_data = args.get("source")
-    expr = args.get("expr")
     extract_type = args.get("type", "jsonpath")
 
     if not step.outputs:
         return {}
 
-    output_key = list(step.outputs.values())[0]
+    extracted: Dict[str, Any] = {}
+    for target_var, source_path in step.outputs.items():
+        if not isinstance(source_path, str):
+            logger.warning(
+                "[%s] extract output '%s' has non-string source path '%s'",
+                step.id,
+                target_var,
+                source_path,
+            )
+            continue
 
-    if extract_type == "jsonpath":
-        jsonpath_expr = parse(expr)
-        matches = jsonpath_expr.find(source_data)
-        if matches:
-            return {output_key: matches[0].value}
-        return {}
-    
-    elif extract_type == "key":
-        if isinstance(source_data, dict):
-            # Case-insensitive header lookup if it seems to be headers (ratelimit)
-            if "ratelimit" in str(expr).lower():
-                val = next((v for k, v in source_data.items() if k.lower() == str(expr).lower()), None)
-                return {output_key: val}
-            return {output_key: source_data.get(expr)}
-        return {}
+        value = _extract_value(source_data, source_path, extract_type)
 
-    return {}
+        if value is _MISSING:
+            continue
+
+        # Publish source-path key so executor can map `target: source_path`.
+        extracted[source_path] = value
+
+    return extracted

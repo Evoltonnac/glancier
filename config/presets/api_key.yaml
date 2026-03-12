@@ -23,7 +23,7 @@ content_template: |
         headers:
           Authorization: "Bearer {api_key}"
       outputs:
-        http_response: "payload"
+        payload: "http_response"
     - id: parse_value
       use: extract
       args:
@@ -31,7 +31,7 @@ content_template: |
         type: "jsonpath"
         expr: "$.value"
       outputs:
-        value: "value"
+        value: "$.value"
   templates:
     - id: "overview"
       type: "source_card"

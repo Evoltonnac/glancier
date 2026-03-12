@@ -24,6 +24,15 @@ if TYPE_CHECKING:
     from core.executor import Executor
 
 
+def _secret_name_for_source(step: "StepConfig", source_path: str, default: str) -> str:
+    if not step.secrets:
+        return default
+    for secret_name, mapped_path in step.secrets.items():
+        if mapped_path == source_path:
+            return secret_name
+    return default
+
+
 async def execute_browser_step(
     step: "StepConfig",
     source: "SourceConfig",
@@ -46,7 +55,7 @@ async def execute_browser_step(
     from core.executor import RequiredSecretMissing
     from core.source_state import InteractionType
 
-    secret_key = step.secrets.get("webview_data", "webview_data") if step.secrets else "webview_data"
+    secret_key = _secret_name_for_source(step, "webview_data", "webview_data")
     webview_data = executor._secrets.get_secret(source.id, secret_key)
     
     if not webview_data:

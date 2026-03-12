@@ -36,6 +36,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _secret_name_for_source(step: "StepConfig", source_path: str, default: str) -> str:
+    if not step.secrets:
+        return default
+    for secret_name, mapped_path in step.secrets.items():
+        if mapped_path == source_path:
+            return secret_name
+    return default
+
+
 async def execute_auth_step(
     step: "StepConfig",
     source: "SourceConfig",
@@ -54,7 +63,7 @@ async def execute_auth_step(
     from core.source_state import InteractionType, InteractionField
 
     if step.use == StepType.API_KEY:
-        secret_key = step.secrets.get("api_key", "api_key") if step.secrets else "api_key"
+        secret_key = _secret_name_for_source(step, "api_key", "api_key")
         api_key = executor._secrets.get_secret(source.id, secret_key)
 
         if not api_key:
@@ -75,7 +84,7 @@ async def execute_auth_step(
         return {"api_key": api_key}
 
     elif step.use == StepType.CURL:
-        secret_key = step.secrets.get("curl_command", "curl_command") if step.secrets else "curl_command"
+        secret_key = _secret_name_for_source(step, "curl_command", "curl_command")
         curl_command = executor._secrets.get_secret(source.id, secret_key)
         
         if not curl_command:
@@ -106,18 +115,15 @@ async def execute_auth_step(
         except Exception as e:
             logger.error(f"Failed to parse cURL command for step {step.id}: {e}")
             
+        # Flatten extracted headers to top-level keys so `outputs` can map
+        # using either direct header names (e.g. "Authorization") or dotted paths ("headers.Authorization").
         output = {"curl_command": curl_command, "headers": extracted_headers}
-        if step.outputs:
-            for key, var_name in step.outputs.items():
-                if key != "headers" and key != "curl_command":
-                    val = next((v for k, v in extracted_headers.items() if k.lower() == key.lower()), None)
-                    if val is not None:
-                        output[key] = val
+        output.update(extracted_headers)
         return output
 
     elif step.use == StepType.OAUTH:
         token_data = executor._secrets.get_secrets(source.id)
-        oauth_secret_key = step.secrets.get("oauth_secrets") if step.secrets else None
+        oauth_secret_key = _secret_name_for_source(step, "oauth_secrets", "oauth_secrets")
         explicit_payload = token_data.get(oauth_secret_key) if oauth_secret_key else None
         default_payload = token_data.get("oauth_secrets")
         legacy_payload = token_data.get("access_token")

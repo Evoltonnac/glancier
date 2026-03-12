@@ -9,25 +9,29 @@ Flow 是集成执行流水线，负责：
 
 ## 2. Step 通用结构
 
-每个 `flow` 节点均支持：
-- `id`（必填）：步骤唯一标识。
-- `use`（必填）：步骤类型。
-- `args`：步骤参数（支持模板插值）。
-- `outputs`：将结果字段映射为 Flow 变量。
-- `secrets`：声明需要持久化保存的敏感数据映射。
+每个 `flow` 节点均支持以下输出处理方式，它们都能使变量在后续 Step 中通过 `{var}` 引用，但持久化行为不同：
+
+| 字段 | 持久化方式 | 安全性 | 主要用途 |
+| --- | --- | --- | --- |
+| `outputs` | **持久化到 Data Store** | 公开（用于展示） | 最终展示给用户的数据（如余额、进度、文本）。 |
+| `secrets` | **持久化到 Secret Store** | 加密（受保护） | 敏感凭据（如 API Key, OAuth Token, Session）。 |
+| `context` | **仅保留在内存** | 临时（不落盘） | 流程中间变量（如临时 ID、仅供后续步骤使用的参数）。 |
+
+其中 `outputs` / `context` / `secrets` 的映射格式统一为：`目标变量: 来源路径`。
 
 示例：
 
 ```yaml
-- id: fetch_profile
+- id: fetch_api
   use: http
   args:
-    method: GET
-    url: "https://api.example.com/me"
-    headers:
-      Authorization: "Bearer {access_token}"
+    url: "https://api.example.com/data"
   outputs:
-    http_response: "profile"
+    display_value: "result.value"     # 存储到 data.json，SDUI 可用
+  secrets:
+    new_token: "headers.X-New-Token"  # 存储到 secrets.json，加密保存
+  context:
+    temp_id: "result.id"              # 仅内存有效，供下个 Step 使用
 ```
 
 ## 3. 变量解析优先级

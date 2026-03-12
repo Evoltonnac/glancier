@@ -8,7 +8,7 @@ flow:
       intercept_api: "/setup/ws/1/accountLogin"
       script: ""
     outputs:
-      webview_data: "account_payload"
+      account_payload: "webview_data"
   - id: parse_full_name
     use: extract
     args:
@@ -16,7 +16,7 @@ flow:
       type: "jsonpath"
       expr: "$.dsInfo.fullName"
     outputs:
-      full_name: "full_name"
+      full_name: "$.dsInfo.fullName"
   - id: parse_email
     use: extract
     args:
@@ -24,7 +24,7 @@ flow:
       type: "jsonpath"
       expr: "$.dsInfo.primaryEmailAddress"
     outputs:
-      email: "email"
+      email: "$.dsInfo.primaryEmailAddress"
   - id: parse_apple_id
     use: extract
     args:
@@ -32,7 +32,7 @@ flow:
       type: "jsonpath"
       expr: "$.dsInfo.appleId"
     outputs:
-      apple_id: "apple_id"
+      apple_id: "$.dsInfo.appleId"
   - id: derive_account_tags
     use: script
     args:

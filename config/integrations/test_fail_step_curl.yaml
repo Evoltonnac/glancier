@@ -12,10 +12,9 @@ flow:
       message: "Paste cURL command for invalid-session test"
       warning_message: "Test only: this config intentionally fails with 401."
     secrets:
-      curl_command: "test_curl_command"
+      test_curl_command: "curl_command"
     outputs:
-      headers: "request_headers"
-
+      request_headers: "headers"
   - id: fetch_unauthorized
     use: http
     args:

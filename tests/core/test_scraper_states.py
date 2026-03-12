@@ -93,13 +93,13 @@ async def test_invalid_credentials_rolls_back_to_nearest_upstream_auth_step(
                 step_id="first_auth",
                 use=StepType.API_KEY,
                 args={"label": "First API Key"},
-                secrets={"api_key": "first_api_key"},
+                secrets={"first_api_key": "api_key"},
             ),
             build_step(
                 step_id="oauth_reauth",
                 use=StepType.OAUTH,
                 args={"oauth_flow": "code", "doc_url": "https://docs.example.com/oauth"},
-                secrets={"access_token": "oauth_reauth_token"},
+                secrets={"oauth_reauth_token": "access_token"},
             ),
             build_step(
                 step_id="fetch_after_oauth",
@@ -144,7 +144,7 @@ async def test_oauth_invalid_credentials_keeps_oauth_secrets_when_refresh_fails(
                 step_id="oauth_auth",
                 use=StepType.OAUTH,
                 args={"oauth_flow": "code"},
-                secrets={"access_token": "custom_oauth_token", "oauth_secrets": "oauth_secrets"},
+                secrets={"custom_oauth_token": "access_token", "oauth_secrets": "oauth_secrets"},
             ),
             build_step(
                 step_id="fetch_data",

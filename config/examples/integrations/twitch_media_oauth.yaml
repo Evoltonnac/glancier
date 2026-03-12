@@ -24,7 +24,7 @@ flow:
           headers:
               Authorization: "OAuth {access_token}"
       outputs:
-          http_response: "session_payload"
+          session_payload: "http_response"
     - id: parse_login
       use: extract
       args:
@@ -32,7 +32,7 @@ flow:
           type: "jsonpath"
           expr: "$.login"
       outputs:
-          login: "login"
+          login: "$.login"
     - id: parse_client_id
       use: extract
       args:
@@ -40,7 +40,7 @@ flow:
           type: "jsonpath"
           expr: "$.client_id"
       outputs:
-          client_id: "client_id"
+          client_id: "$.client_id"
     - id: parse_user_id
       use: extract
       args:
@@ -48,7 +48,7 @@ flow:
           type: "jsonpath"
           expr: "$.user_id"
       outputs:
-          user_id: "user_id"
+          user_id: "$.user_id"
     - id: parse_expires
       use: extract
       args:
@@ -56,7 +56,7 @@ flow:
           type: "jsonpath"
           expr: "$.expires_in"
       outputs:
-          expires_in: "expires_in"
+          expires_in: "$.expires_in"
     - id: parse_scopes
       use: extract
       args:
@@ -64,7 +64,7 @@ flow:
           type: "jsonpath"
           expr: "$.scopes"
       outputs:
-          scopes: "scopes"
+          scopes: "$.scopes"
     - id: summarize_session
       use: script
       args:

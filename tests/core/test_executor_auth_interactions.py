@@ -71,7 +71,7 @@ async def test_webview_interaction_exposes_required_payload(executor):
             "script": "return window.location.href",
             "intercept_api": "/api/session",
         },
-        secrets={"webview_data": "session_capture"},
+        secrets={"session_capture": "webview_data"},
     )
     source = build_source_config(
         source_id="auth-matrix-webview-payload",

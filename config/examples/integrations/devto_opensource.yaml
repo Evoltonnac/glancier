@@ -7,7 +7,7 @@ flow:
           url: "https://dev.to/api/articles?tag=opensource&per_page=1"
           method: "GET"
       outputs:
-          http_response: "articles_payload"
+          articles_payload: "http_response"
     - id: parse_title
       use: extract
       args:
@@ -15,7 +15,7 @@ flow:
           type: "jsonpath"
           expr: "$[0].title"
       outputs:
-          article_title: "article_title"
+          article_title: "$[0].title"
     - id: parse_author
       use: extract
       args:
@@ -23,7 +23,7 @@ flow:
           type: "jsonpath"
           expr: "$[0].user.name"
       outputs:
-          article_author: "article_author"
+          article_author: "$[0].user.name"
     - id: parse_url
       use: extract
       args:
@@ -31,7 +31,7 @@ flow:
           type: "jsonpath"
           expr: "$[0].url"
       outputs:
-          article_url: "article_url"
+          article_url: "$[0].url"
     - id: parse_reactions
       use: extract
       args:
@@ -39,7 +39,7 @@ flow:
           type: "jsonpath"
           expr: "$[0].positive_reactions_count"
       outputs:
-          positive_reactions: "positive_reactions"
+          positive_reactions: "$[0].positive_reactions_count"
     - id: parse_comments
       use: extract
       args:
@@ -47,7 +47,7 @@ flow:
           type: "jsonpath"
           expr: "$[0].comments_count"
       outputs:
-          comments_count: "comments_count"
+          comments_count: "$[0].comments_count"
     - id: parse_reading_time
       use: extract
       args:
@@ -55,7 +55,7 @@ flow:
           type: "jsonpath"
           expr: "$[0].reading_time_minutes"
       outputs:
-          reading_minutes: "reading_minutes"
+          reading_minutes: "$[0].reading_time_minutes"
     - id: calc_card_metrics
       use: script
       args:

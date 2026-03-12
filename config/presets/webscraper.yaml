@@ -13,7 +13,7 @@ content_template: |
         intercept_api: "/api/"
         script: ""
       outputs:
-        webview_data: "page_payload"
+        page_payload: "webview_data"
     - id: parse_title
       use: extract
       args:
@@ -21,7 +21,7 @@ content_template: |
         type: "jsonpath"
         expr: "$.title"
       outputs:
-        title: "title"
+        title: "$.title"
   templates:
     - id: "webscraper_snapshot"
       type: "source_card"

@@ -7,7 +7,7 @@ flow:
           url: "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd"
           method: "GET"
       outputs:
-          http_response: "spot_payload"
+          spot_payload: "http_response"
     - id: parse_paxg
       use: extract
       args:
@@ -15,7 +15,7 @@ flow:
           type: "jsonpath"
           expr: "$['pax-gold'].usd"
       outputs:
-          paxg_price: "paxg_price"
+          paxg_price: "$['pax-gold'].usd"
 templates:
     - id: "gold_market_snapshot"
       type: "source_card"

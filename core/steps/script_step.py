@@ -23,6 +23,23 @@ if TYPE_CHECKING:
     from core.executor import Executor
 
 logger = logging.getLogger(__name__)
+_MISSING = object()
+
+
+def _resolve_script_path(local_env: Dict[str, Any], source_path: str) -> Any:
+    if source_path in local_env:
+        return local_env[source_path]
+
+    if "." not in source_path:
+        return _MISSING
+
+    current: Any = local_env
+    for segment in source_path.split("."):
+        if isinstance(current, dict) and segment in current:
+            current = current[segment]
+            continue
+        return _MISSING
+    return current
 
 
 async def execute_script_step(
@@ -71,13 +88,15 @@ async def execute_script_step(
         
         output = {}
         if step.outputs:
-            for key, var_name in step.outputs.items():
-                if key in local_env:
-                    output[key] = local_env[key]
+            for _target_var, source_path in step.outputs.items():
+                resolved = _resolve_script_path(local_env, source_path)
+                if resolved is not _MISSING:
+                    output[source_path] = resolved
         if getattr(step, 'context', None):
-            for key, var_name in step.context.items():
-                if key in local_env:
-                    output[key] = local_env[key]
+            for _target_var, source_path in step.context.items():
+                resolved = _resolve_script_path(local_env, source_path)
+                if resolved is not _MISSING:
+                    output[source_path] = resolved
                     
         return output
     except Exception as script_e:
