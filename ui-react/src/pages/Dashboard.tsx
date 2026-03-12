@@ -362,9 +362,11 @@ export default function Dashboard() {
             });
         }
 
-        api.updateView(updatedView.id, updatedView).catch((e) =>
-            console.error(e),
-        );
+        api.updateView(updatedView.id, updatedView)
+            .then(() => invalidateViews())
+            .catch((e) =>
+                console.error(e),
+            );
     };
 
     const viewConfigRef = useRef(viewConfig);
@@ -407,10 +409,12 @@ export default function Dashboard() {
 
         const updatedView = { ...currentViewConfig, items: updatedItems };
         setViewConfig(updatedView);
-        api.updateView(updatedView.id, updatedView).catch((e) =>
-            console.error(e),
-        );
-    }, [setViewConfig]);
+        api.updateView(updatedView.id, updatedView)
+            .then(() => invalidateViews())
+            .catch((e) =>
+                console.error(e),
+            );
+    }, [setViewConfig, invalidateViews]);
 
     useEffect(() => {
         if (!gridRef.current || !viewConfig || viewConfig.items.length === 0)
