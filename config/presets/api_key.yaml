@@ -1,0 +1,49 @@
+id: "api_key"
+label: "API Key"
+description: "HTTP API with bearer token authentication."
+filename_hint: "api_key_example"
+content_template: |
+  name: {{display_name_single_quoted}}
+  description: "Preset for API key authenticated HTTP APIs."
+  flow:
+    - id: auth
+      use: api_key
+      args:
+        label: "API Key"
+        description: "Enter your API bearer token"
+      outputs:
+        api_key: "api_key"
+      secrets:
+        api_key: "api_key"
+    - id: fetch_data
+      use: http
+      args:
+        url: "https://api.example.com/v1/metrics"
+        method: "GET"
+        headers:
+          Authorization: "Bearer {api_key}"
+      outputs:
+        http_response: "payload"
+    - id: parse_value
+      use: extract
+      args:
+        source: "{payload}"
+        type: "jsonpath"
+        expr: "$.value"
+      outputs:
+        value: "value"
+  templates:
+    - id: "overview"
+      type: "source_card"
+      ui:
+        title: "API Key Metrics"
+        icon: "🔐"
+      widgets:
+        - type: "TextBlock"
+          text: "{value}"
+          size: "hero"
+          weight: "bold"
+        - type: "TextBlock"
+          text: "Current Value"
+          color: "muted"
+          size: "small"

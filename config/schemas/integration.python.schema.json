@@ -1,0 +1,270 @@
+{
+  "$defs": {
+    "StepConfig": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run"
+        },
+        "use": {
+          "$ref": "#/$defs/StepType"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context",
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secrets",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "use"
+      ],
+      "title": "StepConfig",
+      "type": "object"
+    },
+    "StepType": {
+      "enum": [
+        "http",
+        "oauth",
+        "api_key",
+        "curl",
+        "extract",
+        "script",
+        "log",
+        "webview"
+      ],
+      "title": "StepType",
+      "type": "string"
+    },
+    "ViewComponent": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ViewComponentType",
+          "default": "metric"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "delta_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delta Field"
+        },
+        "ui": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ui"
+        },
+        "widgets": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Widgets"
+        },
+        "use_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Use Group"
+        },
+        "group_vars": {
+          "additionalProperties": true,
+          "title": "Group Vars",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ViewComponent",
+      "type": "object"
+    },
+    "ViewComponentType": {
+      "enum": [
+        "metric",
+        "line_chart",
+        "bar_chart",
+        "table",
+        "json",
+        "badge",
+        "stat_grid",
+        "source_card"
+      ],
+      "title": "ViewComponentType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Generated from Python models: integration root, flow steps, and view component envelope.",
+  "properties": {
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "flow": {
+      "items": {
+        "$ref": "#/$defs/StepConfig"
+      },
+      "title": "Flow",
+      "type": "array"
+    },
+    "templates": {
+      "items": {
+        "$ref": "#/$defs/ViewComponent"
+      },
+      "title": "Templates",
+      "type": "array"
+    }
+  },
+  "required": [
+    "flow"
+  ],
+  "title": "Glancier Integration Configuration (Python Fragment)",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

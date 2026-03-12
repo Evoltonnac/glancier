@@ -1,0 +1,114 @@
+name: "OpenRouter API Keys"
+description: "Use API key auth to fetch OpenRouter developer tooling usage."
+flow:
+    - id: auth
+      use: api_key
+      args:
+          label: "OpenRouter Management API Key"
+          description: "Paste your OpenRouter key."
+      outputs:
+          api_key: "api_key"
+      secrets:
+          api_key: "openrouter_api_key"
+    - id: fetch_keys
+      use: http
+      args:
+          url: "https://openrouter.ai/api/v1/keys"
+          method: "GET"
+          headers:
+              Authorization: "Bearer {openrouter_api_key}"
+      outputs:
+          http_response: "keys_payload"
+    - id: parse_keys
+      use: extract
+      args:
+          source: "{keys_payload}"
+          type: "jsonpath"
+          expr: "$.data"
+      outputs:
+          keys_data: "keys_data"
+    - id: count_keys
+      use: script
+      args:
+          code: |
+              key_count = len(keys_data or [])
+      outputs:
+          key_count: "key_count"
+    - id: summarize_keys
+      use: script
+      args:
+          code: |
+              key_items = keys_data or []
+              active_keys = 0
+              limited_keys = 0
+              total_usage = 0.0
+              total_limit = 0.0
+
+              for item in key_items:
+                  if not item.get("disabled", False):
+                      active_keys += 1
+
+                  usage = item.get("usage")
+                  limit = item.get("limit")
+
+                  if isinstance(usage, (int, float)):
+                      total_usage += float(usage)
+                  if isinstance(limit, (int, float)):
+                      limited_keys += 1
+                      total_limit += float(limit)
+
+              utilization_pct = 0
+              if total_limit > 0:
+                  utilization_pct = min(100, (total_usage / total_limit) * 100)
+      outputs:
+          active_keys: "active_keys"
+          limited_keys: "limited_keys"
+          total_usage: "total_usage"
+          total_limit: "total_limit"
+          utilization_pct: "utilization_pct"
+templates:
+    - id: "openrouter_keys_snapshot"
+      type: "source_card"
+      ui:
+          title: "OpenRouter Key Ledger"
+          icon: "KEY"
+      widgets:
+          - type: "Container"
+            spacing: "small"
+            items:
+                - type: "ColumnSet"
+                  columns:
+                      - type: "Column"
+                        width: "stretch"
+                        items:
+                            - type: "TextBlock"
+                              text: "{key_count}"
+                              size: "hero"
+                              weight: "bold"
+                            - type: "TextBlock"
+                              text: "Managed Keys"
+                              color: "muted"
+                              size: "small"
+                      - type: "Column"
+                        width: "auto"
+                        verticalAlignment: "top"
+                        items:
+                            - type: "Badge"
+                              text: "API Key"
+                              color: "info"
+                - type: "Progress"
+                  value: "{utilization_pct}"
+                  thresholds:
+                      warning: 70
+                      attention: 90
+                - type: "FactSet"
+                  spacing: "compact"
+                  facts:
+                      - label: "Active"
+                        value: "{active_keys}"
+                      - label: "Limited"
+                        value: "{limited_keys}"
+                      - label: "Usage"
+                        value: "${fixed(total_usage, 2)}"
+                      - label: "Limit"
+                        value: "${fixed(total_limit, 2)}"

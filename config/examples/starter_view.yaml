@@ -1,0 +1,39 @@
+id: "starter_pack_overview"
+name: "Starter Pack Overview"
+layout_columns: 12
+items:
+  - id: "widget-starter-devto"
+    x: 0
+    y: 0
+    w: 4
+    h: 3
+    source_id: "starter_devto_source"
+    template_id: "devto_oss_snapshot"
+  - id: "widget-starter-openrouter"
+    x: 4
+    y: 0
+    w: 4
+    h: 3
+    source_id: "starter_openrouter_source"
+    template_id: "openrouter_keys_snapshot"
+  - id: "widget-starter-twitch"
+    x: 8
+    y: 0
+    w: 4
+    h: 3
+    source_id: "starter_twitch_source"
+    template_id: "twitch_oauth_snapshot"
+  - id: "widget-starter-icloud"
+    x: 0
+    y: 3
+    w: 6
+    h: 3
+    source_id: "starter_icloud_source"
+    template_id: "icloud_privacy_snapshot"
+  - id: "widget-starter-gold"
+    x: 6
+    y: 3
+    w: 6
+    h: 3
+    source_id: "starter_gold_source"
+    template_id: "gold_market_snapshot"

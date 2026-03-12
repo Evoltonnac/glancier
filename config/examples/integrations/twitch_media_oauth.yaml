@@ -1,0 +1,131 @@
+name: "Twitch OAuth Session"
+description: "OAuth-based Twitch starter for entertainment and media monitoring."
+flow:
+    - id: authorize
+      use: oauth
+      args:
+          auth_url: "https://id.twitch.tv/oauth2/authorize"
+          token_url: "https://id.twitch.tv/oauth2/token"
+          scopes: ["user:read:email"]
+          doc_url: "https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/"
+          token_request_type: "form"
+          client_id: "" # 请在此填入 Twitch Console 中的 Client ID
+          client_secret: "" # 请在此填入 Twitch Console 中的 Client Secret
+          supports_pkce: false
+      outputs:
+          access_token: "access_token"
+      secrets:
+          access_token: "access_token"
+    - id: fetch_session
+      use: http
+      args:
+          url: "https://id.twitch.tv/oauth2/validate"
+          method: "GET"
+          headers:
+              Authorization: "OAuth {access_token}"
+      outputs:
+          http_response: "session_payload"
+    - id: parse_login
+      use: extract
+      args:
+          source: "{session_payload}"
+          type: "jsonpath"
+          expr: "$.login"
+      outputs:
+          login: "login"
+    - id: parse_client_id
+      use: extract
+      args:
+          source: "{session_payload}"
+          type: "jsonpath"
+          expr: "$.client_id"
+      outputs:
+          client_id: "client_id"
+    - id: parse_user_id
+      use: extract
+      args:
+          source: "{session_payload}"
+          type: "jsonpath"
+          expr: "$.user_id"
+      outputs:
+          user_id: "user_id"
+    - id: parse_expires
+      use: extract
+      args:
+          source: "{session_payload}"
+          type: "jsonpath"
+          expr: "$.expires_in"
+      outputs:
+          expires_in: "expires_in"
+    - id: parse_scopes
+      use: extract
+      args:
+          source: "{session_payload}"
+          type: "jsonpath"
+          expr: "$.scopes"
+      outputs:
+          scopes: "scopes"
+    - id: summarize_session
+      use: script
+      args:
+          code: |
+              expires_seconds = int(expires_in or 0)
+              scopes_count = len(scopes or [])
+              ttl_hours = round(expires_seconds / 3600, 1) if expires_seconds > 0 else 0
+
+              ttl_percent = 0
+              if expires_seconds > 0:
+                  ttl_percent = min(100, (expires_seconds / 86400) * 100)
+
+              risk_percent = max(0, 100 - ttl_percent)
+      outputs:
+          scopes_count: "scopes_count"
+          ttl_hours: "ttl_hours"
+          risk_percent: "risk_percent"
+templates:
+    - id: "twitch_oauth_snapshot"
+      type: "source_card"
+      ui:
+          title: "Twitch OAuth Session"
+          icon: "TV"
+      widgets:
+          - type: "Container"
+            spacing: "small"
+            items:
+                - type: "ColumnSet"
+                  columns:
+                      - type: "Column"
+                        width: "stretch"
+                        items:
+                            - type: "TextBlock"
+                              text: "{login}"
+                              size: "large"
+                              weight: "semibold"
+                              max_lines: 1
+                            - type: "TextBlock"
+                              text: "Entertainment / Media"
+                              color: "muted"
+                              size: "small"
+                      - type: "Column"
+                        width: "auto"
+                        verticalAlignment: "top"
+                        items:
+                            - type: "Badge"
+                              text: "{scopes_count} Scopes"
+                              color: "info"
+                - type: "Progress"
+                  value: "{risk_percent}"
+                  thresholds:
+                      warning: 50
+                      attention: 75
+                - type: "FactSet"
+                  spacing: "compact"
+                  facts:
+                      - label: "Client"
+                        value: "{client_id}"
+                      - label: "User ID"
+                        value: "{user_id}"
+                      - label: "TTL"
+                        value: "{ttl_hours} h"
+                      - label: "Risk"
+                        value: "{fixed(risk_percent, 1)}%"

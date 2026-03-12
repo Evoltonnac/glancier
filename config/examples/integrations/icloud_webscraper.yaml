@@ -1,0 +1,91 @@
+name: "iCloud Account Snapshot"
+description: "WebView scraper starter for iCloud life/privacy account data."
+flow:
+  - id: capture_account
+    use: webview
+    args:
+      url: "https://www.icloud.com/"
+      intercept_api: "/setup/ws/1/accountLogin"
+      script: ""
+    outputs:
+      webview_data: "account_payload"
+  - id: parse_full_name
+    use: extract
+    args:
+      source: "{account_payload}"
+      type: "jsonpath"
+      expr: "$.dsInfo.fullName"
+    outputs:
+      full_name: "full_name"
+  - id: parse_email
+    use: extract
+    args:
+      source: "{account_payload}"
+      type: "jsonpath"
+      expr: "$.dsInfo.primaryEmailAddress"
+    outputs:
+      email: "email"
+  - id: parse_apple_id
+    use: extract
+    args:
+      source: "{account_payload}"
+      type: "jsonpath"
+      expr: "$.dsInfo.appleId"
+    outputs:
+      apple_id: "apple_id"
+  - id: derive_account_tags
+    use: script
+    args:
+      code: |
+        email_text = str(email or "")
+        email_domain = email_text.split("@", 1)[1] if "@" in email_text else "unknown"
+        account_alias = full_name or apple_id or "Unknown User"
+    outputs:
+      email_domain: "email_domain"
+      account_alias: "account_alias"
+templates:
+  - id: "icloud_privacy_snapshot"
+    type: "source_card"
+    ui:
+      title: "iCloud Privacy Snapshot"
+      icon: "CLD"
+    widgets:
+      - type: "Container"
+        spacing: "small"
+        items:
+          - type: "ColumnSet"
+            columns:
+              - type: "Column"
+                width: "stretch"
+                items:
+                  - type: "TextBlock"
+                    text: "{account_alias}"
+                    size: "large"
+                    weight: "semibold"
+                    max_lines: 1
+                  - type: "TextBlock"
+                    text: "{email}"
+                    color: "muted"
+                    size: "small"
+                    max_lines: 1
+              - type: "Column"
+                width: "auto"
+                verticalAlignment: "top"
+                items:
+                  - type: "Badge"
+                    text: "WebView"
+                    color: "info"
+          - type: "FactSet"
+            spacing: "compact"
+            facts:
+              - label: "Category"
+                value: "Life / Privacy"
+              - label: "Apple ID"
+                value: "{apple_id}"
+              - label: "Domain"
+                value: "{email_domain}"
+          - type: "TextBlock"
+            text: "Session capture from iCloud web account endpoint"
+            color: "muted"
+            size: "small"
+            max_lines: 1

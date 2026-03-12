@@ -1,0 +1,47 @@
+id: "oauth2"
+label: "OAuth"
+description: "Authorization-code OAuth2 flow with API request."
+filename_hint: "oauth2_example"
+content_template: |
+  name: {{display_name_single_quoted}}
+  description: "Preset for OAuth2-based integrations."
+  flow:
+    - id: authorize
+      use: oauth
+      args:
+        auth_url: "https://provider.example.com/oauth/authorize"
+        token_url: "https://provider.example.com/oauth/token"
+        scopes: ["read"]
+        doc_url: "https://provider.example.com/docs/oauth"
+      outputs:
+        access_token: "access_token"
+      secrets:
+        access_token: "access_token"
+    - id: fetch_profile
+      use: http
+      args:
+        url: "https://provider.example.com/api/profile"
+        method: "GET"
+        headers:
+          Authorization: "Bearer {access_token}"
+      outputs:
+        http_response: "profile_payload"
+    - id: parse_username
+      use: extract
+      args:
+        source: "{profile_payload}"
+        type: "jsonpath"
+        expr: "$.name"
+      outputs:
+        username: "username"
+  templates:
+    - id: "oauth_profile"
+      type: "source_card"
+      ui:
+        title: "OAuth Profile"
+        icon: "🔓"
+      widgets:
+        - type: "FactSet"
+          facts:
+            - label: "User"
+              value: "{username}"

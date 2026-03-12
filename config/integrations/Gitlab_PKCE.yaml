@@ -1,0 +1,87 @@
+name: "GitLab PKCE Auth"
+description: "OAuth authorization code flow with PKCE using GitLab, requesting api, read_user, and read_repository scopes."
+flow:
+    - id: authorize
+      use: oauth
+      args:
+          oauth_flow: "code"
+          auth_url: "https://gitlab.com/oauth/authorize"
+          token_url: "https://gitlab.com/oauth/token"
+          scopes: ["api", "read_api", "read_user", "read_repository"]
+          doc_url: "https://docs.gitlab.com/integration/oauth_provider/"
+          client_id: "5e1da1f2c428dd23ca5893477f68ebca01f038033448da44c36d33d206cfa548" # 请在此填入 GitLab OAuth App 的 Application ID
+          client_secret: "" # GitLab 的 Public Client (非机密应用) 支持不带 secret 的 PKCE，此处留空即可
+          supports_pkce: true
+      secrets:
+          oauth_secrets: "oauth_secrets"
+    - id: fetch_user
+      use: http
+      args:
+          url: "https://gitlab.com/api/v4/user"
+          method: "GET"
+          headers:
+              Authorization: "Bearer {oauth_secrets.access_token}"
+      outputs:
+          http_response: "user_payload"
+    - id: parse_username
+      use: extract
+      args:
+          source: "{user_payload}"
+          type: "jsonpath"
+          expr: "$.username"
+      outputs:
+          username: "username"
+    - id: parse_name
+      use: extract
+      args:
+          source: "{user_payload}"
+          type: "jsonpath"
+          expr: "$.name"
+      outputs:
+          name: "name"
+    - id: parse_web_url
+      use: extract
+      args:
+          source: "{user_payload}"
+          type: "jsonpath"
+          expr: "$.web_url"
+      outputs:
+          web_url: "web_url"
+templates:
+    - id: "gitlab_pkce_snapshot"
+      type: "source_card"
+      ui:
+          title: "GitLab Profile"
+          icon: "GitLab"
+      widgets:
+          - type: "Container"
+            spacing: "small"
+            items:
+                - type: "ColumnSet"
+                  columns:
+                      - type: "Column"
+                        width: "stretch"
+                        items:
+                            - type: "TextBlock"
+                              text: "{name}"
+                              size: "large"
+                              weight: "semibold"
+                              max_lines: 1
+                            - type: "TextBlock"
+                              text: "@{username}"
+                              color: "muted"
+                              size: "small"
+                      - type: "Column"
+                        width: "auto"
+                        verticalAlignment: "top"
+                        items:
+                            - type: "Badge"
+                              text: "PKCE Flow"
+                              color: "info"
+                - type: "FactSet"
+                  spacing: "compact"
+                  facts:
+                      - label: "Profile"
+                        value: "{web_url}"
+                      - label: "Client ID"
+                        value: "{client_id}"

@@ -1,0 +1,90 @@
+name: "GitHub Device Auth"
+description: "Classic OAuth device flow integration using GitHub as an example. Perfect for CLI or limited-input devices."
+flow:
+    - id: authorize
+      use: oauth
+      args:
+          oauth_flow: "device"
+          device_authorization_url: "https://github.com/login/device/code"
+          token_url: "https://github.com/login/oauth/access_token"
+          scopes: ["repo", "user"]
+          doc_url: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow"
+          client_id: "" # 请在此填入 GitHub OAuth App 的 Client ID
+          token_request_type: "json" # GitHub requires JSON token request to get JSON response
+          device_poll_interval: 5
+      outputs:
+          access_token: "access_token"
+      secrets:
+          access_token: "access_token"
+    - id: fetch_user
+      use: http
+      args:
+          url: "https://api.github.com/user"
+          method: "GET"
+          headers:
+              Authorization: "token {access_token}"
+              Accept: "application/vnd.github.v3+json"
+      outputs:
+          http_response: "user_payload"
+    - id: parse_login
+      use: extract
+      args:
+          source: "{user_payload}"
+          type: "jsonpath"
+          expr: "$.login"
+      outputs:
+          login: "login"
+    - id: parse_name
+      use: extract
+      args:
+          source: "{user_payload}"
+          type: "jsonpath"
+          expr: "$.name"
+      outputs:
+          name: "name"
+    - id: parse_followers
+      use: extract
+      args:
+          source: "{user_payload}"
+          type: "jsonpath"
+          expr: "$.followers"
+      outputs:
+          followers: "followers"
+templates:
+    - id: "github_device_snapshot"
+      type: "source_card"
+      ui:
+          title: "GitHub Device Session"
+          icon: "GitHub"
+      widgets:
+          - type: "Container"
+            spacing: "small"
+            items:
+                - type: "ColumnSet"
+                  columns:
+                      - type: "Column"
+                        width: "stretch"
+                        items:
+                            - type: "TextBlock"
+                              text: "{name}"
+                              size: "large"
+                              weight: "semibold"
+                              max_lines: 1
+                            - type: "TextBlock"
+                              text: "@{login}"
+                              color: "muted"
+                              size: "small"
+                      - type: "Column"
+                        width: "auto"
+                        verticalAlignment: "top"
+                        items:
+                            - type: "Badge"
+                              text: "Device Flow"
+                              color: "info"
+                - type: "FactSet"
+                  spacing: "compact"
+                  facts:
+                      - label: "Followers"
+                        value: "{followers}"
+                      - label: "Client ID"
+                        value: "{client_id}"

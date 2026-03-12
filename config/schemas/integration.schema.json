@@ -71,6 +71,10 @@
     },
     "ViewComponent": {
       "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
         "type": {
           "$ref": "#/$defs/ViewComponentType",
           "default": "metric"
@@ -112,9 +116,16 @@
           "title": "Icon"
         },
         "label": {
-          "default": "",
-          "title": "Label",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
         },
         "format": {
           "anyOf": [
@@ -156,11 +167,10 @@
         "widgets": {
           "anyOf": [
             {
+              "type": "array",
               "items": {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              "type": "array"
+                "$ref": "#/$defs/SduiWidget"
+              }
             },
             {
               "type": "null"
@@ -187,6 +197,9 @@
           "type": "object"
         }
       },
+      "required": [
+        "id"
+      ],
       "title": "ViewComponent",
       "type": "object"
     },
@@ -203,10 +216,1580 @@
       ],
       "title": "ViewComponentType",
       "type": "string"
+    },
+    "SduiWidget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Container"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SduiWidget"
+              }
+            },
+            "spacing": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "none",
+                "small",
+                "default",
+                "large"
+              ]
+            },
+            "verticalAlignment": {
+              "default": "top",
+              "type": "string",
+              "enum": [
+                "top",
+                "center",
+                "bottom"
+              ]
+            },
+            "selectAction": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Action.OpenUrl"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "url"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type",
+            "items"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ColumnSet"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "Column"
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/SduiWidget"
+                    }
+                  },
+                  "width": {
+                    "default": "auto",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "auto"
+                      },
+                      {
+                        "type": "string",
+                        "const": "stretch"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^\\{.*\\}$"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "verticalAlignment": {
+                    "default": "top",
+                    "type": "string",
+                    "enum": [
+                      "top",
+                      "center",
+                      "bottom"
+                    ]
+                  },
+                  "spacing": {
+                    "default": "default",
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "small",
+                      "default",
+                      "large"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "items"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "spacing": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "none",
+                "small",
+                "default",
+                "large"
+              ]
+            },
+            "horizontalAlignment": {
+              "default": "left",
+              "type": "string",
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "columns"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "List"
+            },
+            "data_source": {
+              "type": "string"
+            },
+            "item_alias": {
+              "type": "string"
+            },
+            "render": {
+              "type": "array",
+              "items": {}
+            },
+            "layout": {
+              "default": "col",
+              "type": "string",
+              "enum": [
+                "col",
+                "grid"
+              ]
+            },
+            "columns": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 6
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "spacing": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "none",
+                "small",
+                "default",
+                "large"
+              ]
+            },
+            "filter": {
+              "type": "string"
+            },
+            "sort_by": {
+              "type": "string"
+            },
+            "sort_order": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "pagination": {
+              "default": false,
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "page_size": {
+              "default": 10,
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "data_source",
+            "item_alias",
+            "render"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "TextBlock"
+            },
+            "text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\{.*\\}$"
+                    }
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\{.*\\}$"
+                    }
+                  ]
+                }
+              ]
+            },
+            "size": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "small",
+                "default",
+                "large",
+                "xlarge",
+                "hero"
+              ]
+            },
+            "weight": {
+              "default": "normal",
+              "type": "string",
+              "enum": [
+                "normal",
+                "medium",
+                "semibold",
+                "bold"
+              ]
+            },
+            "color": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "default",
+                "muted",
+                "good",
+                "warning",
+                "attention"
+              ]
+            },
+            "wrap": {
+              "default": true,
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "maxLines": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "max_lines": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "FactSet"
+            },
+            "facts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^\\{.*\\}$"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^\\{.*\\}$"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "spacing": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "compact",
+                "default",
+                "relaxed"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "facts"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Image"
+            },
+            "url": {
+              "type": "string"
+            },
+            "altText": {
+              "default": "",
+              "type": "string"
+            },
+            "size": {
+              "default": "medium",
+              "type": "string",
+              "enum": [
+                "small",
+                "medium",
+                "large"
+              ]
+            },
+            "style": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "default",
+                "avatar"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Badge"
+            },
+            "text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\{.*\\}$"
+                    }
+                  ]
+                }
+              ]
+            },
+            "color": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "default",
+                "good",
+                "warning",
+                "attention",
+                "info"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Progress"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\{.*\\}$"
+                    }
+                  ]
+                }
+              ]
+            },
+            "style": {
+              "default": "bar",
+              "type": "string",
+              "enum": [
+                "bar",
+                "ring"
+              ]
+            },
+            "color": {
+              "type": "string",
+              "enum": [
+                "default",
+                "good",
+                "warning",
+                "attention"
+              ]
+            },
+            "showPercentage": {
+              "default": true,
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "thresholds": {
+              "type": "object",
+              "properties": {
+                "warning": {
+                  "default": 70,
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\{.*\\}$"
+                    }
+                  ]
+                },
+                "attention": {
+                  "default": 90,
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\{.*\\}$"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ActionSet"
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "Action.OpenUrl"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "style": {
+                        "default": "default",
+                        "type": "string",
+                        "enum": [
+                          "default",
+                          "primary",
+                          "secondary"
+                        ]
+                      },
+                      "iconPosition": {
+                        "default": "right",
+                        "type": "string",
+                        "enum": [
+                          "left",
+                          "right",
+                          "none"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "Action.Copy"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "style": {
+                        "default": "default",
+                        "type": "string",
+                        "enum": [
+                          "default",
+                          "primary",
+                          "secondary"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "horizontalAlignment": {
+              "default": "left",
+              "type": "string",
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ]
+            },
+            "spacing": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "compact",
+                "default",
+                "relaxed"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "actions"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Action.OpenUrl"
+            },
+            "title": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "style": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "default",
+                "primary",
+                "secondary"
+              ]
+            },
+            "iconPosition": {
+              "default": "right",
+              "type": "string",
+              "enum": [
+                "left",
+                "right",
+                "none"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "title",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Action.Copy"
+            },
+            "title": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "style": {
+              "default": "default",
+              "type": "string",
+              "enum": [
+                "default",
+                "primary",
+                "secondary"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "title",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SduiContainer": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Container"
+        },
+        "items": {
+          "type": "array",
+          "items": {}
+        },
+        "spacing": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "none",
+            "small",
+            "default",
+            "large"
+          ]
+        },
+        "verticalAlignment": {
+          "default": "top",
+          "type": "string",
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "selectAction": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Action.OpenUrl"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "SduiColumnSet": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ColumnSet"
+        },
+        "columns": {
+          "type": "array",
+          "items": {}
+        },
+        "spacing": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "none",
+            "small",
+            "default",
+            "large"
+          ]
+        },
+        "horizontalAlignment": {
+          "default": "left",
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "SduiColumn": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Column"
+        },
+        "items": {
+          "type": "array",
+          "items": {}
+        },
+        "width": {
+          "default": "auto",
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "auto"
+            },
+            {
+              "type": "string",
+              "const": "stretch"
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            }
+          ]
+        },
+        "verticalAlignment": {
+          "default": "top",
+          "type": "string",
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "spacing": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "none",
+            "small",
+            "default",
+            "large"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "SduiList": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "List"
+        },
+        "data_source": {
+          "type": "string"
+        },
+        "item_alias": {
+          "type": "string"
+        },
+        "render": {
+          "type": "array",
+          "items": {}
+        },
+        "layout": {
+          "default": "col",
+          "type": "string",
+          "enum": [
+            "col",
+            "grid"
+          ]
+        },
+        "columns": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 6
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        },
+        "spacing": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "none",
+            "small",
+            "default",
+            "large"
+          ]
+        },
+        "filter": {
+          "type": "string"
+        },
+        "sort_by": {
+          "type": "string"
+        },
+        "sort_order": {
+          "default": "asc",
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        },
+        "pagination": {
+          "default": false,
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        },
+        "page_size": {
+          "default": 10,
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "data_source",
+        "item_alias",
+        "render"
+      ],
+      "additionalProperties": false
+    },
+    "SduiTextBlock": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "TextBlock"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            }
+          ]
+        },
+        "size": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "small",
+            "default",
+            "large",
+            "xlarge",
+            "hero"
+          ]
+        },
+        "weight": {
+          "default": "normal",
+          "type": "string",
+          "enum": [
+            "normal",
+            "medium",
+            "semibold",
+            "bold"
+          ]
+        },
+        "color": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "default",
+            "muted",
+            "good",
+            "warning",
+            "attention"
+          ]
+        },
+        "wrap": {
+          "default": true,
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        },
+        "maxLines": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        },
+        "max_lines": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "SduiFactSet": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "FactSet"
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^\\{.*\\}$"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^\\{.*\\}$"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "spacing": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "compact",
+            "default",
+            "relaxed"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "facts"
+      ],
+      "additionalProperties": false
+    },
+    "SduiImage": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Image"
+        },
+        "url": {
+          "type": "string"
+        },
+        "altText": {
+          "default": "",
+          "type": "string"
+        },
+        "size": {
+          "default": "medium",
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large"
+          ]
+        },
+        "style": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "default",
+            "avatar"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "SduiBadge": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Badge"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            }
+          ]
+        },
+        "color": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "default",
+            "good",
+            "warning",
+            "attention",
+            "info"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "SduiProgress": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Progress"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            }
+          ]
+        },
+        "style": {
+          "default": "bar",
+          "type": "string",
+          "enum": [
+            "bar",
+            "ring"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "default",
+            "good",
+            "warning",
+            "attention"
+          ]
+        },
+        "showPercentage": {
+          "default": true,
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "pattern": "^\\{.*\\}$"
+            }
+          ]
+        },
+        "thresholds": {
+          "type": "object",
+          "properties": {
+            "warning": {
+              "default": 70,
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            },
+            "attention": {
+              "default": 90,
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{.*\\}$"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "SduiActionSet": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ActionSet"
+        },
+        "actions": {
+          "type": "array",
+          "items": {}
+        },
+        "horizontalAlignment": {
+          "default": "left",
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "spacing": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "compact",
+            "default",
+            "relaxed"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "actions"
+      ],
+      "additionalProperties": false
+    },
+    "SduiAction_OpenUrl": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Action.OpenUrl"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "style": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "default",
+            "primary",
+            "secondary"
+          ]
+        },
+        "iconPosition": {
+          "default": "right",
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "SduiAction_Copy": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Action.Copy"
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "style": {
+          "default": "default",
+          "type": "string",
+          "enum": [
+            "default",
+            "primary",
+            "secondary"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "text"
+      ],
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
-  "description": "Schema for Glancier integration YAML files",
+  "description": "Composed schema for Glancier integration YAML files (Python flow definitions + React SDUI widget definitions).",
   "properties": {
     "name": {
       "anyOf": [

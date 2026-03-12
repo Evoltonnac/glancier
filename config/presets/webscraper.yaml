@@ -1,0 +1,35 @@
+id: "webscraper"
+label: "Web Scraper"
+description: "WebView scraping flow with extracted fields."
+filename_hint: "webscraper_example"
+content_template: |
+  name: {{display_name_single_quoted}}
+  description: "Preset for WebView-based data scraping."
+  flow:
+    - id: collect_page_data
+      use: webview
+      args:
+        url: "https://example.com/dashboard"
+        intercept_api: "/api/"
+        script: ""
+      outputs:
+        webview_data: "page_payload"
+    - id: parse_title
+      use: extract
+      args:
+        source: "{page_payload}"
+        type: "jsonpath"
+        expr: "$.title"
+      outputs:
+        title: "title"
+  templates:
+    - id: "webscraper_snapshot"
+      type: "source_card"
+      ui:
+        title: "Web Scraper"
+        icon: "🕸️"
+      widgets:
+        - type: "FactSet"
+          facts:
+            - label: "Title"
+              value: "{title}"

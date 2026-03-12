@@ -1,0 +1,123 @@
+name: "DEV.to Open Source Feed"
+description: "Fetch latest DEV.to posts focused on technology and open source."
+flow:
+    - id: fetch_articles
+      use: http
+      args:
+          url: "https://dev.to/api/articles?tag=opensource&per_page=1"
+          method: "GET"
+      outputs:
+          http_response: "articles_payload"
+    - id: parse_title
+      use: extract
+      args:
+          source: "{articles_payload}"
+          type: "jsonpath"
+          expr: "$[0].title"
+      outputs:
+          article_title: "article_title"
+    - id: parse_author
+      use: extract
+      args:
+          source: "{articles_payload}"
+          type: "jsonpath"
+          expr: "$[0].user.name"
+      outputs:
+          article_author: "article_author"
+    - id: parse_url
+      use: extract
+      args:
+          source: "{articles_payload}"
+          type: "jsonpath"
+          expr: "$[0].url"
+      outputs:
+          article_url: "article_url"
+    - id: parse_reactions
+      use: extract
+      args:
+          source: "{articles_payload}"
+          type: "jsonpath"
+          expr: "$[0].positive_reactions_count"
+      outputs:
+          positive_reactions: "positive_reactions"
+    - id: parse_comments
+      use: extract
+      args:
+          source: "{articles_payload}"
+          type: "jsonpath"
+          expr: "$[0].comments_count"
+      outputs:
+          comments_count: "comments_count"
+    - id: parse_reading_time
+      use: extract
+      args:
+          source: "{articles_payload}"
+          type: "jsonpath"
+          expr: "$[0].reading_time_minutes"
+      outputs:
+          reading_minutes: "reading_minutes"
+    - id: calc_card_metrics
+      use: script
+      args:
+          code: |
+              reactions = int(positive_reactions or 0)
+              comments = int(comments_count or 0)
+              minutes = int(reading_minutes or 0)
+              engagement_score = min(100, reactions * 2 + comments * 5)
+              reading_label = "Quick Read" if minutes <= 5 else "Deep Read"
+      outputs:
+          engagement_score: "engagement_score"
+          reading_label: "reading_label"
+templates:
+    - id: "devto_oss_snapshot"
+      type: "source_card"
+      ui:
+          title: "DEV.to OSS Pulse"
+          icon: "DEV"
+      widgets:
+          - type: "Container"
+            spacing: "small"
+            items:
+                - type: "ColumnSet"
+                  columns:
+                      - type: "Column"
+                        width: "stretch"
+                        items:
+                            - type: "TextBlock"
+                              text: "{article_title}"
+                              size: "default"
+                              weight: "semibold"
+                              max_lines: 2
+                            - type: "TextBlock"
+                              text: "By {article_author}"
+                              color: "muted"
+                              size: "small"
+                              max_lines: 1
+                      - type: "Column"
+                        width: "auto"
+                        verticalAlignment: "top"
+                        items:
+                            - type: "Badge"
+                              text: "Open Source"
+                              color: "good"
+                - type: "Progress"
+                  value: "{engagement_score}"
+                  thresholds:
+                      warning: 60
+                      attention: 80
+                - type: "FactSet"
+                  spacing: "compact"
+                  facts:
+                      - label: "Reactions"
+                        value: "{positive_reactions}"
+                      - label: "Comments"
+                        value: "{comments_count}"
+                      - label: "Read"
+                        value: "{reading_minutes} min"
+                      - label: "Mode"
+                        value: "{reading_label}"
+                - type: "TextBlock"
+                  text: "{article_url}"
+                  color: "muted"
+                  size: "small"
+                  max_lines: 1
