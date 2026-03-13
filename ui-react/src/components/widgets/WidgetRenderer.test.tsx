@@ -13,7 +13,7 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "List",
-                        data_source: "keys_list",
+                        data_source: [{ name: "Key A", percent: 67 }],
                         item_alias: "key_item",
                         layout: "grid",
                         columns: 2,
@@ -57,7 +57,7 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "List",
-                        data_source: "keys_list",
+                        data_source: [{ percent: "not-a-number" }],
                         item_alias: "key_item",
                         render: [
                             {
@@ -91,7 +91,11 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "List",
-                        data_source: "keys_list",
+                        data_source: [
+                            { name: "Key 1" },
+                            { name: "Key 2" },
+                            { name: "Key 3" },
+                        ],
                         item_alias: "key_item",
                         pagination: true,
                         page_size: 2,
@@ -103,13 +107,7 @@ describe("WidgetRenderer", () => {
                         ],
                     } as any
                 }
-                data={{
-                    keys_list: [
-                        { name: "Key 1" },
-                        { name: "Key 2" },
-                        { name: "Key 3" },
-                    ],
-                }}
+                data={{}}
             />,
         );
 
@@ -184,7 +182,11 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "List",
-                        data_source: "keys_list",
+                        data_source: [
+                            { name: "Key 1", active: true, percent: 90 },
+                            { name: "Key 2", active: false, percent: 95 },
+                            { name: "Key 3", active: true, percent: 70 },
+                        ],
                         item_alias: "key_item",
                         filter: "key_item.active && key_item.percent >= 80",
                         render: [
@@ -195,13 +197,7 @@ describe("WidgetRenderer", () => {
                         ],
                     } as any
                 }
-                data={{
-                    keys_list: [
-                        { name: "Key 1", active: true, percent: 90 },
-                        { name: "Key 2", active: false, percent: 95 },
-                        { name: "Key 3", active: true, percent: 70 },
-                    ],
-                }}
+                data={{}}
             />,
         );
 

@@ -9,7 +9,7 @@ import { SpacingSchema, spacingClassMap } from "../shared/commonProps";
  */
 export const ListSchema = z.object({
     type: z.literal("List"),
-    data_source: z.union([z.string(), z.array(z.any())]),
+    data_source: z.array(z.any()),
     item_alias: z.string(),
     render: z.array(z.any()),
 

@@ -123,20 +123,8 @@ interface ListWidgetRendererProps {
 function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
     const [currentPage, setCurrentPage] = useState(1);
 
-    // Extract array data - handle both string path and inline array
-    let dataSource: any;
-    if (typeof widget.data_source === "string") {
-        // String path: resolve from data context (existing behavior)
-        dataSource = widget.data_source
-            .split(".")
-            .reduce((obj: any, key: string) => obj?.[key], data);
-    } else if (Array.isArray(widget.data_source)) {
-        // Inline array: use directly (new feature)
-        dataSource = widget.data_source;
-    } else {
-        dataSource = [];
-    }
-    const sourceItems = Array.isArray(dataSource) ? dataSource : [];
+    // Extract array data from inline array
+    const sourceItems = Array.isArray(widget.data_source) ? widget.data_source : [];
 
     let processedData = [...sourceItems];
 
@@ -184,14 +172,6 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
     useEffect(() => {
         setCurrentPage((prev) => Math.min(prev, totalPages));
     }, [totalPages]);
-
-    if (!Array.isArray(dataSource)) {
-        console.warn(
-            `List data_source "${widget.data_source}" is not an array:`,
-            dataSource,
-        );
-        return null;
-    }
 
     const pageData = widget.pagination
         ? processedData.slice(

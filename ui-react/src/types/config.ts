@@ -161,7 +161,7 @@ export interface SduiColumnWidget extends SduiWidgetBase {
 
 export interface SduiListWidget extends SduiWidgetBase {
     type: "List";
-    data_source: string | any[];
+    data_source: any[];
     item_alias: string;
     render: SduiWidget[];
     layout?: "col" | "grid";
