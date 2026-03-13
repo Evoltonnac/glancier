@@ -32,6 +32,15 @@ interface AddWidgetDialogProps {
     onAddWidget: (sourceId: string, template: ViewComponent) => void;
 }
 
+export function getTemplateDisplayTitle(template: ViewComponent): string {
+    const title = template.ui?.title?.trim();
+    const icon = template.ui?.icon?.trim();
+    if (title) {
+        return icon ? `${icon} ${title}` : title;
+    }
+    return template.id;
+}
+
 export function AddWidgetDialog({
     open,
     onOpenChange,
@@ -96,7 +105,7 @@ export function AddWidgetDialog({
 
         loadTemplates();
         setSelectedTemplateIdx(-1);
-    }, [selectedSourceId]);
+    }, [selectedSourceId, sources]);
 
     const handleAdd = () => {
         if (selectedSourceId && selectedTemplateIdx >= 0) {
@@ -195,8 +204,8 @@ export function AddWidgetDialog({
                                             }}
                                         >
                                             <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between space-y-0">
-                                                <CardTitle className="text-sm font-medium">
-                                                    {tpl.label || tpl.type}
+                                                <CardTitle className="text-sm font-medium truncate">
+                                                    {getTemplateDisplayTitle(tpl)}
                                                 </CardTitle>
                                                 {selectedTemplateIdx === idx ? (
                                                     <Check className="h-4 w-4 text-primary-foreground" />
@@ -208,7 +217,7 @@ export function AddWidgetDialog({
                                                 <CardDescription
                                                     className={`text-xs truncate ${selectedTemplateIdx === idx ? "text-primary-foreground/80" : ""}`}
                                                 >
-                                                    类型: {tpl.type}
+                                                    {tpl.id}
                                                 </CardDescription>
                                             </CardContent>
                                         </Card>

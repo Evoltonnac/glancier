@@ -417,11 +417,27 @@ export default function Dashboard() {
     }, [setViewConfig, invalidateViews]);
 
     useEffect(() => {
-        if (!gridRef.current || !viewConfig || viewConfig.items.length === 0)
-            return;
-
         const gs = gsInstanceRef.current;
-        if (!gs) {
+        const hasRenderableGrid =
+            !!gridRef.current && !!viewConfig && viewConfig.items.length > 0;
+        if (!hasRenderableGrid) {
+            if (gs) {
+                gs.destroy(false);
+                gsInstanceRef.current = null;
+            }
+            return;
+        }
+
+        if (
+            gs &&
+            gridRef.current &&
+            gs.el !== gridRef.current
+        ) {
+            gs.destroy(false);
+            gsInstanceRef.current = null;
+        }
+
+        if (!gsInstanceRef.current) {
             // Suppress change events during initial setup to avoid zeroing out coordinates
             suppressGridChangeRef.current = true;
 
@@ -447,6 +463,7 @@ export default function Dashboard() {
         } else {
             // React re-renders (like data loading or new item addition) can strip
             // GridStack classes and lose grid styles. Re-initialize items.
+            suppressGridChangeRef.current = true;
             setTimeout(() => {
                 if (gridRef.current && gsInstanceRef.current) {
                     const elements =
@@ -455,6 +472,9 @@ export default function Dashboard() {
                         gsInstanceRef.current!.makeWidget(el as HTMLElement);
                     });
                 }
+                requestAnimationFrame(() => {
+                    suppressGridChangeRef.current = false;
+                });
             }, 0);
         }
     }, [viewConfig?.items, dataMap, handleGridChange]);
