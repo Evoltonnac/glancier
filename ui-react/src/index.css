@@ -36,27 +36,27 @@
     /* GridStack grid row height tokens — keep in sync with GRID_ROW_HEIGHT / GRID_MARGIN in App.tsx */
     --qb-row-height: 60px;
     --qb-grid-row-height: 60px;
-    --qb-grid-margin: 8px;
-    --qb-grid-gap: 12px; /* GridStack cell spacing */
+    --qb-grid-margin: 0.5rem;
+    --qb-grid-gap: 0.75rem; /* GridStack cell spacing */
     /* Card header height = fixed 40px (normal density size), not affected by density */
-    --qb-card-header-height: 40px;
+    --qb-card-header-height: 2.5rem;
     /* Inner card padding */
-    --qb-card-padding: 12px;
+    --qb-card-padding: 0.75rem;
 
     /* ── Card density presets: compact (0.7), normal (1), relaxed (1.3) ── */
     --qb-density: 1;
 
     /* Card internal spacing scale (multiplied by density) */
-    --qb-gap-1: calc(2px * var(--qb-density));
-    --qb-gap-2: calc(4px * var(--qb-density));
-    --qb-gap-3: calc(8px * var(--qb-density));
-    --qb-gap-4: calc(12px * var(--qb-density));
-    --qb-gap-5: calc(16px * var(--qb-density));
-    --qb-gap-6: calc(20px * var(--qb-density));
+    --qb-gap-1: calc(0.125rem * var(--qb-density));
+    --qb-gap-2: calc(0.25rem * var(--qb-density));
+    --qb-gap-3: calc(0.5rem * var(--qb-density));
+    --qb-gap-4: calc(0.75rem * var(--qb-density));
+    --qb-gap-5: calc(1rem * var(--qb-density));
+    --qb-gap-6: calc(1.25rem * var(--qb-density));
 
     /* Card internal padding - fixed values, not affected by density */
-    --qb-card-pad-x: 12px;
-    --qb-card-pad-y: 8px;
+    --qb-card-pad-x: 0.75rem;
+    --qb-card-pad-y: 0.5rem;
   }
 
   .dark {
@@ -89,33 +89,33 @@
 
     /* Card density - uses [data-density] selector to override */
     --qb-density: 1;
-    --qb-gap-1: calc(2px * var(--qb-density));
-    --qb-gap-2: calc(4px * var(--qb-density));
-    --qb-gap-3: calc(8px * var(--qb-density));
-    --qb-gap-4: calc(12px * var(--qb-density));
-    --qb-gap-5: calc(16px * var(--qb-density));
-    --qb-gap-6: calc(20px * var(--qb-density));
+    --qb-gap-1: calc(0.125rem * var(--qb-density));
+    --qb-gap-2: calc(0.25rem * var(--qb-density));
+    --qb-gap-3: calc(0.5rem * var(--qb-density));
+    --qb-gap-4: calc(0.75rem * var(--qb-density));
+    --qb-gap-5: calc(1rem * var(--qb-density));
+    --qb-gap-6: calc(1.25rem * var(--qb-density));
     /* Card internal padding - fixed values, not affected by density */
-    --qb-card-pad-x: 12px;
-    --qb-card-pad-y: 8px;
+    --qb-card-pad-x: 0.75rem;
+    --qb-card-pad-y: 0.5rem;
   }
 
   /* Density selectors - must override .dark */
   :root[data-density="compact"] {
     --qb-density: 0.5;
-    --qb-grid-gap: 8px;
+    --qb-grid-gap: 0.5rem;
     --qb-grid-row-height: 60px;
   }
 
   :root[data-density="normal"] {
     --qb-density: 0.75;
-    --qb-grid-gap: 8px;
+    --qb-grid-gap: 0.5rem;
     --qb-grid-row-height: 60px;
   }
 
   :root[data-density="relaxed"] {
     --qb-density: 1;
-    --qb-grid-gap: 8px;
+    --qb-grid-gap: 0.5rem;
     --qb-grid-row-height: 60px;
   }
 
@@ -123,7 +123,7 @@
   :root[data-density="compact"] .grid-stack-item-content,
   :root[data-density="normal"] .grid-stack-item-content,
   :root[data-density="relaxed"] .grid-stack-item-content {
-    margin: 4px !important;
+    margin: 0.25rem !important;
   }
 
   /* GridStack row height */
@@ -195,8 +195,8 @@
 /* ── Delete button overlay — top-right corner ──────────────────────── */
 .qb-delete-btn {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 0.375rem;
+  right: 0.375rem;
   z-index: 50;
   display: flex;
   align-items: center;
