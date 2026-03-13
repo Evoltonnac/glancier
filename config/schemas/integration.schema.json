@@ -233,40 +233,23 @@
               }
             },
             "spacing": {
-              "default": "default",
+              "default": "md",
               "type": "string",
               "enum": [
                 "none",
-                "small",
-                "default",
-                "large"
+                "sm",
+                "md",
+                "lg"
               ]
             },
-            "verticalAlignment": {
-              "default": "top",
+            "align_y": {
+              "default": "start",
               "type": "string",
               "enum": [
-                "top",
+                "start",
                 "center",
-                "bottom"
+                "end"
               ]
-            },
-            "selectAction": {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "const": "Action.OpenUrl"
-                },
-                "url": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "type",
-                "url"
-              ],
-              "additionalProperties": false
             }
           },
           "required": [
@@ -322,23 +305,23 @@
                       }
                     ]
                   },
-                  "verticalAlignment": {
-                    "default": "top",
+                  "align_y": {
+                    "default": "start",
                     "type": "string",
                     "enum": [
-                      "top",
+                      "start",
                       "center",
-                      "bottom"
+                      "end"
                     ]
                   },
                   "spacing": {
-                    "default": "default",
+                    "default": "md",
                     "type": "string",
                     "enum": [
                       "none",
-                      "small",
-                      "default",
-                      "large"
+                      "sm",
+                      "md",
+                      "lg"
                     ]
                   }
                 },
@@ -350,22 +333,22 @@
               }
             },
             "spacing": {
-              "default": "default",
+              "default": "md",
               "type": "string",
               "enum": [
                 "none",
-                "small",
-                "default",
-                "large"
+                "sm",
+                "md",
+                "lg"
               ]
             },
-            "horizontalAlignment": {
-              "default": "left",
+            "align_x": {
+              "default": "start",
               "type": "string",
               "enum": [
-                "left",
+                "start",
                 "center",
-                "right"
+                "end"
               ]
             }
           },
@@ -414,13 +397,13 @@
               ]
             },
             "spacing": {
-              "default": "default",
+              "default": "md",
               "type": "string",
               "enum": [
                 "none",
-                "small",
-                "default",
-                "large"
+                "sm",
+                "md",
+                "lg"
               ]
             },
             "filter": {
@@ -520,14 +503,13 @@
               ]
             },
             "size": {
-              "default": "default",
+              "default": "md",
               "type": "string",
               "enum": [
-                "small",
-                "default",
-                "large",
-                "xlarge",
-                "hero"
+                "sm",
+                "md",
+                "lg",
+                "xl"
               ]
             },
             "weight": {
@@ -540,15 +522,25 @@
                 "bold"
               ]
             },
-            "color": {
+            "tone": {
               "default": "default",
               "type": "string",
               "enum": [
                 "default",
                 "muted",
-                "good",
+                "info",
+                "success",
                 "warning",
-                "attention"
+                "danger"
+              ]
+            },
+            "align_x": {
+              "default": "start",
+              "type": "string",
+              "enum": [
+                "start",
+                "center",
+                "end"
               ]
             },
             "wrap": {
@@ -641,6 +633,17 @@
                         ]
                       }
                     ]
+                  },
+                  "tone": {
+                    "type": "string",
+                    "enum": [
+                      "default",
+                      "muted",
+                      "info",
+                      "success",
+                      "warning",
+                      "danger"
+                    ]
                   }
                 },
                 "required": [
@@ -651,12 +654,13 @@
               }
             },
             "spacing": {
-              "default": "default",
+              "default": "md",
               "type": "string",
               "enum": [
-                "compact",
-                "default",
-                "relaxed"
+                "none",
+                "sm",
+                "md",
+                "lg"
               ]
             }
           },
@@ -681,20 +685,13 @@
               "type": "string"
             },
             "size": {
-              "default": "medium",
+              "default": "md",
               "type": "string",
               "enum": [
-                "small",
-                "medium",
-                "large"
-              ]
-            },
-            "style": {
-              "default": "default",
-              "type": "string",
-              "enum": [
-                "default",
-                "avatar"
+                "sm",
+                "md",
+                "lg",
+                "xl"
               ]
             }
           },
@@ -729,15 +726,26 @@
                 }
               ]
             },
-            "color": {
+            "tone": {
               "default": "default",
               "type": "string",
               "enum": [
                 "default",
-                "good",
+                "muted",
+                "info",
+                "success",
                 "warning",
-                "attention",
-                "info"
+                "danger"
+              ]
+            },
+            "size": {
+              "default": "md",
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg",
+                "xl"
               ]
             }
           },
@@ -793,13 +801,25 @@
                 "ring"
               ]
             },
-            "color": {
+            "size": {
+              "default": "md",
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg",
+                "xl"
+              ]
+            },
+            "tone": {
               "type": "string",
               "enum": [
                 "default",
-                "good",
+                "muted",
+                "info",
+                "success",
                 "warning",
-                "attention"
+                "danger"
               ]
             },
             "showPercentage": {
@@ -831,7 +851,7 @@
                     }
                   ]
                 },
-                "attention": {
+                "danger": {
                   "default": 90,
                   "anyOf": [
                     {
@@ -880,22 +900,26 @@
                         "type": "string",
                         "format": "uri"
                       },
-                      "style": {
+                      "size": {
+                        "default": "md",
+                        "type": "string",
+                        "enum": [
+                          "sm",
+                          "md",
+                          "lg",
+                          "xl"
+                        ]
+                      },
+                      "tone": {
                         "default": "default",
                         "type": "string",
                         "enum": [
                           "default",
-                          "primary",
-                          "secondary"
-                        ]
-                      },
-                      "iconPosition": {
-                        "default": "right",
-                        "type": "string",
-                        "enum": [
-                          "left",
-                          "right",
-                          "none"
+                          "muted",
+                          "info",
+                          "success",
+                          "warning",
+                          "danger"
                         ]
                       }
                     },
@@ -919,13 +943,26 @@
                       "text": {
                         "type": "string"
                       },
-                      "style": {
+                      "size": {
+                        "default": "md",
+                        "type": "string",
+                        "enum": [
+                          "sm",
+                          "md",
+                          "lg",
+                          "xl"
+                        ]
+                      },
+                      "tone": {
                         "default": "default",
                         "type": "string",
                         "enum": [
                           "default",
-                          "primary",
-                          "secondary"
+                          "muted",
+                          "info",
+                          "success",
+                          "warning",
+                          "danger"
                         ]
                       }
                     },
@@ -939,22 +976,23 @@
                 ]
               }
             },
-            "horizontalAlignment": {
-              "default": "left",
+            "align_x": {
+              "default": "start",
               "type": "string",
               "enum": [
-                "left",
+                "start",
                 "center",
-                "right"
+                "end"
               ]
             },
             "spacing": {
-              "default": "default",
+              "default": "md",
               "type": "string",
               "enum": [
-                "compact",
-                "default",
-                "relaxed"
+                "none",
+                "sm",
+                "md",
+                "lg"
               ]
             }
           },
@@ -978,22 +1016,26 @@
               "type": "string",
               "format": "uri"
             },
-            "style": {
+            "size": {
+              "default": "md",
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg",
+                "xl"
+              ]
+            },
+            "tone": {
               "default": "default",
               "type": "string",
               "enum": [
                 "default",
-                "primary",
-                "secondary"
-              ]
-            },
-            "iconPosition": {
-              "default": "right",
-              "type": "string",
-              "enum": [
-                "left",
-                "right",
-                "none"
+                "muted",
+                "info",
+                "success",
+                "warning",
+                "danger"
               ]
             }
           },
@@ -1017,13 +1059,26 @@
             "text": {
               "type": "string"
             },
-            "style": {
+            "size": {
+              "default": "md",
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg",
+                "xl"
+              ]
+            },
+            "tone": {
               "default": "default",
               "type": "string",
               "enum": [
                 "default",
-                "primary",
-                "secondary"
+                "muted",
+                "info",
+                "success",
+                "warning",
+                "danger"
               ]
             }
           },
@@ -1049,40 +1104,23 @@
           "items": {}
         },
         "spacing": {
-          "default": "default",
+          "default": "md",
           "type": "string",
           "enum": [
             "none",
-            "small",
-            "default",
-            "large"
+            "sm",
+            "md",
+            "lg"
           ]
         },
-        "verticalAlignment": {
-          "default": "top",
+        "align_y": {
+          "default": "start",
           "type": "string",
           "enum": [
-            "top",
+            "start",
             "center",
-            "bottom"
+            "end"
           ]
-        },
-        "selectAction": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "Action.OpenUrl"
-            },
-            "url": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "url"
-          ],
-          "additionalProperties": false
         }
       },
       "required": [
@@ -1104,22 +1142,22 @@
           "items": {}
         },
         "spacing": {
-          "default": "default",
+          "default": "md",
           "type": "string",
           "enum": [
             "none",
-            "small",
-            "default",
-            "large"
+            "sm",
+            "md",
+            "lg"
           ]
         },
-        "horizontalAlignment": {
-          "default": "left",
+        "align_x": {
+          "default": "start",
           "type": "string",
           "enum": [
-            "left",
+            "start",
             "center",
-            "right"
+            "end"
           ]
         }
       },
@@ -1166,23 +1204,23 @@
             }
           ]
         },
-        "verticalAlignment": {
-          "default": "top",
+        "align_y": {
+          "default": "start",
           "type": "string",
           "enum": [
-            "top",
+            "start",
             "center",
-            "bottom"
+            "end"
           ]
         },
         "spacing": {
-          "default": "default",
+          "default": "md",
           "type": "string",
           "enum": [
             "none",
-            "small",
-            "default",
-            "large"
+            "sm",
+            "md",
+            "lg"
           ]
         }
       },
@@ -1232,13 +1270,13 @@
           ]
         },
         "spacing": {
-          "default": "default",
+          "default": "md",
           "type": "string",
           "enum": [
             "none",
-            "small",
-            "default",
-            "large"
+            "sm",
+            "md",
+            "lg"
           ]
         },
         "filter": {
@@ -1339,14 +1377,13 @@
           ]
         },
         "size": {
-          "default": "default",
+          "default": "md",
           "type": "string",
           "enum": [
-            "small",
-            "default",
-            "large",
-            "xlarge",
-            "hero"
+            "sm",
+            "md",
+            "lg",
+            "xl"
           ]
         },
         "weight": {
@@ -1359,15 +1396,25 @@
             "bold"
           ]
         },
-        "color": {
+        "tone": {
           "default": "default",
           "type": "string",
           "enum": [
             "default",
             "muted",
-            "good",
+            "info",
+            "success",
             "warning",
-            "attention"
+            "danger"
+          ]
+        },
+        "align_x": {
+          "default": "start",
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end"
           ]
         },
         "wrap": {
@@ -1461,6 +1508,17 @@
                     ]
                   }
                 ]
+              },
+              "tone": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "muted",
+                  "info",
+                  "success",
+                  "warning",
+                  "danger"
+                ]
               }
             },
             "required": [
@@ -1471,12 +1529,13 @@
           }
         },
         "spacing": {
-          "default": "default",
+          "default": "md",
           "type": "string",
           "enum": [
-            "compact",
-            "default",
-            "relaxed"
+            "none",
+            "sm",
+            "md",
+            "lg"
           ]
         }
       },
@@ -1502,20 +1561,13 @@
           "type": "string"
         },
         "size": {
-          "default": "medium",
+          "default": "md",
           "type": "string",
           "enum": [
-            "small",
-            "medium",
-            "large"
-          ]
-        },
-        "style": {
-          "default": "default",
-          "type": "string",
-          "enum": [
-            "default",
-            "avatar"
+            "sm",
+            "md",
+            "lg",
+            "xl"
           ]
         }
       },
@@ -1551,15 +1603,26 @@
             }
           ]
         },
-        "color": {
+        "tone": {
           "default": "default",
           "type": "string",
           "enum": [
             "default",
-            "good",
+            "muted",
+            "info",
+            "success",
             "warning",
-            "attention",
-            "info"
+            "danger"
+          ]
+        },
+        "size": {
+          "default": "md",
+          "type": "string",
+          "enum": [
+            "sm",
+            "md",
+            "lg",
+            "xl"
           ]
         }
       },
@@ -1616,13 +1679,25 @@
             "ring"
           ]
         },
-        "color": {
+        "size": {
+          "default": "md",
+          "type": "string",
+          "enum": [
+            "sm",
+            "md",
+            "lg",
+            "xl"
+          ]
+        },
+        "tone": {
           "type": "string",
           "enum": [
             "default",
-            "good",
+            "muted",
+            "info",
+            "success",
             "warning",
-            "attention"
+            "danger"
           ]
         },
         "showPercentage": {
@@ -1654,7 +1729,7 @@
                 }
               ]
             },
-            "attention": {
+            "danger": {
               "default": 90,
               "anyOf": [
                 {
@@ -1690,22 +1765,23 @@
           "type": "array",
           "items": {}
         },
-        "horizontalAlignment": {
-          "default": "left",
+        "align_x": {
+          "default": "start",
           "type": "string",
           "enum": [
-            "left",
+            "start",
             "center",
-            "right"
+            "end"
           ]
         },
         "spacing": {
-          "default": "default",
+          "default": "md",
           "type": "string",
           "enum": [
-            "compact",
-            "default",
-            "relaxed"
+            "none",
+            "sm",
+            "md",
+            "lg"
           ]
         }
       },
@@ -1730,22 +1806,26 @@
           "type": "string",
           "format": "uri"
         },
-        "style": {
+        "size": {
+          "default": "md",
+          "type": "string",
+          "enum": [
+            "sm",
+            "md",
+            "lg",
+            "xl"
+          ]
+        },
+        "tone": {
           "default": "default",
           "type": "string",
           "enum": [
             "default",
-            "primary",
-            "secondary"
-          ]
-        },
-        "iconPosition": {
-          "default": "right",
-          "type": "string",
-          "enum": [
-            "left",
-            "right",
-            "none"
+            "muted",
+            "info",
+            "success",
+            "warning",
+            "danger"
           ]
         }
       },
@@ -1770,13 +1850,26 @@
         "text": {
           "type": "string"
         },
-        "style": {
+        "size": {
+          "default": "md",
+          "type": "string",
+          "enum": [
+            "sm",
+            "md",
+            "lg",
+            "xl"
+          ]
+        },
+        "tone": {
           "default": "default",
           "type": "string",
           "enum": [
             "default",
-            "primary",
-            "secondary"
+            "muted",
+            "info",
+            "success",
+            "warning",
+            "danger"
           ]
         }
       },

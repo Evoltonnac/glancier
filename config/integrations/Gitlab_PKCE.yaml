@@ -55,7 +55,7 @@ templates:
           icon: "GitLab"
       widgets:
           - type: "Container"
-            spacing: "small"
+            spacing: "sm"
             items:
                 - type: "ColumnSet"
                   columns:
@@ -64,22 +64,22 @@ templates:
                         items:
                             - type: "TextBlock"
                               text: "{name}"
-                              size: "large"
+                              size: "lg"
                               weight: "semibold"
                               max_lines: 1
                             - type: "TextBlock"
                               text: "@{username}"
-                              color: "muted"
-                              size: "small"
+                              tone: "muted"
+                              size: "sm"
                       - type: "Column"
                         width: "auto"
-                        verticalAlignment: "top"
+                        align_y: "start"
                         items:
                             - type: "Badge"
                               text: "PKCE Flow"
-                              color: "info"
+                              tone: "info"
                 - type: "FactSet"
-                  spacing: "compact"
+                  spacing: "sm"
                   facts:
                       - label: "Profile"
                         value: "{web_url}"

@@ -140,23 +140,23 @@ export interface SduiWidgetBase {
 export interface SduiContainerWidget extends SduiWidgetBase {
     type: "Container";
     items: SduiWidget[];
-    spacing?: "none" | "small" | "default" | "large";
-    verticalAlignment?: "top" | "center" | "bottom";
+    spacing?: "none" | "sm" | "md" | "lg";
+    align_y?: "start" | "center" | "end";
 }
 
 export interface SduiColumnSetWidget extends SduiWidgetBase {
     type: "ColumnSet";
     columns: SduiColumnWidget[];
-    spacing?: "none" | "small" | "default" | "large";
-    horizontalAlignment?: "left" | "center" | "right";
+    spacing?: "none" | "sm" | "md" | "lg";
+    align_x?: "start" | "center" | "end";
 }
 
 export interface SduiColumnWidget extends SduiWidgetBase {
     type: "Column";
     items: SduiWidget[];
     width?: "auto" | "stretch" | number;
-    verticalAlignment?: "top" | "center" | "bottom";
-    spacing?: "none" | "small" | "default" | "large";
+    align_y?: "start" | "center" | "end";
+    spacing?: "none" | "sm" | "md" | "lg";
 }
 
 export interface SduiListWidget extends SduiWidgetBase {
@@ -166,7 +166,7 @@ export interface SduiListWidget extends SduiWidgetBase {
     render: SduiWidget[];
     layout?: "col" | "grid";
     columns?: number;
-    spacing?: "none" | "small" | "default" | "large";
+    spacing?: "none" | "sm" | "md" | "lg";
     filter?: string;
     sort_by?: string;
     sort_order?: "asc" | "desc";
@@ -178,9 +178,10 @@ export interface SduiListWidget extends SduiWidgetBase {
 export interface SduiTextBlockWidget extends SduiWidgetBase {
     type: "TextBlock";
     text: string | number | boolean;
-    size?: "small" | "default" | "large" | "xlarge" | "hero";
+    size?: "sm" | "md" | "lg" | "xl";
     weight?: "normal" | "medium" | "semibold" | "bold";
-    color?: "default" | "muted" | "good" | "warning" | "attention";
+    tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+    align_x?: "start" | "center" | "end";
     wrap?: boolean;
     maxLines?: number;
     max_lines?: number;
@@ -188,22 +189,26 @@ export interface SduiTextBlockWidget extends SduiWidgetBase {
 
 export interface SduiFactSetWidget extends SduiWidgetBase {
     type: "FactSet";
-    facts: Array<{ label: string | number; value: string | number }>;
-    spacing?: "compact" | "default" | "relaxed";
+    facts: Array<{
+        label: string | number;
+        value: string | number;
+        tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+    }>;
+    spacing?: "none" | "sm" | "md" | "lg";
 }
 
 export interface SduiImageWidget extends SduiWidgetBase {
     type: "Image";
     url: string;
     altText?: string;
-    size?: "small" | "medium" | "large";
-    style?: "default" | "avatar";
+    size?: "sm" | "md" | "lg" | "xl";
 }
 
 export interface SduiBadgeWidget extends SduiWidgetBase {
     type: "Badge";
     text: string | number;
-    color?: "default" | "good" | "warning" | "attention" | "info";
+    tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+    size?: "sm" | "md" | "lg" | "xl";
 }
 
 export interface SduiProgressWidget extends SduiWidgetBase {
@@ -211,11 +216,12 @@ export interface SduiProgressWidget extends SduiWidgetBase {
     value: number | string;
     label?: string | number;
     style?: "bar" | "ring";
-    color?: "default" | "good" | "warning" | "attention";
+    size?: "sm" | "md" | "lg" | "xl";
+    tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
     showPercentage?: boolean;
     thresholds?: {
         warning?: number | string;
-        attention?: number | string;
+        danger?: number | string;
     };
 }
 
@@ -223,22 +229,23 @@ export interface SduiActionOpenUrlWidget extends SduiWidgetBase {
     type: "Action.OpenUrl";
     title: string;
     url: string;
-    style?: "default" | "primary" | "secondary";
-    iconPosition?: "left" | "right" | "none";
+    size?: "sm" | "md" | "lg" | "xl";
+    tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
 }
 
 export interface SduiActionCopyWidget extends SduiWidgetBase {
     type: "Action.Copy";
     title: string;
     text: string;
-    style?: "default" | "primary" | "secondary";
+    size?: "sm" | "md" | "lg" | "xl";
+    tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
 }
 
 export interface SduiActionSetWidget extends SduiWidgetBase {
     type: "ActionSet";
     actions: Array<SduiActionOpenUrlWidget | SduiActionCopyWidget>;
-    horizontalAlignment?: "left" | "center" | "right";
-    spacing?: "compact" | "default" | "relaxed";
+    align_x?: "start" | "center" | "end";
+    spacing?: "none" | "sm" | "md" | "lg";
 }
 
 export type SduiWidget =

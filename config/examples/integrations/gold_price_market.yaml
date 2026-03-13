@@ -24,13 +24,13 @@ templates:
           icon: "GLD"
       widgets:
           - type: "Container"
-            spacing: "small"
+            spacing: "sm"
             items:
                 - type: "TextBlock"
                   text: "${fixed(paxg_price, 2)}"
-                  size: "hero"
+                  size: "xl"
                   weight: "bold"
                 - type: "TextBlock"
                   text: "PAX Gold (USD)"
-                  color: "muted"
-                  size: "small"
+                  tone: "muted"
+                  size: "sm"

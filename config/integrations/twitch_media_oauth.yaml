@@ -81,7 +81,7 @@ templates:
           icon: "TV"
       widgets:
           - type: "Container"
-            spacing: "small"
+            spacing: "sm"
             items:
                 - type: "ColumnSet"
                   columns:
@@ -90,27 +90,27 @@ templates:
                         items:
                             - type: "TextBlock"
                               text: "{login}"
-                              size: "large"
+                              size: "lg"
                               weight: "semibold"
                               max_lines: 1
                             - type: "TextBlock"
                               text: "Entertainment / Media"
-                              color: "muted"
-                              size: "small"
+                              tone: "muted"
+                              size: "sm"
                       - type: "Column"
                         width: "auto"
-                        verticalAlignment: "top"
+                        align_y: "start"
                         items:
                             - type: "Badge"
                               text: "{scopes_count} Scopes"
-                              color: "info"
+                              tone: "info"
                 - type: "Progress"
                   value: "{risk_percent}"
                   thresholds:
                       warning: 50
-                      attention: 75
+                      danger: 75
                 - type: "FactSet"
-                  spacing: "compact"
+                  spacing: "sm"
                   facts:
                       - label: "Client"
                         value: "{client_id}"

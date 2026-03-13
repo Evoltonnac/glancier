@@ -26,7 +26,7 @@ describe("WidgetRenderer", () => {
                                 value: "{key_item.percent}",
                                 thresholds: {
                                     warning: 75,
-                                    attention: 90,
+                                    danger: 90,
                                 },
                             },
                         ],

@@ -1,5 +1,11 @@
-import { z } from 'zod';
-import type { ReactNode } from 'react';
+import { z } from "zod";
+import type { ReactNode } from "react";
+import {
+    AlignSchema,
+    SpacingSchema,
+    justifyClassMap,
+    spacingClassMap,
+} from "../shared/commonProps";
 
 /**
  * ColumnSet Schema
@@ -8,37 +14,30 @@ import type { ReactNode } from 'react';
  * Can only contain Column components as direct children.
  */
 export const ColumnSetSchema = z.object({
-  type: z.literal('ColumnSet'),
-  columns: z.array(z.any()), // Will contain Column schemas
-  spacing: z.enum(['none', 'small', 'default', 'large']).default('default'),
-  horizontalAlignment: z.enum(['left', 'center', 'right']).default('left'),
+    type: z.literal("ColumnSet"),
+    columns: z.array(z.any()),
+    spacing: SpacingSchema.default("md"),
+    align_x: AlignSchema.default("start"),
 });
 
 export type ColumnSetProps = z.infer<typeof ColumnSetSchema>;
 
-const spacingMap = {
-  none: 'gap-0',
-  small: 'gap-2',
-  default: 'gap-4',
-  large: 'gap-6',
-};
-
-const alignmentMap = {
-  left: 'justify-start',
-  center: 'justify-center',
-  right: 'justify-end',
-};
-
 interface ColumnSetComponentProps {
-  spacing?: 'none' | 'small' | 'default' | 'large';
-  horizontalAlignment?: 'left' | 'center' | 'right';
-  children: ReactNode;
+    spacing?: z.infer<typeof SpacingSchema>;
+    align_x?: z.infer<typeof AlignSchema>;
+    children: ReactNode;
 }
 
-export function ColumnSet({ spacing = 'default', horizontalAlignment = 'left', children }: ColumnSetComponentProps) {
-  return (
-    <div className={`flex flex-row w-full ${spacingMap[spacing as keyof typeof spacingMap]} ${alignmentMap[horizontalAlignment as keyof typeof alignmentMap]}`}>
-      {children}
-    </div>
-  );
+export function ColumnSet({
+    spacing = "md",
+    align_x = "start",
+    children,
+}: ColumnSetComponentProps) {
+    return (
+        <div
+            className={`flex flex-row w-full ${spacingClassMap[spacing]} ${justifyClassMap[align_x]}`}
+        >
+            {children}
+        </div>
+    );
 }

@@ -1,47 +1,40 @@
-import { z } from 'zod';
-import type { ReactNode } from 'react';
+import { z } from "zod";
+import type { ReactNode } from "react";
+import {
+    AlignSchema,
+    SpacingSchema,
+    justifyClassMap,
+    spacingClassMap,
+} from "../shared/commonProps";
 
 /**
  * ActionSet Schema
- *
- * Horizontal container for action buttons with consistent spacing and alignment.
- * Ensures safe and uniform presentation of interactive elements.
  */
 export const ActionSetSchema = z.object({
-  type: z.literal('ActionSet'),
-  actions: z.array(z.any()), // Will contain Action.* schemas
-  horizontalAlignment: z.enum(['left', 'center', 'right']).default('left'),
-  spacing: z.enum(['compact', 'default', 'relaxed']).default('default'),
+    type: z.literal("ActionSet"),
+    actions: z.array(z.any()),
+    align_x: AlignSchema.default("start"),
+    spacing: SpacingSchema.default("md"),
 });
 
 export type ActionSetProps = z.infer<typeof ActionSetSchema>;
 
-const alignmentMap = {
-  left: 'justify-start',
-  center: 'justify-center',
-  right: 'justify-end',
-};
-
-const spacingMap = {
-  compact: 'gap-1',
-  default: 'gap-2',
-  relaxed: 'gap-4',
-};
-
 interface ActionSetComponentProps {
-  horizontalAlignment?: 'left' | 'center' | 'right';
-  spacing?: 'compact' | 'default' | 'relaxed';
-  children: ReactNode;
+    align_x?: z.infer<typeof AlignSchema>;
+    spacing?: z.infer<typeof SpacingSchema>;
+    children: ReactNode;
 }
 
 export function ActionSet({
-  horizontalAlignment = 'left',
-  spacing = 'default',
-  children,
+    align_x = "start",
+    spacing = "md",
+    children,
 }: ActionSetComponentProps) {
-  return (
-    <div className={`flex flex-row items-center ${alignmentMap[horizontalAlignment as keyof typeof alignmentMap]} ${spacingMap[spacing as keyof typeof spacingMap]}`}>
-      {children}
-    </div>
-  );
+    return (
+        <div
+            className={`flex flex-row items-center ${justifyClassMap[align_x]} ${spacingClassMap[spacing]}`}
+        >
+            {children}
+        </div>
+    );
 }

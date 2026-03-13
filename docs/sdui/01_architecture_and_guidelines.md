@@ -28,7 +28,7 @@ templates:
         items:
           - type: "TextBlock"
             text: "{balance}"
-            size: "hero"
+            size: "xl"
             weight: "bold"
           - type: "Progress"
             value: "{usage_percent}"
@@ -41,20 +41,33 @@ templates:
 - `ui`：卡片层元信息（如 `title`、`icon`）。
 - `widgets`：SDUI 组件树入口。
 
-## 3. 模板绑定语法
+## 3. 通用 Props 规范（Widgets）
 
-### 3.1 直接值绑定
+所有 widget 仅暴露最小通用能力，统一使用以下枚举：
+
+- `spacing`: `none` | `sm` | `md` | `lg`
+- `size`: `sm` | `md` | `lg` | `xl`
+- `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `align_x` / `align_y`: `start` | `center` | `end`
+
+约束：
+- 不再支持旧值（如 `small/default/large`、`compact/relaxed`、`good/attention`、`left/right/top/bottom`）。
+- 视觉细节（padding、radius、复杂 style 变体）由项目 UI 层统一控制，不通过模板暴露。
+
+## 4. 模板绑定语法
+
+### 4.1 直接值绑定
 
 字段是完整表达式 `"{...}"` 时，返回原始类型：
 - `value: "{quota_percent}"` -> number
 - `show: "{quota_percent > 80}"` -> boolean
 
-### 3.2 字符串插值
+### 4.2 字符串插值
 
 表达式嵌入字符串时，结果会转字符串拼接：
 - `text: "Usage: {used}/{limit}"`
 
-### 3.3 表达式边界
+### 4.3 表达式边界
 
 - 仅允许白名单语法与函数。
 - 禁止任意代码执行。
@@ -62,7 +75,7 @@ templates:
 
 完整规则见 [03_template_expression_spec.md](./03_template_expression_spec.md)。
 
-## 4. 列表与布局编排
+## 5. 列表与布局编排
 
 ```yaml
 - type: "List"
@@ -83,14 +96,14 @@ templates:
 
 组件职责见 [02_component_map_and_categories.md](./02_component_map_and_categories.md)。
 
-## 5. Schema-First 约束
+## 6. Schema-First 约束
 
 1. 先定义 Schema，再推导组件 Props。
 2. 渲染前必须执行 schema `safeParse`。
 3. 无效节点必须降级而非白屏。
 4. 新增/修改组件时同步更新 SDUI 文档。
 
-## 6. 与 Flow 的边界
+## 7. 与 Flow 的边界
 
 - SDUI：展示层。
 - Flow：鉴权、抓取、提取、恢复执行。

@@ -41,9 +41,9 @@ content_template: |
       widgets:
         - type: "TextBlock"
           text: "{value}"
-          size: "hero"
+          size: "xl"
           weight: "bold"
         - type: "TextBlock"
           text: "Current Value"
-          color: "muted"
-          size: "small"
+          tone: "muted"
+          size: "sm"

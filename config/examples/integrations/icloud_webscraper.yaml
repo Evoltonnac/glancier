@@ -51,7 +51,7 @@ templates:
       icon: "CLD"
     widgets:
       - type: "Container"
-        spacing: "small"
+        spacing: "sm"
         items:
           - type: "ColumnSet"
             columns:
@@ -60,23 +60,23 @@ templates:
                 items:
                   - type: "TextBlock"
                     text: "{account_alias}"
-                    size: "large"
+                    size: "lg"
                     weight: "semibold"
                     max_lines: 1
                   - type: "TextBlock"
                     text: "{email}"
-                    color: "muted"
-                    size: "small"
+                    tone: "muted"
+                    size: "sm"
                     max_lines: 1
               - type: "Column"
                 width: "auto"
-                verticalAlignment: "top"
+                align_y: "start"
                 items:
                   - type: "Badge"
                     text: "WebView"
-                    color: "info"
+                    tone: "info"
           - type: "FactSet"
-            spacing: "compact"
+            spacing: "sm"
             facts:
               - label: "Category"
                 value: "Life / Privacy"
@@ -86,6 +86,6 @@ templates:
                 value: "{email_domain}"
           - type: "TextBlock"
             text: "Session capture from iCloud web account endpoint"
-            color: "muted"
-            size: "small"
+            tone: "muted"
+            size: "sm"
             max_lines: 1

@@ -1,48 +1,64 @@
-import { z } from 'zod';
-import { Copy, Check } from 'lucide-react';
-import { useState } from 'react';
+import { z } from "zod";
+import { Copy, Check } from "lucide-react";
+import { useState } from "react";
+import {
+    SizeSchema,
+    ToneSchema,
+    toneButtonClassMap,
+} from "../shared/commonProps";
 
 /**
  * Action.Copy Schema
- *
- * Button that copies text to clipboard with visual feedback.
- * Provides silent, lightweight clipboard interaction.
  */
 export const ActionCopySchema = z.object({
-  type: z.literal('Action.Copy'),
-  title: z.string(),
-  text: z.string(),
-  style: z.enum(['default', 'primary', 'secondary']).default('default'),
+    type: z.literal("Action.Copy"),
+    title: z.string(),
+    text: z.string(),
+    size: SizeSchema.default("md"),
+    tone: ToneSchema.default("default"),
 });
 
 export type ActionCopyProps = z.infer<typeof ActionCopySchema>;
 
-const styleMap = {
-  default: 'bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100',
-  primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-  secondary: 'bg-transparent hover:bg-gray-100 text-gray-700 dark:hover:bg-gray-800 dark:text-gray-300 border border-gray-300 dark:border-gray-700',
+const sizeMap = {
+    sm: "gap-1 px-2.5 py-1 text-xs",
+    md: "gap-1.5 px-3 py-1.5 text-sm",
+    lg: "gap-2 px-4 py-2 text-sm",
+    xl: "gap-2 px-5 py-2.5 text-base",
 };
 
-export function ActionCopy({ title, text, style = 'default' }: ActionCopyProps) {
-  const [copied, setCopied] = useState(false);
+const iconSizeMap = {
+    sm: "w-3.5 h-3.5",
+    md: "w-4 h-4",
+    lg: "w-4 h-4",
+    xl: "w-5 h-5",
+};
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy text:', err);
-    }
-  };
+export function ActionCopy({
+    title,
+    text,
+    size = "md",
+    tone = "default",
+}: ActionCopyProps) {
+    const [copied, setCopied] = useState(false);
 
-  return (
-    <button
-      onClick={handleCopy}
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${styleMap[style as keyof typeof styleMap]}`}
-    >
-      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-      {copied ? 'Copied!' : title}
-    </button>
-  );
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error("Failed to copy text:", err);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleCopy}
+            className={`inline-flex items-center rounded-md font-medium transition-colors ${sizeMap[size]} ${toneButtonClassMap[tone]}`}
+        >
+            {copied ? <Check className={iconSizeMap[size]} /> : <Copy className={iconSizeMap[size]} />}
+            {copied ? "Copied!" : title}
+        </button>
+    );
 }

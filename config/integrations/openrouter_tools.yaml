@@ -71,7 +71,7 @@ templates:
           icon: "KEY"
       widgets:
           - type: "Container"
-            spacing: "small"
+            spacing: "sm"
             items:
                 - type: "ColumnSet"
                   columns:
@@ -80,26 +80,26 @@ templates:
                         items:
                             - type: "TextBlock"
                               text: "{key_count}"
-                              size: "hero"
+                              size: "xl"
                               weight: "bold"
                             - type: "TextBlock"
                               text: "Managed Keys"
-                              color: "muted"
-                              size: "small"
+                              tone: "muted"
+                              size: "sm"
                       - type: "Column"
                         width: "auto"
-                        verticalAlignment: "top"
+                        align_y: "start"
                         items:
                             - type: "Badge"
                               text: "API Key"
-                              color: "info"
+                              tone: "info"
                 - type: "Progress"
                   value: "{utilization_pct}"
                   thresholds:
                       warning: 70
-                      attention: 90
+                      danger: 90
                 - type: "FactSet"
-                  spacing: "compact"
+                  spacing: "sm"
                   facts:
                       - label: "Active"
                         value: "{active_keys}"

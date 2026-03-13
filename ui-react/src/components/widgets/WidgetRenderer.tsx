@@ -295,7 +295,7 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
             return (
                 <Container
                     spacing={validWidget.spacing}
-                    verticalAlignment={validWidget.verticalAlignment}
+                    align_y={validWidget.align_y}
                 >
                     {validWidget.items.map((item: Widget, index: number) => (
                         <WidgetRendererImpl
@@ -311,13 +311,13 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
             return (
                 <ColumnSet
                     spacing={validWidget.spacing}
-                    horizontalAlignment={validWidget.horizontalAlignment}
+                    align_x={validWidget.align_x}
                 >
                     {validWidget.columns.map((column: any, index: number) => (
                         <Column
                             key={index}
                             width={column.width}
-                            verticalAlignment={column.verticalAlignment}
+                            align_y={column.align_y}
                             spacing={column.spacing}
                         >
                             {column.items.map(
@@ -356,7 +356,7 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
             return (
                 <ActionSet
                     spacing={validWidget.spacing}
-                    horizontalAlignment={validWidget.horizontalAlignment}
+                    align_x={validWidget.align_x}
                 >
                     {validWidget.actions.map((action: any, index: number) => (
                         <WidgetRendererImpl

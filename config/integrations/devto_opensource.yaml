@@ -76,7 +76,7 @@ templates:
           icon: "DEV"
       widgets:
           - type: "Container"
-            spacing: "small"
+            spacing: "sm"
             items:
                 - type: "ColumnSet"
                   columns:
@@ -85,28 +85,28 @@ templates:
                         items:
                             - type: "TextBlock"
                               text: "{article_title}"
-                              size: "default"
+                              size: "md"
                               weight: "semibold"
                               max_lines: 2
                             - type: "TextBlock"
                               text: "By {article_author}"
-                              color: "muted"
-                              size: "small"
+                              tone: "muted"
+                              size: "sm"
                               max_lines: 1
                       - type: "Column"
                         width: "auto"
-                        verticalAlignment: "top"
+                        align_y: "start"
                         items:
                             - type: "Badge"
                               text: "Open Source"
-                              color: "good"
+                              tone: "success"
                 - type: "Progress"
                   value: "{engagement_score}"
                   thresholds:
                       warning: 60
-                      attention: 80
+                      danger: 80
                 - type: "FactSet"
-                  spacing: "compact"
+                  spacing: "sm"
                   facts:
                       - label: "Reactions"
                         value: "{positive_reactions}"
@@ -118,6 +118,6 @@ templates:
                         value: "{reading_label}"
                 - type: "TextBlock"
                   text: "{article_url}"
-                  color: "muted"
-                  size: "small"
+                  tone: "muted"
+                  size: "sm"
                   max_lines: 1
