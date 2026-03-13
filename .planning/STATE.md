@@ -4,7 +4,7 @@ milestone: v0.1
 milestone_name: milestone
 status: **v1.0 Milestone Shipped** — 2026-03-13
 last_updated: "2026-03-13T14:04:12.514Z"
-last_activity: "2026-03-13 - Completed quick task 003: Convert CSS spacing variables from PX to REM"
+last_activity: "2026-03-13 - Completed quick task 003: 将布局密度的 CSS 变量从 PX 转换为 REM"
 progress:
   total_phases: 7
   completed_phases: 6
@@ -44,7 +44,7 @@ Last activity: 2026-03-13 - Completed quick task 19: templates 改为 template_i
 |---|-------------|------|--------|-----------|
 | 001 | 移动刷新按钮到侧边栏 | 2026-03-13 | 001d3db | [001-move-refresh-buttons](./quick/001-move-refresh-buttons/) |
 | 002 | widgets data_source 支持 inline array | 2026-03-13 | 92195f5 | [002-widgets-datasource](./quick/2-widgets-datasource/) |
-| 003 | Convert CSS spacing variables from PX to REM | 2026-03-13 | 3a4ba78 | [3-css-px-rem-widgets-rem](./quick/3-css-px-rem-widgets-rem/) |
+| 003 | 将布局密度的 CSS 变量从 PX 转换为 REM，检查 widgets 组件，统一使用 REM 进行间距布局 | 2026-03-13 | 2ff61cc | [3-css-px-rem-widgets-rem](./quick/3-css-px-rem-widgets-rem/) |
 
 ## Pending Todos
 - [ ] [2026-03-10] global-state-chat-sidebar (Area: architecture, ui)
