@@ -4,8 +4,13 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-.venv/
 venv/
+.venv/
+.env
+.env.*
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Data (TinyDB)
 data/*.json
@@ -23,6 +28,8 @@ config/config.yaml
 # OS
 .DS_Store
 Thumbs.db
+*.log
+.eslintcache
 
 # PyInstaller
 *.spec
@@ -33,6 +40,10 @@ ui-react/src-tauri/binaries/*
 !ui-react/src-tauri/binaries/README.md
 ui-react/src-tauri/target/
 ui-react/src-tauri/gen/
+ui-react/dist/
+ui-react/node_modules/
+ui-react/test-results/
+ui-react/.tmp-schema-test/
 
 # agent
 .agent/
