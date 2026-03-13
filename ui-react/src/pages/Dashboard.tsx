@@ -7,6 +7,7 @@ import {
     useState,
 } from "react";
 import { GridStack } from "gridstack";
+import { useNavigate } from "react-router-dom";
 import "gridstack/dist/gridstack.min.css";
 import { api } from "../api/client";
 import type {
@@ -55,7 +56,7 @@ import { useScraper } from "../hooks/useScraper";
 import { mergeViewItemsWithGridNodes } from "./dashboardLayout";
 import { invoke } from "@tauri-apps/api/core";
 import {
-    RefreshCw,
+    Play,
     Database,
     Trash2,
     Wrench,
@@ -242,6 +243,7 @@ function getSourceErrorDetails(
 }
 
 export default function Dashboard() {
+    const navigate = useNavigate();
     const {
         viewConfig: storeViewConfig,
         setViewConfig,
@@ -630,6 +632,15 @@ export default function Dashboard() {
         }
     };
 
+    const handleRefreshAll = async () => {
+        try {
+            await api.refreshAll();
+            window.dispatchEvent(new CustomEvent("app:refresh_data"));
+        } catch (error) {
+            console.error("刷新失败:", error);
+        }
+    };
+
     const openErrorDialog = useCallback((source: SourceSummary) => {
         setErrorSourceId(source.id);
         setShowErrorDetails(false);
@@ -640,7 +651,7 @@ export default function Dashboard() {
             <TooltipProvider>
                 <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
                     <EmptyState 
-                        icon={<RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />}
+                        icon={<Play className="h-8 w-8 animate-spin text-muted-foreground" />}
                         title="加载中..."
                         description="正在获取配置和数据"
                     />
@@ -658,7 +669,7 @@ export default function Dashboard() {
                 label: "刷新中",
                 variant: "info" as const,
                 colorClass: "bg-blue-500/10 text-blue-500",
-                icon: RefreshCw,
+                icon: Play,
             };
         }
         if ((source.status as string) === "suspended") {
@@ -757,7 +768,7 @@ export default function Dashboard() {
                             <TooltipTrigger asChild>
                                 <button
                                     onClick={toggleSidebar}
-                                    className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
+                                    className="h-8 w-8 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150 -my-1"
                                 >
                                     {sidebarCollapsed ? (
                                         <ChevronRight className="h-4 w-4" />
@@ -772,8 +783,58 @@ export default function Dashboard() {
                         </Tooltip>
                     </div>
 
+                    {!sidebarCollapsed && (
+                        <div className="p-3 border-b border-border/40 flex items-center gap-2 bg-surface/50">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => navigate("/integrations")}
+                                        className="flex-1 h-8 bg-transparent border-border/50 text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                                    >
+                                        <Plus className="h-3.5 w-3.5 mr-1.5" />
+                                        新建
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">添加数据源</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleRefreshAll}
+                                        className="flex-1 h-8 bg-transparent border-border/50 text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                                    >
+                                        <Play className="h-3.5 w-3.5 mr-1.5" />
+                                        运行
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">
+                                    重新获取所有数据源
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                    )}
+
                     {sidebarCollapsed ? (
                         <div className="flex-1 flex flex-col items-center gap-3 p-2 overflow-y-auto">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={handleRefreshAll}
+                                        className="h-8 w-8 text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150 mb-1"
+                                    >
+                                        <Play className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="text-xs">
+                                    运行 (获取数据源)
+                                </TooltipContent>
+                            </Tooltip>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <div className="flex flex-col items-center gap-1 p-2 rounded bg-success/20 text-success w-full">
@@ -791,7 +852,7 @@ export default function Dashboard() {
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div className="flex flex-col items-center gap-1 p-2 rounded bg-blue-500/10 text-blue-500 w-full">
-                                            <RefreshCw className="h-4 w-4" />
+                                            <Play className="h-4 w-4" />
                                             <span className="text-xs font-bold">
                                                 {statusCounts.refreshing}
                                             </span>
@@ -999,7 +1060,7 @@ export default function Dashboard() {
                                                                         )
                                                                     }
                                                                 >
-                                                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                                                    <Play className="mr-2 h-4 w-4" />
                                                                     <span>
                                                                         刷新
                                                                     </span>

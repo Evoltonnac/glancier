@@ -48,13 +48,13 @@ import {
     Database,
     AlertCircle,
     CheckCircle,
-    RotateCcw,
     ChevronLeft,
     ChevronRight,
     Globe,
     Key,
     Lock,
     Terminal,
+    RefreshCw,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { useTheme } from "../components/theme-provider";
@@ -833,24 +833,13 @@ export default function IntegrationsPage() {
                             </h2>
                         )}
                         <div className="flex items-center gap-1">
-                            {!sidebarCollapsed && (
-                                <Dialog
-                                    open={showNewIntegrationDialog}
-                                    onOpenChange={
-                                        handleNewIntegrationDialogChange
-                                    }
-                                >
-                                    <DialogTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            aria-label="New Integration"
-                                            className="h-6 w-6 text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
-                                        >
-                                            <Plus className="h-4 w-4" />
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-2xl">
+                            <Dialog
+                                open={showNewIntegrationDialog}
+                                onOpenChange={
+                                    handleNewIntegrationDialogChange
+                                }
+                            >
+                                <DialogContent className="max-w-2xl">
                                         <DialogHeader>
                                             <DialogTitle>
                                                 New Integration
@@ -989,7 +978,6 @@ export default function IntegrationsPage() {
                                         </DialogFooter>
                                     </DialogContent>
                                 </Dialog>
-                            )}
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <button
@@ -998,7 +986,7 @@ export default function IntegrationsPage() {
                                                 !sidebarCollapsed,
                                             )
                                         }
-                                        className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
+                                        className="h-8 w-8 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150 -my-1"
                                     >
                                         {sidebarCollapsed ? (
                                             <ChevronRight className="h-4 w-4" />
@@ -1014,6 +1002,41 @@ export default function IntegrationsPage() {
                         </div>
                     </div>
 
+                    {!sidebarCollapsed && (
+                        <div className="p-3 border-b border-border/40 flex items-center gap-2 bg-surface/50">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleNewIntegrationDialogChange(true)}
+                                        className="flex-1 h-8 bg-transparent border-border/50 text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                                    >
+                                        <Plus className="h-3.5 w-3.5 mr-1.5" />
+                                        新建
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">新建集成</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleReloadFile}
+                                        className="flex-1 h-8 bg-transparent border-border/50 text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                                    >
+                                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                        重载
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">
+                                    重新加载配置
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                    )}
+
                     {sidebarCollapsed ? (
                         <div className="flex-1 flex flex-col items-center gap-3 p-2 overflow-y-auto">
                             <Tooltip>
@@ -1021,19 +1044,14 @@ export default function IntegrationsPage() {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        aria-label="New Integration"
-                                        className="h-8 w-8 text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
-                                        onClick={() =>
-                                            handleNewIntegrationDialogChange(
-                                                true,
-                                            )
-                                        }
+                                        className="h-8 w-8 text-muted-foreground hover:bg-foreground hover:text-background transition-colors duration-150 mb-1"
+                                        onClick={handleReloadFile}
                                     >
-                                        <Plus className="h-4 w-4" />
+                                        <RefreshCw className="h-4 w-4" />
                                     </Button>
                                 </TooltipTrigger>
-                                <TooltipContent side="right">
-                                    New Integration
+                                <TooltipContent side="right" className="text-xs">
+                                    重新加载配置
                                 </TooltipContent>
                             </Tooltip>
                             {integrations.map((file) => {
@@ -1203,22 +1221,6 @@ export default function IntegrationsPage() {
                                             {success}
                                         </span>
                                     )}
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                size="icon"
-                                                aria-label="Reload file"
-                                                className="h-8 w-8 hover:bg-foreground hover:text-background transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-brand/50"
-                                                onClick={handleReloadFile}
-                                            >
-                                                <RotateCcw className="h-4 w-4" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            Reload file from disk
-                                        </TooltipContent>
-                                    </Tooltip>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button

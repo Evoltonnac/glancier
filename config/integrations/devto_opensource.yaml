@@ -32,42 +32,6 @@ flow:
           expr: "$[0].url"
       outputs:
           article_url: "$[0].url"
-    - id: parse_reactions
-      use: extract
-      args:
-          source: "{articles_payload}"
-          type: "jsonpath"
-          expr: "$[0].positive_reactions_count"
-      outputs:
-          positive_reactions: "$[0].positive_reactions_count"
-    - id: parse_comments
-      use: extract
-      args:
-          source: "{articles_payload}"
-          type: "jsonpath"
-          expr: "$[0].comments_count"
-      outputs:
-          comments_count: "$[0].comments_count"
-    - id: parse_reading_time
-      use: extract
-      args:
-          source: "{articles_payload}"
-          type: "jsonpath"
-          expr: "$[0].reading_time_minutes"
-      outputs:
-          reading_minutes: "$[0].reading_time_minutes"
-    - id: calc_card_metrics
-      use: script
-      args:
-          code: |
-              reactions = int(positive_reactions or 0)
-              comments = int(comments_count or 0)
-              minutes = int(reading_minutes or 0)
-              engagement_score = min(100, reactions * 2 + comments * 5)
-              reading_label = "Quick Read" if minutes <= 5 else "Deep Read"
-      outputs:
-          engagement_score: "engagement_score"
-          reading_label: "reading_label"
 templates:
     - id: "devto_oss_snapshot"
       type: "source_card"
@@ -87,37 +51,20 @@ templates:
                               text: "{article_title}"
                               size: "md"
                               weight: "semibold"
-                              max_lines: 2
+                              max_lines: 1
                             - type: "TextBlock"
-                              text: "By {article_author}"
+                              text: "{article_author}"
                               tone: "muted"
                               size: "sm"
                               max_lines: 1
                       - type: "Column"
                         width: "auto"
-                        align_y: "start"
+                        align_y: "center"
                         items:
-                            - type: "Badge"
-                              text: "Open Source"
-                              tone: "success"
-                - type: "Progress"
-                  value: "{engagement_score}"
-                  thresholds:
-                      warning: 60
-                      danger: 80
-                - type: "FactSet"
-                  spacing: "sm"
-                  facts:
-                      - label: "Reactions"
-                        value: "{positive_reactions}"
-                      - label: "Comments"
-                        value: "{comments_count}"
-                      - label: "Read"
-                        value: "{reading_minutes} min"
-                      - label: "Mode"
-                        value: "{reading_label}"
-                - type: "TextBlock"
-                  text: "{article_url}"
-                  tone: "muted"
-                  size: "sm"
-                  max_lines: 1
+                            - type: "ActionSet"
+                              align_x: "end"
+                              actions:
+                                  - type: "Action.OpenUrl"
+                                    title: "Read"
+                                    url: "{article_url}"
+                                    size: "sm"

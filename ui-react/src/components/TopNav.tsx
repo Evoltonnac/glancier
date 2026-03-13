@@ -1,6 +1,5 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { api } from "../api/client";
-import { RefreshCw, Settings, LayoutDashboard, Blocks } from "lucide-react";
+import { Settings, LayoutDashboard, Blocks } from "lucide-react";
 import {
     Tooltip,
     TooltipContent,
@@ -52,15 +51,6 @@ export function TopNav() {
 
     const isHomeActive = location.pathname === "/";
     const isIntegrationsActive = location.pathname.startsWith("/integrations");
-
-    const handleRefreshAll = async () => {
-        try {
-            await api.refreshAll();
-            window.dispatchEvent(new CustomEvent("app:refresh_data"));
-        } catch (error) {
-            console.error("刷新失败:", error);
-        }
-    };
 
     const navItemClass = (isActive: boolean) =>
         `inline-flex items-center justify-center h-9 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
@@ -145,21 +135,6 @@ export function TopNav() {
 
                 {/* Right: Actions */}
                 <div className="flex items-center gap-2">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                onClick={handleRefreshAll}
-                                className={actionButtonClass}
-                                aria-label="全部刷新"
-                            >
-                                <RefreshCw className="w-4 h-4" />
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>重新获取所有数据源的配额数据</p>
-                        </TooltipContent>
-                    </Tooltip>
-
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button

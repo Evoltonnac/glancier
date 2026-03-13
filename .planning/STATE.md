@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: 稳定版发版
 status: shipped
 last_updated: "2026-03-13T13:45:00Z"
-last_activity: "2026-03-13 - Milestone v1.0 completed and archived"
+last_activity: "2026-03-13 - Completed quick task 001: 移动刷新按钮到侧边栏"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -37,6 +37,14 @@ Last activity: 2026-03-13 - Completed quick task 19: templates 改为 template_i
 ## Accumulated Context
 
 ### Pending Todos
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 001 | 移动刷新按钮到侧边栏 | 2026-03-13 | 001d3db | [001-move-refresh-buttons](./quick/001-move-refresh-buttons/) |
+
+## Pending Todos
 - [ ] [2026-03-10] global-state-chat-sidebar (Area: architecture, ui)
 - [ ] [2026-03-09] project-structure-reorganization (Area: planning)
 - [ ] [2026-03-08] topnav-global-search (Area: ui)
