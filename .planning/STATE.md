@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: 稳定版发版
-status: shipped
-last_updated: "2026-03-13T13:45:00Z"
-last_activity: "2026-03-13 - Completed quick task 001: 移动刷新按钮到侧边栏"
+milestone: v0.1
+milestone_name: milestone
+status: **v1.0 Milestone Shipped** — 2026-03-13
+last_updated: "2026-03-13T14:04:12.514Z"
+last_activity: "2026-03-13 - Completed quick task 19: templates 改为 template_id 关联 + runtime hydration，同步 integration YAML templates 变更到已添加视图组件"
 progress:
   total_phases: 7
-  completed_phases: 7
-  total_plans: 30
+  completed_phases: 6
+  total_plans: 32
   completed_plans: 30
 ---
 
@@ -28,7 +28,7 @@ All 7 phases (09-15) completed. Milestone archived.
 
 ## Session Continuity
 
-Last session: 2026-03-13
+Last session: 2026-03-13T14:04:12.512Z
 Last activity: 2026-03-13 - Completed quick task 19: templates 改为 template_id 关联 + runtime hydration，同步 integration YAML templates 变更到已添加视图组件
 - 2026-03-11: Executed Phase 15 plans 01/02/04/05 (Authlib refactor, device flow backend, client credentials + refresh hardening, integration tests).
 - 2026-03-11: Implemented Phase 15-03 frontend work and created plan summaries (`15-01` ~ `15-05`), with `15-03` remaining `checkpoint_pending`.
@@ -43,6 +43,7 @@ Last activity: 2026-03-13 - Completed quick task 19: templates 改为 template_i
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 001 | 移动刷新按钮到侧边栏 | 2026-03-13 | 001d3db | [001-move-refresh-buttons](./quick/001-move-refresh-buttons/) |
+| 002 | widgets data_source 支持 inline array | 2026-03-13 | 92195f5 | [002-widgets-datasource](./quick/2-widgets-datasource/) |
 
 ## Pending Todos
 - [ ] [2026-03-10] global-state-chat-sidebar (Area: architecture, ui)
