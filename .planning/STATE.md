@@ -4,7 +4,7 @@ milestone: v0.1
 milestone_name: milestone
 status: **v1.0 Milestone Shipped** — 2026-03-13
 last_updated: "2026-03-13T14:04:12.514Z"
-last_activity: "2026-03-13 - Completed quick task 19: templates 改为 template_id 关联 + runtime hydration，同步 integration YAML templates 变更到已添加视图组件"
+last_activity: "2026-03-13 - Completed quick task 002: widgets data_source 支持 inline array"
 progress:
   total_phases: 7
   completed_phases: 6
