@@ -1,154 +1,187 @@
-# Architecture - Glancier
+# Architecture
 
-**Analysis Date:** 2026-03-10
+**Analysis Date:** 2026-03-13
 
 ## Pattern Overview
 
-**Overall:** Configuration-driven **Personal Data Aggregator & Hub** with a Bento Grid UI.
+**Overall:** Service-Oriented with Component-Based UI
 
 **Key Characteristics:**
-- **Flow -> Bento Grid Pipeline**: Integration behavior is declared as a `flow` in YAML (`config/integrations/*.yaml`) and visualized using View Templates.
-- **Decoupled Data Fetching**: Data is treated as generic **Integration Data**, categorized into **Metrics** (numeric) or **Signals** (state/boolean).
-- **Desktop-First Execution**: A modular monolith backend (FastAPI) wrapped in a Tauri shell for native scraping and local-first persistence.
-- **SDUI Runtime Contract**: Rendering is schema-validated at runtime with Zod and driven by a safe template expression engine.
+- FastAPI backend provides REST API for data fetching and source management
+- React/TypeScript frontend with Zustand state management
+- Flow-based execution engine for data source scraping
+- YAML-driven integration and source configuration
+- JSON-based persistent storage for runtime data and user configurations
 
 ## Layers
 
-**Configuration Layer:**
-- Purpose: Define integration flows, auth strategies, and **Bento Card** templates.
-- Location: `config/integrations/*.yaml`, `core/config_loader.py`
-- Contains: Pydantic enums/models (`AuthType`, `StepType`, `SourceConfig`, `IntegrationConfig`)
-- Used by: `main.py`, `core/api.py`, `core/auth/manager.py`, `core/executor.py`
+**Backend Layer (`core/`):**
+- Purpose: Core business logic, data execution, and API serving
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/`
+- Contains: API routes, executors, configuration loaders, data controllers
+- Depends on: Pydantic, FastAPI, httpx, YAML libraries
+- Used by: Frontend (via HTTP), Tauri desktop app
 
-**Execution Layer (The Flow Engine):**
-- Purpose: Execute multi-step flows to extract **Integration Data**.
-- Location: `core/executor.py`, `core/steps/*.py`, `core/source_state.py`
-- Contains: Step routing + modular runners (`http`, `oauth`, `extract`, `script`, `webview`) and interaction handling.
-- Depends on: `core/secrets_controller.py`, `core/data_controller.py`, `httpx`, `jsonpath_ng`
+**API Layer (`core/api.py`):**
+- Purpose: Expose REST endpoints for frontend consumption
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/api.py`
+- Contains: FastAPI router with endpoints for sources, views, integrations, auth
+- Depends on: All core modules (executor, data_controller, config, auth_manager)
+- Used by: Frontend HTTP client (`ui-react/src/api/client.ts`)
 
-**Persistence Layer (Local-First):**
-- Purpose: Store Metrics, Signals, configurations, and encrypted secrets locally.
-- Location: `core/resource_manager.py`, `core/data_controller.py`, `core/secrets_controller.py`, `core/settings_manager.py`
-- Contains: JSON file CRUD + TinyDB state/history + AES-256-GCM secret support.
-- Environment Variable: `GLANCIER_DATA_DIR`.
+**Execution Layer (`core/executor.py`):**
+- Purpose: Orchestrate data source fetching via flow steps
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/executor.py`
+- Contains: Executor class that runs flows, manages SourceState
+- Depends on: Steps (http_step, auth_step, browser_step, etc.), SecretsController
+- Used by: API layer for fetch operations
 
-**API Layer:**
-- Purpose: Expose data hub capabilities to the client.
-- Location: `main.py`, `core/api.py`
-- Contains: `/api/sources`, `/api/data`, `/api/refresh`, `/api/integrations/files`.
+**Step Modules (`core/steps/`):**
+- Purpose: Implement individual flow step types
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/steps/`
+- Contains: `http_step.py`, `auth_step.py`, `browser_step.py`, `extract_step.py`, `script_step.py`
+- Depends on: httpx, browser automation, auth libraries
+- Used by: Executor
 
-**Presentation Layer (Bento UI):**
-- Purpose: Render a high-density dashboard using modular **Micro-Widgets**.
-- Location: `ui-react/src/App.tsx`, `ui-react/src/pages/*.tsx`, `ui-react/src/components/**/*`
-- Philosophy: **Bento Grid** - Organized, modular tiles displaying prioritized data.
-- Components:
-  - SDUI renderer core: `ui-react/src/components/widgets/WidgetRenderer.tsx`
-  - Layouts: `Container`, `ColumnSet`, `Column`
-  - Containers: `List` (filter/sort/limit/pagination)
-  - Elements: `TextBlock`, `FactSet`, `Image`, `Badge`
-  - Visualizations/Actions: `Progress`, `ActionSet`, `Action.OpenUrl`, `Action.Copy`
-  - Template engine: `ui-react/src/lib/templateExpression.ts`, `ui-react/src/lib/utils.ts`
+**Data Persistence Layer:**
+- Purpose: JSON-based storage for sources, views, and scraped data
+- Locations:
+  - `/Users/xingminghua/Coding/evoltonnac/glancier/core/data_controller.py` - scraped data
+  - `/Users/xingminghua/Coding/evoltonnac/glancier/core/resource_manager.py` - sources/views metadata
+  - `/Users/xingminghua/Coding/evoltonnac/glancier/core/secrets_controller.py` - encrypted credentials
 
-## Project Architecture Diagram
+**Configuration Layer (`core/config_loader.py`):**
+- Purpose: Parse and resolve YAML integration/source configs
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/config_loader.py`
+- Contains: Pydantic models, YAML loading, variable substitution, integration inheritance
+- Depends on: PyYAML, Pydantic
+- Used by: Executor, API, bootstrap
 
-```mermaid
-flowchart TD
-    A[Integration YAML<br/>config/integrations/*.yaml] --> B[FastAPI API Layer<br/>core/api.py]
-    B --> C[Flow Executor Router<br/>core/executor.py]
-    C --> D[Step Modules<br/>core/steps/http_step.py<br/>core/steps/browser_step.py ...]
-    D --> E[Data/State Persistence<br/>core/data_controller.py]
-    E --> F[React Dashboard Shell<br/>ui-react/src/App.tsx]
-    F --> G[WidgetRenderer + WidgetSchema<br/>ui-react/src/components/widgets/WidgetRenderer.tsx]
-    G --> H[Template Expression Engine<br/>ui-react/src/lib/templateExpression.ts]
-    G --> I[SDUI Widget Categories<br/>Layouts / Containers / Elements / Visualizations / Actions]
-```
+**Authentication Layer (`core/auth/`):**
+- Purpose: Handle OAuth, API key, and PKCE authentication flows
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/auth/`
+- Contains: `oauth_auth.py`, `pkce.py`, `manager.py`, `oauth_types.py`
+- Depends on: authlib, cryptography
+- Used by: Executor (auth steps), API (auth endpoints)
 
-**Desktop Bridge Layer:**
-- Purpose: Provide native autostart and webview scraping workflows
-- Location: `ui-react/src-tauri/src/lib.rs`, `ui-react/src-tauri/src/scraper.rs`
-- Contains: tauri command handlers, event emitters, hidden/off-screen scraper window orchestration
-- Depends on: Tauri plugins and frontend `invoke/listen` calls in `ui-react/src/App.tsx` and `ui-react/src/pages/Settings.tsx`
-- Used by: React client when run as desktop app
+**Frontend Layer (`ui-react/src/`):**
+- Purpose: React-based UI with Tauri desktop integration
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/ui-react/src/`
+- Contains: Pages, components, store, API client, widget renderer
+- Depends on: React 18, Zustand, Monaco Editor, GridStack, Radix UI
+- Used by: End users via browser or Tauri desktop
 
 ## Data Flow
 
-**User-Driven Refresh Flow:**
+**Source Fetch Flow:**
 
-1. UI triggers refresh via `api.refreshSource` or `api.refreshAll` in `ui-react/src/api/client.ts`
-2. FastAPI route in `core/api.py` resolves `StoredSource` to `SourceConfig` and schedules `Executor.fetch_source`
-3. Executor runs configured steps in `core/executor.py`, obtaining secrets from `core/secrets_controller.py`
-4. Results and status are persisted to TinyDB (`core/data_controller.py`) and returned to UI polling (`ui-react/src/App.tsx`)
+1. Frontend calls `POST /api/sources/{id}/fetch` via `api/client.ts`
+2. API endpoint retrieves SourceConfig via `resolve_stored_source()` in `main.py`
+3. API calls `executor.fetch_source(source)`
+4. Executor runs flow steps sequentially:
+   - Resolves step arguments (outputs > context > secrets)
+   - Dispatches to appropriate step handler (`execute_http_step`, `execute_auth_step`, etc.)
+   - Stores outputs to context and secrets
+5. Executor persists result via `data_controller.upsert()`
+6. Executor updates SourceState via `data_controller.set_state()`
+7. Frontend polls for state changes and refreshes data display
 
-**SDUI Render Flow:**
+**Authentication Flow:**
 
-1. View template config (including `{...}` expressions) is loaded by the frontend.
-2. `WidgetRenderer` recursively evaluates template fields via `evaluateTemplate` / `evaluateTemplateExpression`.
-3. Evaluated nodes are validated with `WidgetSchema.safeParse` (Zod runtime guard).
-4. `List` nodes bind array data via `data_source`, then apply `filter`, `sort_by`, `limit`, and optional pagination.
-5. Leaf widgets render typed props; invalid nodes degrade safely without blanking the whole card.
+1. Source fetch fails with auth error (401/403)
+2. Executor raises `RequiredSecretMissing` or `InvalidCredentialsError`
+3. Executor converts exception to `InteractionRequest`
+4. State persisted with `SUSPENDED` status and interaction data
+5. Frontend detects suspended source, shows auth modal (OAuth, API key input, etc.)
+6. User completes auth, frontend calls interaction resolution endpoint
+7. Secrets stored via `secrets_controller`
+8. Frontend retries fetch
 
-**State Management:**
-- Backend runtime state: in-memory `Executor._states` plus persisted source status in TinyDB via `DataController.set_state` (`core/executor.py`, `core/data_controller.py`)
-- Frontend state: React hooks in large page-level component `ui-react/src/App.tsx`; no global state library detected
+**Configuration Resolution Flow:**
+
+1. `main.py` calls `load_config()` from `config_loader.py`
+2. Loader scans `config/` directory for YAML files
+3. Integrations loaded from `config/integrations/*.yaml`
+4. Sources loaded from `config/sources.yaml` or `config/*.yaml`
+5. Variable substitution applies `{var}` placeholders
+6. Integration inheritance resolved (source inherits from integration)
+7. Pydantic validation ensures schema compliance
 
 ## Key Abstractions
 
-**Source and Integration Models:**
-- Purpose: Contract between YAML definitions, persisted JSON source instances, and runtime execution
-- Examples: `core/config_loader.py`, `core/models.py`
-- Pattern: Pydantic-validated schema with merge/substitution resolution
+**SourceConfig:**
+- Purpose: Runtime representation of a data source with resolved flow
+- Examples: `/Users/xingminghua/Coding/evoltonnac/glancier/core/config_loader.py` (SourceConfig model)
+- Pattern: Pydantic BaseModel with flow, vars, schedule
 
-**InteractionRequest Contract:**
-- Purpose: Standardize actionable user prompts (API key, OAuth, webview scrape)
-- Examples: `core/source_state.py`, `ui-react/src/components/auth/FlowHandler.tsx`
-- Pattern: backend emits typed interaction payload; frontend renders dynamic form/actions
+**StoredSource:**
+- Purpose: User-persisted source metadata (ID, integration_id, vars, config)
+- Examples: `/Users/xingminghua/Coding/evoltonnac/glancier/core/models.py`
+- Pattern: JSON-serializable Pydantic model
 
-**Scraper Task Bridge:**
-- Purpose: Offload web dashboard scraping through Tauri webview interception
-- Examples: `ui-react/src-tauri/src/scraper.rs`, `ui-react/src/App.tsx`
-- Pattern: command dispatch (`invoke`) + emitted events (`listen`) + source-scoped dedupe
+**StepConfig:**
+- Purpose: Single step in a flow (HTTP request, auth, extraction, etc.)
+- Examples: `/Users/xingminghua/Coding/evoltonnac/glancier/core/config_loader.py` (StepConfig model)
+- Pattern: Defines `id`, `use` (step type), `args`, `outputs`, `context`, `secrets`
 
-**Widget Runtime Contract:**
-- Purpose: Keep declarative UI schema-first and AI-friendly while ensuring runtime safety.
-- Examples: `ui-react/src/components/widgets/WidgetRenderer.tsx`, `ui-react/src/components/widgets/**`
-- Pattern: discriminated-union schema + recursive rendering + invalid-node fallback.
+**SourceState:**
+- Purpose: Runtime state of a source (ACTIVE, ERROR, SUSPENDED, etc.)
+- Examples: `/Users/xingminghua/Coding/evoltonnac/glancier/core/source_state.py`
+- Pattern: Enum status + interaction request for suspended state
 
-**Template Expression Engine:**
-- Purpose: Evaluate template expressions with controlled syntax and helper whitelist.
-- Examples: `ui-react/src/lib/templateExpression.ts`, `docs/sdui/03_template_expression_spec.md`
-- Pattern: custom parser/evaluator, no `eval/new Function`, forbidden prototype-chain access.
+**InteractionRequest:**
+- Purpose: Frontend instruction for user action (OAuth, API key input, retry)
+- Examples: `/Users/xingminghua/Coding/evoltonnac/glancier/core/source_state.py`
+- Pattern: Enum type + fields + data payload
 
 ## Entry Points
 
-**Backend Entry Point:**
-- Location: `main.py`
-- Triggers: `python main.py [port]`
-- Responsibilities: initialize services, wire API dependencies, startup refresh lifecycle, run uvicorn
+**Backend Entry:**
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/main.py`
+- Triggers: `python main.py [port]` or `uvicorn main:app`
+- Responsibilities: FastAPI app creation, component initialization, CORS setup, lifespan management
 
-**Frontend Entry Point:**
-- Location: `ui-react/src/main.tsx`
-- Triggers: Vite app start (`npm run dev`)
-- Responsibilities: mount React tree, apply `ThemeProvider`, render router app
+**Frontend Entry:**
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/ui-react/src/main.tsx`
+- Triggers: `npm run dev` (Vite dev server) or Tauri build
+- Responsibilities: React app mount, routing setup, store initialization
 
-**Desktop Entry Point:**
-- Location: `ui-react/src-tauri/src/main.rs` -> `ui-react/src-tauri/src/lib.rs`
-- Triggers: `npm run tauri:dev` / Tauri bundle launch
-- Responsibilities: register native commands, optional sidecar startup, manage scraper state
+**API Router:**
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/api.py`
+- Triggers: HTTP requests from frontend
+- Responsibilities: All REST endpoints (sources, views, integrations, auth, settings)
+
+**Executor Entry:**
+- Location: `/Users/xingminghua/Coding/evoltonnac/glancier/core/executor.py` (Executor.fetch_source)
+- Triggers: API source fetch endpoint
+- Responsibilities: Flow execution, state management, error handling
 
 ## Error Handling
 
-**Strategy:** Catch-and-convert with user-facing interactions or HTTP errors
+**Strategy:** Exception-based with structured interaction requests
 
 **Patterns:**
-- Backend uses `try/except` + `logger.error` and maps failures to `SourceStatus` + `InteractionRequest` in `core/executor.py`
-- API routes validate presence/IDs and raise `HTTPException` in `core/api.py`
+- Custom exceptions: `RequiredSecretMissing`, `InvalidCredentialsError`, `WebScraperBlockedError`, `FlowExecutionError`
+- Executor catches exceptions and converts to InteractionRequest for frontend
+- State persisted to JSON for frontend polling
+- OAuth refresh attempt on credential failure before showing interaction
 
 ## Cross-Cutting Concerns
 
-**Logging:** Python logging configured in `main.py`; module loggers throughout `core/*.py`; console logging on frontend in `ui-react/src/App.tsx`
-**Validation:** Pydantic model validation in `core/config_loader.py`, `core/models.py`, `core/source_state.py`; Zod runtime validation for SDUI widgets in `ui-react/src/components/widgets/WidgetRenderer.tsx`
-**Authentication:** Source-scoped auth handlers (`api_key`, `oauth`, `browser`) in `core/auth/*.py` with secret persistence in `core/secrets_controller.py`
+**Logging:** Python standard logging module with configurable levels (DEBUG/INFO)
+
+**Validation:** Pydantic models throughout config loading and API request/response
+
+**Authentication:**
+- OAuth 1.0a/2.0 with PKCE support
+- API key header injection
+- cURL command parsing
+- Browser cookie extraction
+
+**Encryption:**
+- SecretsController with cryptography for stored credentials
+- SettingsManager for adaptive encryption
 
 ---
 
-*Architecture analysis: 2026-03-10*
+*Architecture analysis: 2026-03-13*

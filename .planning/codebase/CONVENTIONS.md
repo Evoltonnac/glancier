@@ -1,94 +1,129 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-02-28
+**Analysis Date:** 2026-03-13
 
 ## Naming Patterns
 
 **Files:**
-- Backend Python uses `snake_case` file naming (examples: `core/data_controller.py`, `core/source_state.py`)
-- Frontend feature components mostly use `PascalCase` (examples: `ui-react/src/components/BaseSourceCard.tsx`, `ui-react/src/pages/Settings.tsx`)
-- Frontend UI primitives use lowercase names, sometimes kebab-case (examples: `ui-react/src/components/ui/button.tsx`, `ui-react/src/components/ui/dropdown-menu.tsx`)
+- PascalCase for components: `Dashboard.tsx`, `WidgetRenderer.tsx`
+- camelCase for utilities/hooks: `useScraper.ts`, `templateExpression.ts`
+- camelCase for test files: `dashboardLayout.test.ts`, `useScraper.test.ts`
+- kebab-case for config files: `eslint.config.js`, `vitest.config.ts`
 
 **Functions:**
-- Python uses `snake_case` functions/methods (examples: `resolve_stored_source` in `main.py`, `_resolve_args` in `core/executor.py`)
-- TypeScript uses `camelCase` functions/hooks (examples: `handleAddWidget` and `loadData` in `ui-react/src/App.tsx`)
+- camelCase: `useScraper`, `mergeViewItemsWithGridNodes`, `hasLayoutOverlap`
+- Custom hooks MUST start with "use" prefix: `useScraper`, `useSidebar`, `useSWR`
 
 **Variables:**
-- Python follows `snake_case` (`stored_sources` in `core/api.py`)
-- TS/React follows `camelCase` (`activeScraperRef` in `ui-react/src/App.tsx`)
+- camelCase: `activeScraper`, `webviewQueue`, `scraperLogs`
+- Interface names use PascalCase: `AppState`, `ScraperLifecycleLog`, `SourceSummary`
+- Type aliases use PascalCase: `WaitForBackendOptions`, `RuntimePortInfo`
 
-**Types:**
-- Pydantic models use `PascalCase` in backend (`SourceConfig` in `core/config_loader.py`)
-- TS interfaces/types use `PascalCase` (`SourceSummary` in `ui-react/src/types/config.ts`)
+**Constants:**
+- UPPER_SNAKE_CASE for compile-time constants: `DEFAULT_TAURI_API_PORT`, `SCRAPER_LOG_LIMIT`
+- Regular camelCase for runtime constants: `tauriCachedBaseUrl`
 
 ## Code Style
 
 **Formatting:**
-- Python formatter config not detected (`pyproject.toml`/`ruff`/`black` config absent)
-- Frontend formatting appears Prettier-like but Prettier config not detected
+- Tool: Uses ESLint with TypeScript ESLint and React plugins
+- No Prettier config found - relies on ESLint for formatting
+- 4-space indentation (TypeScript default)
+- Semicolons required
 
 **Linting:**
-- ESLint flat config with TypeScript and React plugins in `ui-react/eslint.config.js`
-- Strict TS compiler settings (`strict`, `noUnusedLocals`, `noUnusedParameters`) in `ui-react/tsconfig.json`
+- Tool: ESLint flat config (`eslint.config.js`)
+- Extends: `js.configs.recommended`, `tseslint.configs.recommended`, `reactHooks.configs.flat.recommended`, `reactRefresh.configs.vite`
+- Globals: `globals.browser`
+- ECMAScript 2020
+- Ignores: `dist` directory
+
+**TypeScript:**
+- Strict mode enabled: `"strict": true` in `tsconfig.json`
+- `noUnusedLocals: true` and `noUnusedParameters: true`
+- `isolatedModules: true`
+- Module resolution: `bundler`
+- JSX: `react-jsx`
 
 ## Import Organization
 
 **Order:**
-1. External libraries first (example: `react`, `@tauri-apps/api`, `gridstack` in `ui-react/src/App.tsx`)
-2. Local modules/components second (example: `./api/client`, `./components/*` in `ui-react/src/App.tsx`)
-3. Type imports and value imports are mixed but explicit where needed (example: `type` imports in `ui-react/src/App.tsx`)
+1. External React/framework imports: `import { useEffect, useRef } from "react"`
+2. External library imports: `import { invoke } from "@tauri-apps/api/core"`
+3. Internal relative imports (paths start with `.` or `..`): `import { useStore } from "../store"`
+4. Path alias imports (uses `@/`): Not currently used in source files
 
 **Path Aliases:**
-- `@` alias to `ui-react/src` configured in `ui-react/vite.config.ts`
-- Relative imports still dominant across UI code (example: `../../lib/utils` in `ui-react/src/components/ui/button.tsx`)
+- Configured in `vitest.config.ts`: `@/` maps to `./src`
+- Not configured in TypeScript (using relative imports)
 
 ## Error Handling
 
 **Patterns:**
-- API layer raises `HTTPException` for invalid resources/state in `core/api.py`
-- Service layer catches and logs exceptions, then updates runtime state in `core/executor.py`
-- Frontend API client throws on non-2xx and callers catch with UI fallback/console logging in `ui-react/src/api/client.ts` and `ui-react/src/App.tsx`
+- Try-catch blocks for async operations with specific error messages
+- Console error/warn for non-critical failures with descriptive messages in Chinese (e.g., `"加载数据失败:"`)
+- Throws descriptive Error objects: `throw new Error("Failed to fetch sources")`
+- Error parsing from HTTP responses: checks for `detail` and `message` fields in JSON payloads
+
+**Examples from `src/api/client.ts`:**
+```typescript
+try {
+    const payload = await res.json();
+    if (payload && typeof payload === "object") {
+        const detail = "detail" in payload ? payload.detail : null;
+        // ...
+    }
+} catch {
+    // ignore non-JSON responses and keep fallback
+}
+return fallback;
+```
 
 ## Logging
 
-**Framework:** Python `logging`; frontend `console`; Tauri plugin log in debug
+**Framework:** `console` (browser console)
 
 **Patterns:**
-- Module logger usage (`logger = logging.getLogger(__name__)`) in `main.py`, `core/*.py`
-- User-facing UI errors handled with `alert` or local state in `ui-react/src/pages/Settings.tsx` and `ui-react/src/pages/Integrations.tsx`
+- `console.error` for failures: `console.error("Failed to push scraper task to Tauri:", err)`
+- `console.warn` for non-critical issues: `console.warn("Failed to load scraper timeout settings...")`
+- `console.log` for debugging/tracing: `console.log("手动将 ${source.name}...")`
+- Error messages often in Chinese mixed with English
 
 ## Comments
 
 **When to Comment:**
-- Comments are used for rationale and operational caveats (examples: GridStack sync notes in `ui-react/src/App.tsx`, encryption migration comments in `core/secrets_controller.py`)
+- Complex logic explanations: see `useScraper.ts` for detailed comments on state management
+- Non-obvious workarounds: `"// Guard against UI wipeout when navigating back to Dashboard:"`
+- TODO-like explanations: `"// Track when scraper was intentionally started by user action"`
 
 **JSDoc/TSDoc:**
-- Sparse and selective on frontend (example comments on row-span behavior in `ui-react/src/types/config.ts`)
-- Python docstrings are widely used for modules/classes/functions in `core/*.py`
+- Not extensively used in codebase
+- No JSDoc comments observed in source files
 
 ## Function Design
 
 **Size:**
-- Several large functions/components exceed small-function norms (notably `Dashboard` in `ui-react/src/App.tsx` and long route module in `core/api.py`)
+- Functions tend to be large in complex hooks (e.g., `useScraper` is 600+ lines)
+- Smaller utility functions in `lib/utils.ts`
 
 **Parameters:**
-- Backend passes explicit dependency objects during initialization (`api.init_api(...)` in `main.py`)
-- Frontend handlers frequently close over page state rather than receiving narrow dependencies (`ui-react/src/App.tsx`)
+- Typed parameters: `function normalizeScraperTimeoutSeconds(value: number | undefined): number`
+- Options objects for flexibility: `handlePushToQueue(source: SourceSummary, options?: { foreground?: boolean })`
 
 **Return Values:**
-- Backend service methods return typed dict/model structures (examples in `core/data_controller.py`, `core/resource_manager.py`)
-- Frontend API client methods return parsed JSON promises with simple typed interfaces in `ui-react/src/api/client.ts`
+- Explicit return types on functions
+- Async/await for promise-based operations
 
 ## Module Design
 
 **Exports:**
-- Backend modules export classes/functions directly by definition (no central barrel module)
-- Frontend uses named exports for components/utilities and occasional default exports for page components (`ui-react/src/pages/Integrations.tsx`)
+- Named exports preferred: `export const useStore = create<AppState>(...)`
+- Single export per module for main functionality
 
 **Barrel Files:**
-- Barrel export used for UI components in `ui-react/src/components/index.ts`
-- Most feature areas import directly from file paths instead of barrels
+- Not heavily used
+- Direct imports from files: `import { useStore } from "../store/index"`
 
 ---
 
-*Convention analysis: 2026-02-28*
+*Convention analysis: 2026-03-13*
