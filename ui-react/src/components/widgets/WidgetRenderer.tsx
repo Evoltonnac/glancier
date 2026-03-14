@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { memo, useEffect, useState } from "react";
-import { evaluateTemplate } from "../../lib/utils";
 import { evaluateTemplateExpression } from "../../lib/templateExpression";
+import { resolveWidgetParams } from "./shared/widgetParamResolver";
 
 // Import all widget schemas
 import { ContainerSchema } from "./layouts/Container";
@@ -72,43 +72,6 @@ export const WidgetSchema: z.ZodType<any> = z.lazy(() =>
 );
 
 export type Widget = z.infer<typeof WidgetSchema>;
-
-/**
- * Recursively evaluate all template strings in a widget configuration
- */
-function evaluateWidgetTemplates(widget: any, data: Record<string, any>): any {
-    if (typeof widget === "string") {
-        return evaluateTemplate(widget, data);
-    }
-
-    if (Array.isArray(widget)) {
-        return widget.map((item) => evaluateWidgetTemplates(item, data));
-    }
-
-    if (widget && typeof widget === "object") {
-        // Special case: Skip evaluating templates in List widget's render array
-        // The render array will be evaluated per-item by the List component
-        if (widget.type === "List" && widget.render) {
-            const result: any = {};
-            for (const [key, value] of Object.entries(widget)) {
-                // Preserve render array as-is for per-item evaluation
-                result[key] =
-                    key === "render"
-                        ? value
-                        : evaluateWidgetTemplates(value, data);
-            }
-            return result;
-        }
-
-        const result: any = {};
-        for (const [key, value] of Object.entries(widget)) {
-            result[key] = evaluateWidgetTemplates(value, data);
-        }
-        return result;
-    }
-
-    return widget;
-}
 
 interface WidgetRendererProps {
     widget: Widget;
@@ -253,7 +216,7 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
  */
 function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
     // Evaluate all template strings in the widget configuration
-    const evaluatedWidget = evaluateWidgetTemplates(widget, data);
+    const evaluatedWidget = resolveWidgetParams(widget, data);
 
     // Validate against schema
     const parseResult = WidgetSchema.safeParse(evaluatedWidget);

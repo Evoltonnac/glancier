@@ -226,4 +226,111 @@ describe("WidgetRenderer", () => {
         expect(text).toHaveStyle({ WebkitLineClamp: "2" });
         expect(text).toHaveStyle({ display: "-webkit-box" });
     });
+
+    it("resolves non-value enum params from templates", () => {
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Container",
+                        spacing: "{compact ? 'SM' : 'LG'}",
+                        align_y: "{vertical_align}",
+                        items: [
+                            {
+                                type: "TextBlock",
+                                text: "Usage",
+                                size: "{text_size}",
+                                tone: "{text_tone}",
+                                align_x: "{horizontal_align}",
+                            },
+                        ],
+                    } as any
+                }
+                data={{
+                    compact: true,
+                    vertical_align: "CENTER",
+                    text_size: "LG",
+                    text_tone: "WARNING",
+                    horizontal_align: "END",
+                }}
+            />,
+        );
+
+        const textBlock = screen.getByText("Usage");
+        expect(textBlock).toHaveClass("text-base");
+        expect(textBlock).toHaveClass("text-warning");
+        expect(textBlock).toHaveClass("text-right");
+
+        const container = textBlock.parentElement;
+        expect(container).toHaveClass("qb-gap-1");
+        expect(container).toHaveClass("justify-center");
+    });
+
+    it("resolves list layout params from templates with primitive coercion", () => {
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "List",
+                        data_source: [
+                            { name: "Item A" },
+                            { name: "Item B" },
+                        ],
+                        item_alias: "item",
+                        layout: "{layout_mode}",
+                        columns: "{column_count}",
+                        spacing: "{gap_size}",
+                        render: [
+                            {
+                                type: "TextBlock",
+                                text: "{item.name}",
+                            },
+                        ],
+                    } as any
+                }
+                data={{
+                    layout_mode: "GRID",
+                    column_count: "3",
+                    gap_size: "LG",
+                }}
+            />,
+        );
+
+        const listGrid = screen.getByText("Item A").closest("div.grid");
+        expect(listGrid).not.toBeNull();
+        expect(listGrid).toHaveClass("lg:grid-cols-3");
+        expect(listGrid).toHaveClass("qb-gap-3");
+    });
+
+    it("falls back to schema defaults when templated enum values are invalid", () => {
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Badge",
+                        text: "Template Badge",
+                        size: "{badge_size}",
+                        tone: "{badge_tone}",
+                    } as any
+                }
+                data={{
+                    badge_size: "HUGE",
+                    badge_tone: "NEON",
+                }}
+            />,
+        );
+
+        const badge = screen.getByText("Template Badge");
+        expect(badge).toBeInTheDocument();
+        expect(screen.queryByText("Invalid widget configuration: Badge")).toBeNull();
+        expect(
+            errorSpy.mock.calls.some((call) =>
+                String(call[0]).includes("Widget validation failed:"),
+            ),
+        ).toBe(false);
+
+        errorSpy.mockRestore();
+    });
 });

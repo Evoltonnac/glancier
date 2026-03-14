@@ -501,11 +501,36 @@ export function evaluateTemplateExpression(
   expression: string,
   context: Record<string, any>,
 ): any {
-  try {
-    const parser = new Parser(tokenize(expression));
-    const ast = parser.parseExpression();
-    return evalNode(ast, context);
-  } catch {
+  const ast = getCachedAst(expression);
+  if (!ast) {
     return undefined;
   }
+  return evalNode(ast, context);
+}
+
+const TEMPLATE_AST_CACHE_MAX = 256;
+const templateAstCache = new Map<string, ExprNode | null>();
+
+function getCachedAst(expression: string): ExprNode | null {
+  if (templateAstCache.has(expression)) {
+    return templateAstCache.get(expression) ?? null;
+  }
+
+  let ast: ExprNode | null = null;
+  try {
+    const parser = new Parser(tokenize(expression));
+    ast = parser.parseExpression();
+  } catch {
+    ast = null;
+  }
+
+  templateAstCache.set(expression, ast);
+  if (templateAstCache.size > TEMPLATE_AST_CACHE_MAX) {
+    const oldestKey = templateAstCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      templateAstCache.delete(oldestKey);
+    }
+  }
+
+  return ast;
 }
