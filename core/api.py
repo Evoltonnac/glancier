@@ -1120,7 +1120,14 @@ async def update_integration_file(filename: str, request: FileContentRequest) ->
 
     except yaml.YAMLError as exc:
         # YAML 语法错误
-        raise HTTPException(400, f"Invalid YAML syntax: {exc}")
+        error_text = str(exc)
+        escape_hint = ""
+        if "unknown escape character" in error_text and ("{" in error_text or "}" in error_text):
+            escape_hint = (
+                " Hint: YAML 双引号字符串中 \\{ / \\} 是非法转义。"
+                "请使用 \\\\{ / \\\\}，或改用单引号字符串。"
+            )
+        raise HTTPException(400, f"Invalid YAML syntax: {exc}{escape_hint}")
     except HTTPException:
         raise
     except Exception as exc:

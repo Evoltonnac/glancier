@@ -21,4 +21,25 @@ describe("evaluateTemplate escaping", () => {
         });
         expect(output).toBe("path=C:\\alice");
     });
+
+    it("keeps placeholder literal when escaped backslash appears before closing brace", () => {
+        const output = evaluateTemplate("\\\\{data_path\\\\}", {
+            data_path: "/tmp/data.json",
+        });
+        expect(output).toBe("\\{data_path\\}");
+    });
+
+    it("handles escaped literal braces from YAML (quoted/unquoted converge)", () => {
+        const output = evaluateTemplate("\\{data_path\\}", {
+            data_path: "/tmp/data.json",
+        });
+        expect(output).toBe("{data_path}");
+    });
+
+    it("handles escaped backslash plus expression", () => {
+        const output = evaluateTemplate("\\\\{data_path}", {
+            data_path: "/tmp/data.json",
+        });
+        expect(output).toBe("\\/tmp/data.json");
+    });
 });

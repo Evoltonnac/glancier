@@ -36,17 +36,10 @@ logger = logging.getLogger(__name__)
 _RUNTIME_LOG_LINE_LIMIT = 120
 _RUNTIME_LOG_CHAR_LIMIT = 6000
 _PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
+_ESCAPED_TEMPLATE_CHAR_PATTERN = re.compile(r"\\([{}\\])")
+_ESCAPE_TOKEN_PATTERN = re.compile("\u0000(\\d+)\u0000")
 _MISSING = object()
 
-
-class _DotAccessDict(dict):
-    """dict wrapper that supports dotted attribute lookup in str.format."""
-
-    def __getattr__(self, key: str):
-        try:
-            return self[key]
-        except KeyError as exc:
-            raise AttributeError(key) from exc
 
 class Executor:
     """
@@ -299,13 +292,6 @@ class Executor:
         # Return final data mapping
         return final_data
 
-    def _wrap_for_format(self, value: Any) -> Any:
-        if isinstance(value, dict):
-            return _DotAccessDict({k: self._wrap_for_format(v) for k, v in value.items()})
-        if isinstance(value, list):
-            return [self._wrap_for_format(v) for v in value]
-        return value
-
     def _resolve_dotted_value(self, scope: Dict[str, Any], key: str) -> Any:
         if key in scope:
             return scope[key]
@@ -352,6 +338,25 @@ class Executor:
 
         return _MISSING
 
+    def _mask_escaped_template_chars(self, template: str) -> tuple[str, list[str]]:
+        escaped_chars: list[str] = []
+
+        def replace(match: re.Match[str]) -> str:
+            token = f"\u0000{len(escaped_chars)}\u0000"
+            escaped_chars.append(match.group(1))
+            return token
+
+        return _ESCAPED_TEMPLATE_CHAR_PATTERN.sub(replace, template), escaped_chars
+
+    def _restore_escaped_template_chars(self, text: str, escaped_chars: list[str]) -> str:
+        def replace(match: re.Match[str]) -> str:
+            index = int(match.group(1))
+            if 0 <= index < len(escaped_chars):
+                return escaped_chars[index]
+            return ""
+
+        return _ESCAPE_TOKEN_PATTERN.sub(replace, text)
+
     def _resolve_args(self, args: Dict[str, Any], outputs: Dict[str, Any], context: Dict[str, Any], source_id: str) -> Dict[str, Any]:
         """Recursive string substitution with priority: outputs > context > secrets.
 
@@ -362,16 +367,19 @@ class Executor:
         if isinstance(args, str):
             try:
                 secrets_data = self._secrets.get_secrets(source_id) or {}
+                masked_args, escaped_chars = self._mask_escaped_template_chars(args)
 
                 # Optimized: if args is exactly "{key}", return the object directly
                 # This preserves types (dict, list, etc) instead of stringifying
-                exact_match = _PLACEHOLDER_PATTERN.fullmatch(args)
+                exact_match = _PLACEHOLDER_PATTERN.fullmatch(masked_args)
                 if exact_match:
                      key = exact_match.group(1).strip()
                      resolved = self._resolve_reference(key, outputs, context, secrets_data)
                      if resolved is not _MISSING:
+                         if isinstance(resolved, str):
+                             return self._restore_escaped_template_chars(resolved, escaped_chars)
                          return resolved
-                     return args
+                     return self._restore_escaped_template_chars(masked_args, escaped_chars)
 
                 def replace(match: re.Match[str]) -> str:
                     key = match.group(1).strip()
@@ -380,22 +388,8 @@ class Executor:
                         return match.group(0)
                     return str(resolved)
 
-                replaced = _PLACEHOLDER_PATTERN.sub(replace, args)
-                if replaced != args:
-                    return replaced
-
-                # Fallback to format with combined scope
-                # Build combined dict with priority: outputs > context > secrets
-                combined = {}
-                # Add secrets to combined (lowest priority)
-                if secrets_data:
-                    combined.update({k: self._wrap_for_format(v) for k, v in secrets_data.items()})
-                # Add context (medium priority - will override secrets)
-                combined.update({k: self._wrap_for_format(v) for k, v in context.items()})
-                # Add outputs (highest priority - will override context)
-                combined.update({k: self._wrap_for_format(v) for k, v in outputs.items()})
-
-                return args.format(**combined)
+                replaced = _PLACEHOLDER_PATTERN.sub(replace, masked_args)
+                return self._restore_escaped_template_chars(replaced, escaped_chars)
             except:
                 return args
         elif isinstance(args, dict):

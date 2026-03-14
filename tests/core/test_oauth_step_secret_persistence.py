@@ -115,3 +115,41 @@ def test_resolve_args_supports_oauth_secrets_dot_path(executor):
     )
     assert isinstance(resolved_object, dict)
     assert resolved_object["refresh_token"] == "refresh-dot"
+
+
+def test_resolve_args_honors_escaped_template_braces(executor):
+    source_id = "oauth-escape-literal"
+    executor._secrets.set_secret(
+        source_id,
+        "oauth_secrets",
+        {
+            "access_token": "token-literal",
+        },
+    )
+
+    resolved_literal = executor._resolve_args(
+        r"\{oauth_secrets.access_token\}",
+        outputs={},
+        context={},
+        source_id=source_id,
+    )
+    assert resolved_literal == "{oauth_secrets.access_token}"
+
+    resolved_mixed = executor._resolve_args(
+        r"literal=\{oauth_secrets.access_token\}, resolved={oauth_secrets.access_token}",
+        outputs={},
+        context={},
+        source_id=source_id,
+    )
+    assert (
+        resolved_mixed
+        == "literal={oauth_secrets.access_token}, resolved=token-literal"
+    )
+
+    resolved_with_escaped_backslash = executor._resolve_args(
+        r"path=C:\\{oauth_secrets.access_token}",
+        outputs={},
+        context={},
+        source_id=source_id,
+    )
+    assert resolved_with_escaped_backslash == r"path=C:\token-literal"

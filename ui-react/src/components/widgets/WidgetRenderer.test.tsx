@@ -178,6 +178,37 @@ describe("WidgetRenderer", () => {
         expect(screen.getByText("High")).toBeInTheDocument();
     });
 
+    it("does not re-evaluate escaped template literals in nested widgets", () => {
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "ColumnSet",
+                        columns: [
+                            {
+                                type: "Column",
+                                items: [
+                                    {
+                                        type: "TextBlock",
+                                        text: "📈$\\{fixed(price, 2)\\}",
+                                    },
+                                    {
+                                        type: "TextBlock",
+                                        text: "~ ${fixed(price_per_gram, 2)} per gram",
+                                    },
+                                ],
+                            },
+                        ],
+                    } as any
+                }
+                data={{ price: 3123.456, price_per_gram: 100.1234 }}
+            />,
+        );
+
+        expect(screen.getByText("📈${fixed(price, 2)}")).toBeInTheDocument();
+        expect(screen.getByText("~ $100.12 per gram")).toBeInTheDocument();
+    });
+
     it("filters list items with expression engine", () => {
         render(
             <WidgetRenderer

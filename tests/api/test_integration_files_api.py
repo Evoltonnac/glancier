@@ -92,3 +92,23 @@ def test_get_integration_sources_matches_file_stem_id(tmp_path):
 
     source_ids = sorted(item["id"] for item in resp.json())
     assert source_ids == ["source-a"]
+
+
+def test_update_integration_file_reports_brace_escape_hint(tmp_path):
+    client = _build_client(tmp_path, sources=[])
+
+    create_resp = client.post(
+        "/api/integrations/files",
+        params={"filename": "escape.yaml"},
+        json={"content": "flow: []\n"},
+    )
+    assert create_resp.status_code == 200
+
+    update_resp = client.put(
+        "/api/integrations/files/escape.yaml",
+        json={"content": 'name: "demo \\{value}"\nflow: []\n'},
+    )
+    assert update_resp.status_code == 400
+    detail = update_resp.json()["detail"]
+    assert "Invalid YAML syntax" in detail
+    assert "YAML 双引号字符串中 \\{ / \\} 是非法转义" in detail

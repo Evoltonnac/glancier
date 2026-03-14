@@ -4,8 +4,41 @@ import { evaluateTemplateExpression } from "./templateExpression";
 
 const SINGLE_EXPRESSION_PATTERN = /^\{([^{}]+)\}$/;
 const TEMPLATE_SEGMENT_PATTERN = /\{([^{}]+)\}/g;
-const ESCAPED_TEMPLATE_CHAR_PATTERN = /\\([{}\\])/g;
 const ESCAPE_TOKEN_PATTERN = /\u0000(\d+)\u0000/g;
+const ESCAPE_TOKEN_IN_EXPRESSION_PATTERN = /\u0000\d+\u0000/;
+
+function maskEscapedTemplateChars(template: string): {
+  maskedTemplate: string;
+  escapedChars: string[];
+} {
+  const escapedChars: string[] = [];
+  let maskedTemplate = "";
+
+  for (let i = 0; i < template.length; i += 1) {
+    const current = template[i];
+    if (current !== "\\") {
+      maskedTemplate += current;
+      continue;
+    }
+
+    const next = template[i + 1];
+    // Escape patterns from YAML-resolved strings:
+    // \{ -> literal {
+    // \} -> literal }
+    // \\ -> literal backslash
+    if (next === "{" || next === "}" || next === "\\") {
+      const token = `\u0000${escapedChars.length}\u0000`;
+      escapedChars.push(next);
+      maskedTemplate += token;
+      i += 1;
+      continue;
+    }
+
+    maskedTemplate += current;
+  }
+
+  return { maskedTemplate, escapedChars };
+}
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -68,15 +101,7 @@ export function getFieldFromPath(obj: any, path: string): any {
 export function evaluateTemplate(template: any, data: any): any {
   if (typeof template !== "string") return template;
 
-  const escapedChars: string[] = [];
-  const maskedTemplate = template.replace(
-    ESCAPED_TEMPLATE_CHAR_PATTERN,
-    (_, escapedChar: string) => {
-      const token = `\u0000${escapedChars.length}\u0000`;
-      escapedChars.push(escapedChar);
-      return token;
-    },
-  );
+  const { maskedTemplate, escapedChars } = maskEscapedTemplateChars(template);
   const restoreEscapedChars = (value: string): string =>
     value.replace(ESCAPE_TOKEN_PATTERN, (_, indexText: string) => {
       const index = Number(indexText);
@@ -88,6 +113,9 @@ export function evaluateTemplate(template: any, data: any): any {
   // Entire string is one expression: keep original return type.
   const singleExpressionMatch = maskedTemplate.match(SINGLE_EXPRESSION_PATTERN);
   if (singleExpressionMatch) {
+    if (ESCAPE_TOKEN_IN_EXPRESSION_PATTERN.test(singleExpressionMatch[1])) {
+      return restoreEscapedChars(maskedTemplate);
+    }
     const value = evaluateTemplateExpression(singleExpressionMatch[1], data);
     if (value === undefined) return "";
     return typeof value === "string" ? restoreEscapedChars(value) : value;
@@ -96,7 +124,10 @@ export function evaluateTemplate(template: any, data: any): any {
   // Mixed string: evaluate each expression and stringify.
   const resolvedTemplate = maskedTemplate.replace(
     TEMPLATE_SEGMENT_PATTERN,
-    (_, expression) => {
+    (match, expression) => {
+      if (ESCAPE_TOKEN_IN_EXPRESSION_PATTERN.test(expression)) {
+        return match;
+      }
       const value = evaluateTemplateExpression(expression, data);
       return value !== undefined && value !== null ? String(value) : "";
     },

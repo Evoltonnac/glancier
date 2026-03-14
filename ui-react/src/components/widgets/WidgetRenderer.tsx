@@ -123,6 +123,7 @@ function formatIssuePath(path: readonly PropertyKey[]): string {
 interface WidgetRendererProps {
     widget: Widget;
     data: Record<string, any>;
+    skipTemplateResolution?: boolean;
 }
 
 interface ListWidgetRendererProps {
@@ -261,9 +262,15 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
  * Recursively renders widget tree with runtime schema validation.
  * Provides graceful fallback for invalid configurations.
  */
-function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
+function WidgetRendererImpl({
+    widget,
+    data,
+    skipTemplateResolution = false,
+}: WidgetRendererProps) {
     // Evaluate all template strings in the widget configuration
-    const evaluatedWidget = resolveWidgetParams(widget, data);
+    const evaluatedWidget = skipTemplateResolution
+        ? widget
+        : resolveWidgetParams(widget, data);
 
     // Validate against schema
     const parseResult = RuntimeWidgetSchema.safeParse(evaluatedWidget);
@@ -313,6 +320,7 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
                             key={index}
                             widget={item}
                             data={data}
+                            skipTemplateResolution
                         />
                     ))}
                 </Container>
@@ -337,6 +345,7 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
                                         key={itemIndex}
                                         widget={item}
                                         data={data}
+                                        skipTemplateResolution
                                     />
                                 ),
                             )}
@@ -374,6 +383,7 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
                             key={index}
                             widget={action}
                             data={data}
+                            skipTemplateResolution
                         />
                     ))}
                 </ActionSet>
