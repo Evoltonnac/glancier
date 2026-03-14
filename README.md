@@ -1,136 +1,91 @@
 # Glancier
 
-**Glancier** 是一个**配置驱动**的通用型**个人数据聚合器与中心 (Personal Data Aggregator & Hub)**。
+<p align="center">
+  <img src="ui-react/src/assets/logo.svg" alt="Glancier Logo" width="120" />
+</p>
 
-它允许用户通过简单的 YAML 配置文件 (Flows) 接入任意第三方 API 或网页数据（如 OpenAI 使用量、GitHub 贡献、服务器状态等），自动定时采集数据，并基于 **Bento Grid** 哲学在现代化 Web 看板中实时展示各项指标 (Metrics) 与信号 (Signals)。
+<p align="center"><strong>Config-first personal data hub for metrics, signals, and automation workflows.</strong></p>
 
-## 核心特性
+<p align="center">
+  <img src="docs/assets/demo-placeholder.svg" alt="Glancier Demo (Placeholder)" width="900" />
+</p>
+<p align="center"><sub>Demo image placeholder. Replace with a real screenshot later.</sub></p>
 
-- **零代码集成 (Flow-based)**：通过 YAML 定义请求流，支持复杂的鉴权 (OAuth, API Key, Cookies) 与数据提取 (JSONPath, CSS Selector)。
-- **Bento Grid 视觉哲学**：采用模块化、高密度的卡片布局，让所有重要信息一目了然 (At-a-glance)。
-- **多样化微组件 (Micro-Widgets)**：提供进度条 (Progress Bars)、状态信号 (Signals)、趋势图表 (Charts) 等多种展示方式。
-- **本地优先与隐私保护**：所有配置、密钥与采集到的数据均存储在本地，支持 AES-256 加密。
-- **跨平台桌面支持**：基于 Tauri v2 构建，提供轻量级的 macOS/Windows/Linux 客户端，并内置 Python 驱动引擎。
+## Features
 
-## 项目结构
+- **AI-friendly**: Integration authoring and maintenance are optimized for AI-assisted workflows and structured docs.
+- **Declarative UI**: SDUI templates define cards and widgets without hardcoding frontend business logic.
+- **OAuth-first authentication**: Supports OAuth flows (Code + PKCE, Device Flow, Client Credentials), with API Key compatibility when needed.
+- **Local-first**: Data, source configs, and secrets stay on your machine by default.
+- **WebView Scraper**: Handles sites without stable APIs through interactive desktop scraping flow.
+- **Free-layout dashboard**: Bento-style dashboard with flexible layout and widget composition.
 
-```
-glancier/
-├── main.py                     # 统一入口：FastAPI 服务 + APScheduler 调度器
-├── config/                     # YAML 配置文件
-│   ├── integrations/           # 集成定义 (Flows + View Templates)
-│   └── sources/                # 数据源实例配置
-├── core/                       # 后端核心逻辑
-│   ├── auth/                   # 鉴权策略 (API Key, OAuth, PKCE)
-│   ├── executor.py             # 任务执行引擎 (采集管道)
-│   ├── parser.py               # 数据解析器 (JSON/HTML/Regex)
-│   ├── resource_manager.py     # 资源管理器 (Sources/Views)
-│   └── api.py                  # REST API 定义
-├── ui-react/                   # 前端 (React + Vite + Tailwind CSS)
-│   ├── src/                    # UI 组件与页面
-│   ├── src-tauri/              # Tauri 桌面壳
-│   └── package.json
-└── data/                       # 本地运行时数据 (GLANCIER_DATA_DIR)
-    ├── sources.json            # 已配置的数据源
-    ├── views.json              # 看板视图布局
-    ├── data.json               # 最新采集的数据与状态
-    ├── secrets.json            # 加密存储的密钥
-    └── settings.json           # 设备专属设置
-```
+## Usage
 
-## 技术栈
-
-| 层级 | 技术 | 用途 |
-|------|------|------|
-| **配置层** | PyYAML + Pydantic v2 | 配置加载与类型安全 |
-| **驱动层** | FastAPI + APScheduler | 异步 API 服务与定时任务 |
-| **采集层** | httpx + Playwright (via Tauri) | 高效的数据获取 |
-| **解析层** | jsonpath-ng + BeautifulSoup4 | 结构化与非结构化数据提取 |
-| **存储层** | TinyDB | 轻量级本地 NoSQL |
-| **展现层** | React + Tailwind CSS | 响应式 Bento UI |
-| **桌面层** | Tauri v2 + PyInstaller | 跨平台分发与 Sidecar 管理 |
-
-## 快速开始
-
-### 1. 环境准备
-
-确保您的系统中已安装 Python 3.10+ 和 Node.js 18+。
+### 1. Install dependencies
 
 ```bash
-# 安装 Python 依赖
 pip install -r requirements.txt
-
-# 安装前端依赖
-cd ui-react && npm install
+npm --prefix ui-react install
 ```
 
-### 2. 运行开发服务器
+### 2. Run in development
 
 ```bash
-make dev         # 同时启动前端与后端 (默认端口: 3000 & 8400)
-# 或
-make dev-tauri   # 同时启动后端与 Tauri dev
+make dev        # backend + web frontend
+make dev-tauri  # backend + Tauri desktop shell
 ```
 
-### 2.1 统一命令入口（推荐）
+### 3. Configure integrations
+
+- Open the Integrations page in UI.
+- Create or edit YAML files under `config/integrations/`.
+- Reload integration definitions via API/UI when needed.
+
+## Developer & Maintainer Quick Reference
+
+### Quick start (dependencies)
 
 ```bash
-make help                     # 查看所有统一命令
-make build-backend            # 仅准备 Python sidecar
-make build-desktop            # 打包桌面应用
-make test-impacted            # 按变更文件执行测试门禁
-make clean-artifacts          # 清理构建产物
+pip install -r requirements.txt
+npm --prefix ui-react install
 ```
 
-### 3. 创建您的第一个集成
+### Core commands
 
-您可以直接在 UI 的 "Integrations" 页面中使用内置编辑器创建新的 YAML 配置，或者参考 `config/integrations/` 下的示例文件。
+| Command | Purpose |
+| --- | --- |
+| `make help` | List canonical project commands |
+| `make dev` | Run backend + web frontend |
+| `make dev-tauri` | Run backend + Tauri app |
+| `make build-backend` | Build Python sidecar artifacts |
+| `make build-desktop` | Build desktop package |
+| `make test-backend` | Backend core test gate |
+| `make test-frontend` | Frontend core test gate |
+| `make test-typecheck` | Frontend tests + TypeScript gate |
+| `make test-impacted` | Changed-file driven gate |
+| `make gen-schemas` | Generate schema artifacts |
 
-## 术语表 (Terminology)
+### AI workflow in this project (GSD + TDD)
 
-为了保持语义一致性，请参考 [docs/terminology.md](docs/terminology.md) 获取详细的命名空间定义。
+- **Planning/execution**: Use the GSD workflow (`gsd-*`) for scoped tasks, state tracking, and atomic delivery.
+- **Quality model**: Follow TDD (`RED -> GREEN -> REFACTOR`) for backend/frontend core behavior changes.
+- **Release gate**: Run impacted or core gates before merge (`make test-impacted`, or module-specific test gates).
+- **Doc language policy**: Any document without an explicit language tag must be written/updated in English (including this file and `AGENTS.md`).
 
-- **Metric (指标)**：数值型数据，如 API 余额、存储用量。
-- **Signal (信号)**：状态型数据，如在线状态、构建成功/失败。
-- **Integration Data**：通过 Flow 获取的原始或加工后的信息。
-- **Bento Card**：承载特定来源数据的 UI 容器。
+## Documentation Map
 
-## 测试与 TDD 门禁 (Phase 11)
+- Terminology: [`docs/terminology.md`](docs/terminology.md)
+- Flow architecture: [`docs/flow/`](docs/flow/)
+- SDUI architecture: [`docs/sdui/`](docs/sdui/)
+- Frontend engineering guide: [`docs/frontend/01_engineering_guide.md`](docs/frontend/01_engineering_guide.md)
+- WebView scraper docs: [`docs/webview-scraper/`](docs/webview-scraper/)
+- Testing/TDD policy: [`docs/testing_tdd.md`](docs/testing_tdd.md)
+- Build path contract: [`docs/build-path-contract.md`](docs/build-path-contract.md)
+- AI coding contract: [`AGENTS.md`](AGENTS.md)
 
-后端核心模块采用强制 TDD（RED -> GREEN -> REFACTOR）流程；前端核心行为使用 `Vitest + React Testing Library` 作为阻断门禁。
+## Known Limitations
 
-常用命令：
-
-```bash
-# Backend core gate
-make test-backend
-
-# Frontend core gate
-make test-frontend
-
-# Frontend type gate
-make test-typecheck
-
-# Impacted-only gate (changed-file driven)
-make test-impacted
-
-# Minimal smoke path
-python -m pytest tests/smoke/test_phase11_smoke.py -q
-```
-
-完整规则与命令矩阵见 [docs/testing_tdd.md](docs/testing_tdd.md)。
-
-## 架构指引
-
-- **文档总览**：[`docs/README.md`](docs/README.md)
-- **SDUI 架构与模板规范**：[`docs/sdui/`](docs/sdui/)
-- **Flow 编排与 Step 说明**：[`docs/flow/`](docs/flow/)
-- **WebView Scraper 核心能力**：[`docs/webview-scraper/`](docs/webview-scraper/)
-- **UI 设计原则**：[`docs/ui_design_guidelines.md`](docs/ui_design_guidelines.md)
-- **配置架构详解**：[`CONFIG.md`](CONFIG.md)
-- **构建路径与命令契约**：[`docs/build-path-contract.md`](docs/build-path-contract.md)
-- **AI 助手编程规范**：[`Agent.md`](Agent.md)
-
-## 许可
-
-仅供个人非商业使用。
+- Desktop mode (Tauri) provides the full WebView scraping capability; pure web mode has runtime fallback constraints.
+- The project is optimized for single-user local workflows, not multi-tenant SaaS collaboration.
+- Some advanced integrations require manual OAuth/app registration with third-party providers.

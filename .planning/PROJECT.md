@@ -106,7 +106,7 @@ Glancier 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 
 1. `docs/terminology.md`
 2. `README.md`
-3. `Agent.md`
+3. `AGENTS.md`
 4. `CONFIG.md`
 5. `docs/flow/README.md`
 6. `docs/sdui/README.md`

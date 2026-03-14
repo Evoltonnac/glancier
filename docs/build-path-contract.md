@@ -61,6 +61,7 @@ These remain valid, but are secondary to `make` entrypoints:
 | `dist/glancier-server/` | PyInstaller | Sidecar runtime folder | Do not commit |
 | `ui-react/dist/` | Vite | Frontend build output | Do not commit |
 | `ui-react/src-tauri/target/` | Cargo/Tauri | Rust/Tauri build output | Do not commit |
+| `ui-react/src-tauri/binaries/` | `scripts/build.sh` | Sidecar archive staging directory | Keep only generated archives needed for packaging; do not commit generated platform folders |
 | `ui-react/src-tauri/binaries/glancier-server-*.tar.gz` | `scripts/build.sh` | Sidecar archive for packaging | Do not commit |
 | `ui-react/test-results/` | Playwright | E2E results | Do not commit |
 | `.coverage` | pytest coverage | Local report artifact | Do not commit |
