@@ -2,6 +2,11 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { evaluateTemplateExpression } from "./templateExpression";
 
+const SINGLE_EXPRESSION_PATTERN = /^\{([^{}]+)\}$/;
+const TEMPLATE_SEGMENT_PATTERN = /\{([^{}]+)\}/g;
+const ESCAPED_TEMPLATE_CHAR_PATTERN = /\\([{}\\])/g;
+const ESCAPE_TOKEN_PATTERN = /\u0000(\d+)\u0000/g;
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -63,18 +68,41 @@ export function getFieldFromPath(obj: any, path: string): any {
 export function evaluateTemplate(template: any, data: any): any {
   if (typeof template !== "string") return template;
 
+  const escapedChars: string[] = [];
+  const maskedTemplate = template.replace(
+    ESCAPED_TEMPLATE_CHAR_PATTERN,
+    (_, escapedChar: string) => {
+      const token = `\u0000${escapedChars.length}\u0000`;
+      escapedChars.push(escapedChar);
+      return token;
+    },
+  );
+  const restoreEscapedChars = (value: string): string =>
+    value.replace(ESCAPE_TOKEN_PATTERN, (_, indexText: string) => {
+      const index = Number(indexText);
+      return Number.isInteger(index) && escapedChars[index] !== undefined
+        ? escapedChars[index]
+        : "";
+    });
+
   // Entire string is one expression: keep original return type.
-  const singleExpressionMatch = template.match(/^\{([^{}]+)\}$/);
+  const singleExpressionMatch = maskedTemplate.match(SINGLE_EXPRESSION_PATTERN);
   if (singleExpressionMatch) {
     const value = evaluateTemplateExpression(singleExpressionMatch[1], data);
-    return value !== undefined ? value : "";
+    if (value === undefined) return "";
+    return typeof value === "string" ? restoreEscapedChars(value) : value;
   }
 
   // Mixed string: evaluate each expression and stringify.
-  return template.replace(/\{([^{}]+)\}/g, (_, expression) => {
-    const value = evaluateTemplateExpression(expression, data);
-    return value !== undefined && value !== null ? String(value) : "";
-  });
+  const resolvedTemplate = maskedTemplate.replace(
+    TEMPLATE_SEGMENT_PATTERN,
+    (_, expression) => {
+      const value = evaluateTemplateExpression(expression, data);
+      return value !== undefined && value !== null ? String(value) : "";
+    },
+  );
+
+  return restoreEscapedChars(resolvedTemplate);
 }
 
 /**

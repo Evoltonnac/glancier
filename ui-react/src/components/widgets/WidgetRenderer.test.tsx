@@ -76,6 +76,8 @@ describe("WidgetRenderer", () => {
         expect(
             screen.getByText("Invalid widget configuration: Progress"),
         ).toBeInTheDocument();
+        expect(screen.getByText("Path: value")).toBeInTheDocument();
+        expect(screen.getByText(/Reason:/)).toBeInTheDocument();
         expect(
             errorSpy.mock.calls.some((call) =>
                 String(call[0]).includes("Widget validation failed:"),
@@ -330,6 +332,34 @@ describe("WidgetRenderer", () => {
                 String(call[0]).includes("Widget validation failed:"),
             ),
         ).toBe(false);
+
+        errorSpy.mockRestore();
+    });
+
+    it("shows nested validation path for field-level errors", () => {
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "FactSet",
+                        facts: [
+                            {
+                                label: "CPU",
+                                value: { bad: true },
+                            },
+                        ],
+                    } as any
+                }
+                data={{}}
+            />,
+        );
+
+        expect(
+            screen.getByText("Invalid widget configuration: FactSet"),
+        ).toBeInTheDocument();
+        expect(screen.getByText("Path: facts[0].value")).toBeInTheDocument();
 
         errorSpy.mockRestore();
     });

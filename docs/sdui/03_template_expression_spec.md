@@ -10,6 +10,7 @@
 
 - 整体表达式：`"{...}"`，返回原始类型（number/boolean/string/null）。
 - 插值表达式：`"prefix {...} suffix"`，结果转字符串后拼接。
+- 转义写法：使用反斜杠转义模板控制符，`\{` / `\}` 输出字面量花括号，`\\` 输出字面量反斜杠。
 
 ## 2. 可用语法
 
@@ -51,3 +52,5 @@
 - `"{usage > 80 ? 'High' : 'Normal'}"`
 - `"Used {number(usage, 0)} / {number(limit, 0)}"`
 - `"{key_item.active && key_item.percent >= 80 ? 'Alert' : 'OK'}"`
+- `"Literal \\{usage\\} and resolved {usage}"`
+- `"Windows path: C:\\\\{username}"`

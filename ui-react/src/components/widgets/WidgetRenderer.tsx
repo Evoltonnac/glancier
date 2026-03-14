@@ -73,6 +73,39 @@ export const WidgetSchema: z.ZodType<any> = z.lazy(() =>
 
 export type Widget = z.infer<typeof WidgetSchema>;
 
+function getWidgetTypeLabel(widget: unknown): string {
+    if (
+        widget &&
+        typeof widget === "object" &&
+        "type" in widget &&
+        typeof (widget as { type?: unknown }).type === "string"
+    ) {
+        return (widget as { type: string }).type;
+    }
+    return "unknown";
+}
+
+function formatIssuePath(path: readonly PropertyKey[]): string {
+    if (path.length === 0) {
+        return "(root)";
+    }
+
+    return path
+        .map((segment, index) => {
+            if (typeof segment === "number") {
+                return `[${segment}]`;
+            }
+            if (typeof segment === "symbol") {
+                return index === 0
+                    ? segment.toString()
+                    : `.${segment.toString()}`;
+            }
+            return index === 0 ? segment : `.${segment}`;
+        },
+        )
+        .join("");
+}
+
 interface WidgetRendererProps {
     widget: Widget;
     data: Record<string, any>;
@@ -222,6 +255,13 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
     const parseResult = WidgetSchema.safeParse(evaluatedWidget);
 
     if (!parseResult.success) {
+        const widgetType = getWidgetTypeLabel(evaluatedWidget);
+        const primaryIssue = parseResult.error.issues[0];
+        const primaryPath = primaryIssue
+            ? formatIssuePath(primaryIssue.path)
+            : "(root)";
+        const primaryMessage = primaryIssue?.message ?? "Unknown validation error";
+
         console.error("Widget validation failed:", parseResult.error);
         console.error(
             "Evaluated widget:",
@@ -233,8 +273,13 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
         );
         return (
             <div className="text-xs text-red-500 p-2 border border-red-300 rounded bg-red-50 dark:bg-red-900/10">
-                Invalid widget configuration:{" "}
-                {evaluatedWidget.type || "unknown"}
+                <div>Invalid widget configuration: {widgetType}</div>
+                <div className="mt-1 text-[11px] leading-relaxed">
+                    Path: {primaryPath}
+                </div>
+                <div className="text-[11px] leading-relaxed">
+                    Reason: {primaryMessage}
+                </div>
             </div>
         );
     }
