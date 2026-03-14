@@ -32,13 +32,20 @@ flow:
     - id: fetch_followed_channels
       use: http
       args:
-          url: "https://api.twitch.tv/helix/channels/followed?user_id={user_id}&first=1"
+          url: "https://api.twitch.tv/helix/channels/followed?user_id={user_id}&first=50"
           method: "GET"
           headers:
               Authorization: "Bearer {oauth_secrets.access_token}"
               Client-Id: "c43f3z8swkmw4osvippz14cj37wg7b"
       outputs:
           followed_channels_payload: "http_response"
+    - id: parse_followed_channels
+      use: extract
+      args:
+          source: "{followed_channels_payload}"
+          type: "jsonpath"
+      outputs:
+          followed_channels: "$.data"
     - id: parse_followed_total
       use: extract
       args:
@@ -79,20 +86,28 @@ flow:
               except Exception:
                   live_items_raw = []
 
+              try:
+                  followed_channels_raw = followed_channels or []
+              except Exception:
+                  followed_channels_raw = []
+
               live_count = len(live_items_raw)
-              offline_count = max(0, followed_total_count - live_count)
               live_ratio = round((live_count / followed_total_count) * 100, 1) if followed_total_count > 0 else 0
-              follow_ratio = max(0, round(100 - live_ratio, 1))
 
               total_viewers = 0
               peak_viewers = 0
               live_cards = []
+              followed_cards = []
+              live_by_user_id = {}
               now_utc = datetime.now(timezone.utc)
 
               for stream in live_items_raw[:12]:
                   viewers = int(stream.get("viewer_count") or 0)
                   total_viewers += viewers
                   peak_viewers = max(peak_viewers, viewers)
+                  stream_user_id = str(stream.get("user_id") or "")
+                  if stream_user_id:
+                      live_by_user_id[stream_user_id] = stream
 
                   started_at = stream.get("started_at")
                   uptime = "Live"
@@ -122,8 +137,80 @@ flow:
                       }
                   )
 
+              for channel in followed_channels_raw:
+                  broadcaster_id = str(channel.get("broadcaster_id") or "")
+                  broadcaster_name = channel.get("broadcaster_name") or "Unknown streamer"
+                  broadcaster_login = channel.get("broadcaster_login") or ""
+                  followed_at_raw = channel.get("followed_at")
+
+                  live_stream = live_by_user_id.get(broadcaster_id)
+
+                  if live_stream:
+                      viewers = int(live_stream.get("viewer_count") or 0)
+                      started_at = live_stream.get("started_at")
+                      uptime = "Live"
+                      if started_at:
+                          try:
+                              started_dt = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
+                              elapsed_minutes = max(0, int((now_utc - started_dt).total_seconds() // 60))
+                              hours = elapsed_minutes // 60
+                              minutes = elapsed_minutes % 60
+                              uptime = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                          except Exception:
+                              uptime = "Live"
+
+                      ranking_score = 1_000_000_000 + viewers
+                      subtitle = f"LIVE · {live_stream.get('game_name') or 'Unknown category'} · {viewers} viewers · {uptime}"
+                      status = "LIVE"
+                      status_tone = "danger"
+                      title = live_stream.get("title") or "Untitled stream"
+                  else:
+                      followed_ts = 0
+                      if followed_at_raw:
+                          try:
+                              followed_dt = datetime.fromisoformat(str(followed_at_raw).replace("Z", "+00:00"))
+                              followed_ts = int(followed_dt.timestamp())
+                              elapsed_minutes = max(0, int((now_utc - followed_dt).total_seconds() // 60))
+                              days = elapsed_minutes // 1440
+                              hours = (elapsed_minutes % 1440) // 60
+                              age_text = f"{days}d ago" if days > 0 else f"{hours}h ago"
+                          except Exception:
+                              age_text = "recently"
+                      else:
+                          age_text = "recently"
+
+                      ranking_score = followed_ts
+                      subtitle = f"OFFLINE · followed {age_text}"
+                      status = "OFFLINE"
+                      status_tone = "muted"
+                      title = "Currently offline"
+
+                  followed_cards.append(
+                      {
+                          "user_name": broadcaster_name,
+                          "title": title,
+                          "subtitle": subtitle,
+                          "status": status,
+                          "status_tone": status_tone,
+                          "ranking_score": ranking_score,
+                          "stream_url": (
+                              f"https://www.twitch.tv/{broadcaster_login}"
+                              if broadcaster_login
+                              else "https://www.twitch.tv/directory/following/live"
+                          ),
+                      }
+                  )
+
               live_cards = sorted(live_cards, key=lambda item: item.get("viewer_count", 0), reverse=True)
-              top_live_cards = live_cards[:2]
+              followed_cards = sorted(
+                  followed_cards,
+                  key=lambda item: (
+                      1 if item.get("status") == "LIVE" else 0,
+                      int(item.get("ranking_score") or 0),
+                  ),
+                  reverse=True,
+              )
+              top_followed_cards = followed_cards[:2]
               avg_viewers = round(total_viewers / live_count, 1) if live_count > 0 else 0
               summary_line = (
                   "No followed channels live right now"
@@ -133,14 +220,12 @@ flow:
       outputs:
           followed_total_count: "followed_total_count"
           live_count: "live_count"
-          offline_count: "offline_count"
           live_ratio: "live_ratio"
-          follow_ratio: "follow_ratio"
           total_viewers: "total_viewers"
           avg_viewers: "avg_viewers"
           peak_viewers: "peak_viewers"
           live_cards: "live_cards"
-          top_live_cards: "top_live_cards"
+          top_followed_cards: "top_followed_cards"
           summary_line: "summary_line"
 templates:
     - id: "twitch_oauth_snapshot"
@@ -160,7 +245,7 @@ templates:
                       warning: 25
                       danger: 60
                 - type: "List"
-                  data_source: "{top_live_cards}"
+                  data_source: "{top_followed_cards}"
                   item_alias: "stream"
                   spacing: "sm"
                   limit: 2
@@ -178,23 +263,23 @@ templates:
                                           text: "{stream.user_name}"
                                           size: "md"
                                           weight: "semibold"
-                                          maxLines: 1
+                                          max_lines: 1
                                         - type: "TextBlock"
-                                          text: "{stream.game_name} · {stream.viewer_count} viewers · {stream.uptime}"
+                                          text: "{stream.subtitle}"
                                           size: "sm"
                                           tone: "muted"
-                                          maxLines: 1
+                                          max_lines: 1
                                         - type: "TextBlock"
                                           text: "{stream.title}"
                                           size: "sm"
-                                          maxLines: 2
+                                          max_lines: 2
                                   - type: "Column"
                                     width: "auto"
                                     align_y: "start"
                                     items:
                                         - type: "Badge"
-                                          text: "LIVE"
-                                          tone: "danger"
+                                          text: "{stream.status}"
+                                          tone: "{stream.status_tone}"
                                           size: "sm"
                             - type: "ActionSet"
                               align_x: "start"
@@ -203,5 +288,5 @@ templates:
                                   - type: "Action.OpenUrl"
                                     title: "Watch"
                                     url: "{stream.stream_url}"
-                                    size: "sm"
-                                    tone: "default"
+                                    size: "md"
+                                    tone: "muted"

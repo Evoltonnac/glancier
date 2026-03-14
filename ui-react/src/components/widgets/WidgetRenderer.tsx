@@ -37,38 +37,52 @@ import { ActionCopy } from "./actions/ActionCopy";
  * Discriminated union of all supported widget types.
  * This serves as the single source of truth for AI consumption and runtime validation.
  */
-export const WidgetSchema: z.ZodType<any> = z.lazy(() =>
-    z.discriminatedUnion("type", [
-        // Layouts
-        ContainerSchema.extend({
-            items: z.array(WidgetSchema),
-        }),
-        ColumnSetSchema.extend({
-            columns: z.array(
-                ColumnSchema.extend({
-                    items: z.array(WidgetSchema),
-                }),
-            ),
-        }),
-        // Containers
-        ListSchema.extend({
-            // Defer validation until each list item is rendered with item-specific data.
-            render: z.array(z.any()),
-        }),
-        // Elements
-        TextBlockSchema,
-        FactSetSchema,
-        ImageSchema,
-        BadgeSchema,
-        // Visualizations
-        ProgressSchema,
-        // Actions
-        ActionSetSchema.extend({
-            actions: z.array(z.union([ActionOpenUrlSchema, ActionCopySchema])),
-        }),
-        ActionOpenUrlSchema,
-        ActionCopySchema,
-    ]),
+function createWidgetSchema(
+    listRenderSchemaFactory: (self: z.ZodTypeAny) => z.ZodTypeAny,
+): z.ZodType<any> {
+    let selfSchema: z.ZodType<any>;
+
+    selfSchema = z.lazy(() =>
+        z.discriminatedUnion("type", [
+            // Layouts
+            ContainerSchema.extend({
+                items: z.array(selfSchema),
+            }),
+            ColumnSetSchema.extend({
+                columns: z.array(
+                    ColumnSchema.extend({
+                        items: z.array(selfSchema),
+                    }),
+                ),
+            }),
+            // Containers
+            ListSchema.extend({
+                render: listRenderSchemaFactory(selfSchema),
+            }),
+            // Elements
+            TextBlockSchema,
+            FactSetSchema,
+            ImageSchema,
+            BadgeSchema,
+            // Visualizations
+            ProgressSchema,
+            // Actions
+            ActionSetSchema.extend({
+                actions: z.array(z.union([ActionOpenUrlSchema, ActionCopySchema])),
+            }),
+            ActionOpenUrlSchema,
+            ActionCopySchema,
+        ]),
+    );
+
+    return selfSchema;
+}
+
+export const WidgetSchema = createWidgetSchema((self) => z.array(self));
+
+const RuntimeWidgetSchema = createWidgetSchema(
+    // Defer List.render validation until each item is rendered with item-specific data.
+    () => z.array(z.any()),
 );
 
 export type Widget = z.infer<typeof WidgetSchema>;
@@ -252,7 +266,7 @@ function WidgetRendererImpl({ widget, data }: WidgetRendererProps) {
     const evaluatedWidget = resolveWidgetParams(widget, data);
 
     // Validate against schema
-    const parseResult = WidgetSchema.safeParse(evaluatedWidget);
+    const parseResult = RuntimeWidgetSchema.safeParse(evaluatedWidget);
 
     if (!parseResult.success) {
         const widgetType = getWidgetTypeLabel(evaluatedWidget);

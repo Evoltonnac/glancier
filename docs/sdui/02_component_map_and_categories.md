@@ -30,7 +30,7 @@
 ## 3. Elements（原子图元）
 
 - `TextBlock`：通用文本（含数字/状态文本）。
-  - 常用字段：`text`、`size`、`tone`、`align_x`、`weight`、`wrap`、`maxLines`
+  - 常用字段：`text`、`size`、`tone`、`align_x`、`weight`、`wrap`、`max_lines`
 - `FactSet`：键值集合（label/value）。
   - 常用字段：`facts`、`spacing`（单个 fact 可用 `tone`）
 - `Image`：图片或图标。

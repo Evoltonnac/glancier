@@ -21,17 +21,7 @@ vi.mock("../api/client", () => ({
     api: apiMock,
 }));
 
-// Mock both monaco related packages and the setup worker to avoid loading monaco in vitest
-vi.mock("monaco-editor", () => ({
-    editor: {
-        setModelMarkers: vi.fn(),
-    },
-}));
-
-vi.mock("monaco-yaml", () => ({
-    configureMonacoYaml: vi.fn(),
-}));
-
+// Mock setup worker to avoid loading monaco worker/runtime paths in vitest.
 vi.mock("../components/editor/YamlEditorWorkerSetup", () => ({
     setupYamlWorker: vi.fn().mockResolvedValue(undefined),
     markersToDiagnostics: vi.fn().mockReturnValue([]),
@@ -181,17 +171,15 @@ describe("Integrations page", () => {
     });
 
     it("shows single-step delete warning and deletes source", async () => {
-        apiMock.getIntegrationSources
-            .mockResolvedValueOnce([
-                {
-                    id: "source-1",
-                    name: "Source One",
-                    integration_id: "demo",
-                    config: {},
-                    vars: {},
-                },
-            ])
-            .mockResolvedValueOnce([]);
+        apiMock.getIntegrationSources.mockResolvedValue([
+            {
+                id: "source-1",
+                name: "Source One",
+                integration_id: "demo",
+                config: {},
+                vars: {},
+            },
+        ]);
         apiMock.deleteSourceFile.mockResolvedValue({
             message: "Source source-1 deleted",
             source_id: "source-1",

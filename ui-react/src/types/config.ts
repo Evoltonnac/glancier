@@ -183,7 +183,6 @@ export interface SduiTextBlockWidget extends SduiWidgetBase {
     tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
     align_x?: "start" | "center" | "end";
     wrap?: boolean;
-    maxLines?: number;
     max_lines?: number;
 }
 
@@ -218,7 +217,7 @@ export interface SduiProgressWidget extends SduiWidgetBase {
     style?: "bar" | "ring";
     size?: "sm" | "md" | "lg" | "xl";
     tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
-    showPercentage?: boolean;
+    show_percentage?: boolean;
     thresholds?: {
         warning?: number | string;
         danger?: number | string;

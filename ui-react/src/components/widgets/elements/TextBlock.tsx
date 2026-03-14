@@ -21,7 +21,6 @@ export const TextBlockSchema = z.object({
     tone: ToneSchema.default("default"),
     align_x: AlignSchema.default("start"),
     wrap: z.boolean().default(true),
-    maxLines: z.number().positive().optional(),
     max_lines: z.number().positive().optional(),
 });
 
@@ -41,19 +40,17 @@ export function TextBlock({
     tone = "default",
     align_x = "start",
     wrap = true,
-    maxLines,
     max_lines,
 }: TextBlockProps) {
-    const resolvedMaxLines = maxLines ?? max_lines;
     const displayText = text === null || text === undefined ? "" : String(text);
 
-    const shouldClampLines = typeof resolvedMaxLines === "number" && resolvedMaxLines > 0;
+    const shouldClampLines = typeof max_lines === "number" && max_lines > 0;
     const wrapClass = shouldClampLines || wrap ? "break-words" : "whitespace-nowrap truncate";
     const clampStyle = shouldClampLines
         ? {
               display: "-webkit-box",
               WebkitBoxOrient: "vertical" as const,
-              WebkitLineClamp: String(resolvedMaxLines),
+              WebkitLineClamp: String(max_lines),
               overflow: "hidden",
           }
         : undefined;

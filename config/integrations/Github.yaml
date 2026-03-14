@@ -143,7 +143,7 @@ templates:
                                           text: "{name || login}"
                                           size: "lg"
                                           weight: "bold"
-                                          maxLines: 1
+                                          max_lines: 1
                                         - type: "TextBlock"
                                           text: "@{login}"
                                           tone: "muted"
@@ -152,7 +152,7 @@ templates:
                                           text: "{bio || 'No bio provided.'}"
                                           size: "sm"
                                           tone: "muted"
-                                          maxLines: 2
+                                          max_lines: 2
                                   - type: "Column"
                                     width: "auto"
                                     align_y: "start"
@@ -226,12 +226,12 @@ templates:
                                                       text: "{repo.name}"
                                                       size: "md"
                                                       weight: "semibold"
-                                                      maxLines: 1
+                                                      max_lines: 1
                                                     - type: "TextBlock"
                                                       text: "{repo.language || 'Unspecified'} · ★ {repo.stargazers_count} · Forks {repo.forks_count}"
                                                       size: "sm"
                                                       tone: "muted"
-                                                      maxLines: 1
+                                                      max_lines: 1
                                               - type: "Column"
                                                 width: "auto"
                                                 align_y: "center"

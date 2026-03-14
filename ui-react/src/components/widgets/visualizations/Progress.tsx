@@ -15,7 +15,7 @@ export const ProgressSchema = z.object({
     style: z.enum(["bar", "ring"]).default("bar"),
     size: SizeSchema.default("md"),
     tone: ToneSchema.optional(),
-    showPercentage: z.boolean().default(true),
+    show_percentage: z.boolean().default(true),
     thresholds: z
         .object({
             warning: z.coerce.number().min(0).max(100).default(70),
@@ -56,7 +56,7 @@ export function Progress({
     style = "bar",
     size = "md",
     tone,
-    showPercentage = true,
+    show_percentage = true,
     thresholds,
 }: ProgressProps) {
     const resolvedTone = tone || getAutoTone(value, thresholds);
@@ -93,7 +93,7 @@ export function Progress({
                             className={progressColorClass.replace("bg-", "text-")}
                         />
                     </svg>
-                    {showPercentage && (
+                    {show_percentage && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <span className={`${ring.text} font-semibold`}>{value}%</span>
                         </div>
@@ -106,10 +106,10 @@ export function Progress({
 
     return (
         <div className="flex flex-col qb-gap-1 w-full">
-            {(label || showPercentage) && (
+            {(label || show_percentage) && (
                 <div className="flex justify-between items-baseline">
                     {label && <span className="text-sm text-muted-foreground">{label}</span>}
-                    {showPercentage && <span className="text-sm font-medium">{value}%</span>}
+                    {show_percentage && <span className="text-sm font-medium">{value}%</span>}
                 </div>
             )}
             <div

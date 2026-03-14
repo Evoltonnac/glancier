@@ -215,7 +215,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "TextBlock",
                         text: "A very long line that should be clamped to two lines in declarative UI rendering.",
-                        maxLines: 2,
+                        max_lines: 2,
                     } as any
                 }
                 data={{}}
@@ -235,7 +235,7 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "Container",
-                        spacing: "{compact ? 'SM' : 'LG'}",
+                        spacing: "{compact ? 'sm' : 'lg'}",
                         align_y: "{vertical_align}",
                         items: [
                             {
@@ -250,10 +250,10 @@ describe("WidgetRenderer", () => {
                 }
                 data={{
                     compact: true,
-                    vertical_align: "CENTER",
-                    text_size: "LG",
-                    text_tone: "WARNING",
-                    horizontal_align: "END",
+                    vertical_align: "center",
+                    text_size: "lg",
+                    text_tone: "warning",
+                    horizontal_align: "end",
                 }}
             />,
         );
@@ -268,7 +268,7 @@ describe("WidgetRenderer", () => {
         expect(container).toHaveClass("justify-center");
     });
 
-    it("resolves list layout params from templates with primitive coercion", () => {
+    it("resolves list layout params from templates", () => {
         render(
             <WidgetRenderer
                 widget={
@@ -291,9 +291,9 @@ describe("WidgetRenderer", () => {
                     } as any
                 }
                 data={{
-                    layout_mode: "GRID",
-                    column_count: "3",
-                    gap_size: "LG",
+                    layout_mode: "grid",
+                    column_count: 3,
+                    gap_size: "lg",
                 }}
             />,
         );
@@ -304,7 +304,7 @@ describe("WidgetRenderer", () => {
         expect(listGrid).toHaveClass("qb-gap-3");
     });
 
-    it("falls back to schema defaults when templated enum values are invalid", () => {
+    it("shows validation fallback when templated enum values are invalid", () => {
         const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
         render(
@@ -324,14 +324,14 @@ describe("WidgetRenderer", () => {
             />,
         );
 
-        const badge = screen.getByText("Template Badge");
-        expect(badge).toBeInTheDocument();
-        expect(screen.queryByText("Invalid widget configuration: Badge")).toBeNull();
+        expect(
+            screen.getByText("Invalid widget configuration: Badge"),
+        ).toBeInTheDocument();
         expect(
             errorSpy.mock.calls.some((call) =>
                 String(call[0]).includes("Widget validation failed:"),
             ),
-        ).toBe(false);
+        ).toBe(true);
 
         errorSpy.mockRestore();
     });

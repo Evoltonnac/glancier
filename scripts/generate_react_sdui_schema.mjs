@@ -67,6 +67,54 @@ function buildEntrySource() {
     ];
 
     const schemaPostProcessHelper = `
+const TEMPLATE_SYNTAX_PATTERN = "^\\\\{.*\\\\}$";
+
+function isTemplatePatternSchema(node) {
+  return (
+    node &&
+    typeof node === "object" &&
+    node.type === "string" &&
+    node.pattern === TEMPLATE_SYNTAX_PATTERN
+  );
+}
+
+function hasTemplateFallback(node) {
+  if (!node || typeof node !== "object" || !Array.isArray(node.anyOf)) {
+    return false;
+  }
+
+  return node.anyOf.some((item) => isTemplatePatternSchema(item));
+}
+
+function isPlainStringSchema(node) {
+  if (!node || typeof node !== "object" || node.type !== "string") {
+    return false;
+  }
+
+  return (
+    !Array.isArray(node.enum) &&
+    node.const === undefined &&
+    node.pattern === undefined
+  );
+}
+
+function wrapPropertySchemaForTemplate(node) {
+  if (!node || typeof node !== "object") {
+    return node;
+  }
+
+  if (hasTemplateFallback(node) || isPlainStringSchema(node)) {
+    return node;
+  }
+
+  return {
+    anyOf: [
+      node,
+      { type: "string", pattern: TEMPLATE_SYNTAX_PATTERN }
+    ],
+  };
+}
+
 function finalizeSchemaForEditor(schema) {
   const stack = [schema];
   const processed = new WeakSet();
@@ -87,23 +135,21 @@ function finalizeSchemaForEditor(schema) {
       delete node.required;
     }
 
-    if (typeof node.type === "string" && ["number", "integer", "boolean"].includes(node.type)) {
-      const originalType = node.type;
-      const primitiveDef = { type: originalType };
-      processed.add(primitiveDef);
-      
-      const constraints = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"];
-      for (const c of constraints) {
-        if (node[c] !== undefined) {
-          primitiveDef[c] = node[c];
-          delete node[c];
+    if (node.type === "object" && node.properties && typeof node.properties === "object") {
+      for (const [propertyKey, propertySchema] of Object.entries(node.properties)) {
+        if (!propertySchema || typeof propertySchema !== "object") {
+          continue;
         }
+        node.properties[propertyKey] = wrapPropertySchemaForTemplate(propertySchema);
       }
-      delete node.type;
-      node.anyOf = [
-        primitiveDef,
-        { type: "string", pattern: "^\\\\{.*\\\\}$" }
-      ];
+    }
+
+    if (
+      node.type === "object" &&
+      node.additionalProperties &&
+      typeof node.additionalProperties === "object"
+    ) {
+      node.additionalProperties = wrapPropertySchemaForTemplate(node.additionalProperties);
     }
 
     for (const value of Object.values(node)) {
