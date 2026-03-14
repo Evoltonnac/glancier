@@ -57,6 +57,39 @@ import { render } from "../test/render";
 import IntegrationsPage from "./Integrations";
 import { useStore } from "../store";
 
+function createReloadPayload(
+    overrides: Partial<{
+        affected_sources: string[];
+        auto_refreshed_sources: string[];
+        changed_files: Array<{
+            filename: string;
+            integration_id: string;
+            change_scope: "view" | "logic";
+            changed_fields: string[];
+            related_sources: string[];
+            auto_refreshed_sources: string[];
+        }>;
+    }> = {},
+) {
+    return {
+        message: "ok",
+        affected_sources: ["source-a"],
+        auto_refreshed_sources: ["source-a"],
+        changed_files: [
+            {
+                filename: "demo.yaml",
+                integration_id: "demo",
+                change_scope: "logic" as const,
+                changed_fields: ["flow"],
+                related_sources: ["source-a"],
+                auto_refreshed_sources: ["source-a"],
+            },
+        ],
+        total_sources: 1,
+        ...overrides,
+    };
+}
+
 describe("Integrations page", () => {
     const initialState = useStore.getState();
 
@@ -87,10 +120,7 @@ describe("Integrations page", () => {
             display_name: "演示集成",
         });
         apiMock.getIntegrationSources.mockResolvedValue([]);
-        apiMock.reloadConfig.mockResolvedValue({
-            message: "ok",
-            affected_sources: ["source-a"],
-        });
+        apiMock.reloadConfig.mockResolvedValue(createReloadPayload());
     });
 
     it("covers load, select, edit, and save success flow", async () => {
@@ -116,6 +146,38 @@ describe("Integrations page", () => {
                 "name: changed",
             );
         });
+
+        expect(useStore.getState().toast?.message).toContain("检测到逻辑改动");
+        expect(useStore.getState().toast?.message).toContain("已自动刷新");
+    });
+
+    it("reloads config even when no file is selected", async () => {
+        apiMock.reloadConfig.mockResolvedValue(
+            createReloadPayload({
+                affected_sources: [],
+                auto_refreshed_sources: [],
+                changed_files: [
+                    {
+                        filename: "demo.yaml",
+                        integration_id: "demo",
+                        change_scope: "view",
+                        changed_fields: ["templates"],
+                        related_sources: [],
+                        auto_refreshed_sources: [],
+                    },
+                ],
+            }),
+        );
+
+        render(<IntegrationsPage />);
+
+        expect(await screen.findByText("演示集成")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "重载" }));
+
+        await waitFor(() => {
+            expect(apiMock.reloadConfig).toHaveBeenCalledTimes(1);
+        });
+        expect(useStore.getState().toast?.message).toContain("仅视图改动");
     });
 
     it("shows single-step delete warning and deletes source", async () => {

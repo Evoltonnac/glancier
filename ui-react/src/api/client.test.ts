@@ -126,4 +126,46 @@ describe("api client", () => {
             { cache: "no-store" },
         );
     });
+
+    it("returns reload config change scope payload for integrations page decisions", async () => {
+        const { api } = await import("./client");
+        const fetchMock = vi.mocked(fetch);
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: vi.fn(),
+            } as unknown as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: vi.fn().mockResolvedValue({
+                    message: "Configuration reloaded",
+                    affected_sources: ["source-a"],
+                    auto_refreshed_sources: ["source-a"],
+                    changed_files: [
+                        {
+                            filename: "demo.yaml",
+                            integration_id: "demo",
+                            change_scope: "logic",
+                            changed_fields: ["flow"],
+                            related_sources: ["source-a"],
+                            auto_refreshed_sources: ["source-a"],
+                        },
+                    ],
+                    total_sources: 1,
+                }),
+            } as unknown as Response);
+
+        await expect(api.reloadConfig()).resolves.toMatchObject({
+            affected_sources: ["source-a"],
+            auto_refreshed_sources: ["source-a"],
+            changed_files: [
+                expect.objectContaining({
+                    filename: "demo.yaml",
+                    change_scope: "logic",
+                }),
+            ],
+        });
+    });
 });

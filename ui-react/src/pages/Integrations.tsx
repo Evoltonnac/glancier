@@ -3,13 +3,19 @@ import Editor from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import type * as Monaco from "monaco-editor";
 import { api } from "../api/client";
-import type { IntegrationPresetResponse, ReloadConfigDiagnostic, IntegrationFileMetadata } from "../api/client";
+import type {
+    IntegrationPresetResponse,
+    ReloadConfigDiagnostic,
+    IntegrationFileMetadata,
+    ReloadConfigResponse,
+} from "../api/client";
 import { useStore } from "../store";
 import {
     useIntegrationFiles,
     useIntegrationPresets,
     useIntegrationMetadata,
     invalidateViews,
+    invalidateSources,
 } from "../hooks/useSWR";
 import {
     Card,
@@ -121,6 +127,60 @@ function renderPresetContent(template: string, displayName: string): string {
         .replaceAll("{{display_name}}", displayName);
 }
 
+function unique(values: string[]): string[] {
+    return Array.from(new Set(values));
+}
+
+function buildReloadToastMessage(
+    action: "save" | "reload",
+    result: ReloadConfigResponse,
+    focusFile: string | null,
+): string {
+    const targetFilename = focusFile
+        ? normalizeIntegrationFilename(focusFile)
+        : null;
+    const changedFiles = result.changed_files ?? [];
+    const focusedChanges = targetFilename
+        ? changedFiles.filter(
+            (item) =>
+                normalizeIntegrationFilename(item.filename) === targetFilename,
+        )
+        : changedFiles;
+    const scopedChanges = focusedChanges.length > 0 ? focusedChanges : changedFiles;
+
+    if (scopedChanges.length === 0) {
+        return action === "save"
+            ? "保存成功，配置已重载。"
+            : "配置已重载，未检测到配置变更。";
+    }
+
+    const logicChanges = scopedChanges.filter(
+        (item) => item.change_scope === "logic",
+    );
+    const viewChanges = scopedChanges.filter(
+        (item) => item.change_scope === "view",
+    );
+    const autoRefreshedSources = unique(
+        scopedChanges.flatMap((item) => item.auto_refreshed_sources ?? []),
+    );
+    const prefix = action === "save" ? "保存成功：" : "重载成功：";
+
+    if (logicChanges.length > 0) {
+        const logicFiles = logicChanges.map((item) => item.filename).join(", ");
+        const refreshText =
+            autoRefreshedSources.length > 0
+                ? `已自动刷新 ${autoRefreshedSources.length} 个 source`
+                : "未检测到可自动刷新的 source";
+        if (viewChanges.length > 0) {
+            return `${prefix}检测到逻辑改动（${logicFiles}），${refreshText}；另有 ${viewChanges.length} 个文件仅视图改动。`;
+        }
+        return `${prefix}检测到逻辑改动（${logicFiles}），${refreshText}。`;
+    }
+
+    const viewFiles = viewChanges.map((item) => item.filename).join(", ");
+    return `${prefix}仅视图改动（${viewFiles}），未触发 source 自动刷新。`;
+}
+
 function DiagnosticItem({ diagnostic }: { diagnostic: IntegrationDiagnostic }) {
     const [expanded, setExpanded] = useState(false);
     const locationPrefix =
@@ -192,6 +252,7 @@ export default function IntegrationsPage() {
         integrationsSidebarCollapsed: sidebarCollapsed,
         setIntegrationsSidebarCollapsed: setSidebarCollapsed,
     } = useStore();
+    const showToast = useStore((state) => state.showToast);
 
     const [integrations, setIntegrations] = useState<string[]>([]);
     const [content, setContent] = useState<string>("");
@@ -429,39 +490,45 @@ export default function IntegrationsPage() {
     }, []);
 
     const handleReloadFile = useCallback(async () => {
-        if (!selectedFile) {
-            return;
-        }
-
+        const targetFile = selectedFile;
         const previousContent = content;
         setEditorError(null);
         setSuccess(null);
+        let loadedFilename: string | null = null;
+        let fileContentUpdated = false;
 
-        const data = await loadIntegrationContent(selectedFile);
-        if (!data) {
-            return;
+        if (targetFile) {
+            const data = await loadIntegrationContent(targetFile);
+            if (!data) {
+                showToast(`重载文件失败：${targetFile}`, "error");
+            } else {
+                loadedFilename = data.filename;
+                fileContentUpdated = data.content !== previousContent;
+            }
         }
 
         try {
             const reloadResult = await api.reloadConfig();
-            clearBackendDiagnosticsForFile(data.filename);
-            if (data.content === previousContent) {
-                if (reloadResult.affected_sources.length > 0) {
-                    setSuccess(
-                        `Reloaded config. Affected sources: ${reloadResult.affected_sources.join(", ")}`,
-                    );
-                } else {
-                    setSuccess(
-                        "Reloaded. No external file changes detected; runtime config refreshed.",
-                    );
-                }
-            } else if (reloadResult.affected_sources.length > 0) {
-                setSuccess(
-                    `Reloaded latest file and config. Affected sources: ${reloadResult.affected_sources.join(", ")}`,
-                );
-            } else {
-                setSuccess("Reloaded latest file and runtime config.");
+            await loadIntegrations();
+            const resolvedFocusFile = loadedFilename ?? targetFile;
+            if (resolvedFocusFile) {
+                clearBackendDiagnosticsForFile(resolvedFocusFile);
             }
+            await invalidateViews();
+            if ((reloadResult.auto_refreshed_sources ?? []).length > 0) {
+                await invalidateSources();
+            }
+
+            let message = buildReloadToastMessage(
+                "reload",
+                reloadResult,
+                resolvedFocusFile,
+            );
+            if (fileContentUpdated) {
+                message = `已重载最新文件。${message}`;
+            }
+            setSuccess(message);
+            showToast(message, "success");
         } catch (reloadErr) {
             const typedReloadErr = reloadErr as ReloadConfigError;
             const reloadMessage =
@@ -469,7 +536,7 @@ export default function IntegrationsPage() {
                 typedReloadErr.message ||
                 "Configuration reload failed";
             const groupedDiagnostics = mapBackendDiagnostics(
-                data.filename,
+                loadedFilename ?? targetFile ?? "__reload__",
                 typedReloadErr.diagnostics,
                 reloadMessage,
             );
@@ -482,21 +549,20 @@ export default function IntegrationsPage() {
                 );
                 return next;
             });
-            if (data.content === previousContent) {
-                setSuccess("Reloaded file, but config reload failed.");
-            } else {
-                setSuccess("Reloaded latest file, but config reload failed.");
-            }
             setEditorError(reloadMessage);
+            setSuccess("重载失败。");
+            showToast(`重载失败：${reloadMessage}`, "error");
         }
 
-        setTimeout(() => setSuccess(null), 3000);
+        setTimeout(() => setSuccess(null), 4000);
     }, [
         clearBackendDiagnosticsForFile,
         content,
+        loadIntegrations,
         loadIntegrationContent,
         mapBackendDiagnostics,
         selectedFile,
+        showToast,
     ]);
 
     // Use SWR for data fetching - handles dedup and StrictMode automatically
@@ -567,14 +633,17 @@ export default function IntegrationsPage() {
             try {
                 const result = await api.reloadConfig();
                 clearBackendDiagnosticsForFile(selectedFile);
-                if (result.affected_sources.length > 0) {
-                    setSuccess(
-                        `Saved! Reloaded config. Affected sources: ${result.affected_sources.join(", ")}`,
-                    );
-                } else {
-                    setSuccess("Saved and reloaded config.");
-                }
                 await invalidateViews();
+                if ((result.auto_refreshed_sources ?? []).length > 0) {
+                    await invalidateSources();
+                }
+                const message = buildReloadToastMessage(
+                    "save",
+                    result,
+                    selectedFile,
+                );
+                setSuccess(message);
+                showToast(message, "success");
             } catch (reloadErr) {
                 const typedReloadErr = reloadErr as ReloadConfigError;
                 const reloadMessage =
@@ -595,8 +664,9 @@ export default function IntegrationsPage() {
                     );
                     return next;
                 });
-                setSuccess("Saved file, but config reload failed.");
+                setSuccess("保存成功，但配置重载失败。");
                 setEditorError(reloadMessage);
+                showToast(`保存成功，但重载失败：${reloadMessage}`, "error");
             }
 
             setTimeout(() => setSuccess(null), 4000);
@@ -604,6 +674,7 @@ export default function IntegrationsPage() {
             const message =
                 saveErr instanceof Error ? saveErr.message : "Failed to save";
             setEditorError(message);
+            showToast(`保存失败：${message}`, "error");
         } finally {
             setSaving(false);
         }

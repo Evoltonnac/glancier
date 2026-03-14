@@ -1151,10 +1151,39 @@ async def system_health() -> dict:
     return {"status": "ok"}
 
 
+_VIEW_ONLY_INTEGRATION_FIELDS = {"templates", "name", "description"}
+
+
+def _collect_changed_fields(
+    old_payload: dict[str, Any] | None,
+    new_payload: dict[str, Any] | None,
+) -> list[str]:
+    if old_payload is None:
+        return ["integration_added"]
+    if new_payload is None:
+        return ["integration_removed"]
+
+    changed_fields: list[str] = []
+    for field in sorted(set(old_payload) | set(new_payload)):
+        if old_payload.get(field) != new_payload.get(field):
+            changed_fields.append(field)
+    return changed_fields
+
+
+def _is_logic_change(changed_fields: list[str]) -> bool:
+    if not changed_fields:
+        return False
+
+    if "integration_added" in changed_fields or "integration_removed" in changed_fields:
+        return True
+
+    return any(field not in _VIEW_ONLY_INTEGRATION_FIELDS for field in changed_fields)
+
+
 @router.post("/system/reload")
-async def reload_config() -> dict:
+async def reload_config(background_tasks: BackgroundTasks) -> dict:
     """
-    重新加载配置文件，并标记相关数据源为 CONFIG_CHANGED。
+    重新加载配置文件，区分视图改动/逻辑改动，并在逻辑改动时自动刷新受影响 source。
     """
     global _config
 
@@ -1166,37 +1195,103 @@ async def reload_config() -> dict:
         logger.error("Configuration reload failed: %s", exc, exc_info=True)
         raise HTTPException(400, f"Configuration reload failed: {exc}") from exc
 
-    # 找出受影响的源（配置发生变化的集成所对应的源）
-    changed_integrations = set()
-    for new_int in new_config.integrations:
-        old_int = _config.get_integration(new_int.id)
-        if old_int is None or old_int.model_dump() != new_int.model_dump():
-            changed_integrations.add(new_int.id)
-
-    for old_int in _config.integrations:
-        if new_config.get_integration(old_int.id) is None:
-            changed_integrations.add(old_int.id)
-
-    affected_sources = []
-
-    # 从 JSON 存储获取数据源
     stored_sources = _resource_manager.load_sources()
+    source_ids_by_integration: dict[str, list[str]] = {}
+    stored_sources_by_id: dict[str, StoredSource] = {}
     for stored in stored_sources:
-        if stored.integration_id and stored.integration_id in changed_integrations:
-            # 标记该源为 CONFIG_CHANGED
-            state = _executor.get_source_state(stored.id)
-            state.status = SourceStatus.CONFIG_CHANGED
-            state.message = "Configuration changed, needs refresh"
-            _executor.update_source_state(stored.id, state)
-            affected_sources.append(stored.id)
+        stored_sources_by_id[stored.id] = stored
+        if stored.integration_id:
+            source_ids_by_integration.setdefault(stored.integration_id, []).append(stored.id)
+
+    old_integrations = {integration.id: integration for integration in _config.integrations}
+    new_integrations = {integration.id: integration for integration in new_config.integrations}
+
+    changed_files: list[dict[str, Any]] = []
+    changed_ids = sorted(set(old_integrations) | set(new_integrations))
+    for integration_id in changed_ids:
+        old_integration = old_integrations.get(integration_id)
+        new_integration = new_integrations.get(integration_id)
+
+        if (
+            old_integration is not None
+            and new_integration is not None
+            and old_integration.model_dump() == new_integration.model_dump()
+        ):
+            continue
+
+        changed_fields = _collect_changed_fields(
+            old_integration.model_dump() if old_integration else None,
+            new_integration.model_dump() if new_integration else None,
+        )
+        change_scope = "logic" if _is_logic_change(changed_fields) else "view"
+
+        matched_files = (
+            _integration_manager.find_files_by_integration_id(integration_id)
+            if _integration_manager
+            else []
+        )
+        filename = matched_files[0] if matched_files else f"{integration_id}.yaml"
+        related_source_ids = source_ids_by_integration.get(integration_id, [])
+
+        changed_files.append(
+            {
+                "filename": filename,
+                "integration_id": integration_id,
+                "change_scope": change_scope,
+                "changed_fields": changed_fields,
+                "related_sources": related_source_ids,
+                "auto_refreshed_sources": [],
+            }
+        )
 
     # 更新全局配置
     _config = new_config
 
+    affected_sources: list[str] = []
+    auto_refreshed_sources: list[str] = []
+    auto_refreshed_seen: set[str] = set()
+
+    for changed in changed_files:
+        if changed["change_scope"] != "logic":
+            continue
+
+        refreshed_for_file: list[str] = []
+        for source_id in changed["related_sources"]:
+            if source_id in auto_refreshed_seen:
+                continue
+
+            stored_source = stored_sources_by_id.get(source_id)
+            if stored_source is None:
+                continue
+
+            resolved_source = _resolve_stored_source_with_config(stored_source, new_config)
+            if resolved_source is None:
+                _executor._update_state(
+                    source_id,
+                    SourceStatus.ERROR,
+                    f"Integration '{stored_source.integration_id}' is missing or invalid",
+                )
+                continue
+
+            _executor._update_state(
+                source_id,
+                SourceStatus.REFRESHING,
+                "Configuration logic changed, refreshing source...",
+            )
+            background_tasks.add_task(_executor.fetch_source, resolved_source)
+            auto_refreshed_seen.add(source_id)
+            auto_refreshed_sources.append(source_id)
+            affected_sources.append(source_id)
+            refreshed_for_file.append(source_id)
+
+        changed["auto_refreshed_sources"] = refreshed_for_file
+
     return {
         "message": "Configuration reloaded",
-        "affected_sources": affected_sources,
-        "total_sources": len(stored_sources)
+        "affected_sources": sorted(affected_sources),
+        "auto_refreshed_sources": sorted(auto_refreshed_sources),
+        "changed_files": changed_files,
+        "total_sources": len(stored_sources),
     }
 
 

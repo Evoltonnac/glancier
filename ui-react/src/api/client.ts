@@ -152,6 +152,23 @@ export interface ReloadConfigDiagnostic {
   fieldPath?: string;
 }
 
+export interface ReloadConfigChangedFile {
+  filename: string;
+  integration_id: string;
+  change_scope: "view" | "logic";
+  changed_fields: string[];
+  related_sources: string[];
+  auto_refreshed_sources: string[];
+}
+
+export interface ReloadConfigResponse {
+  message: string;
+  affected_sources: string[];
+  auto_refreshed_sources: string[];
+  changed_files: ReloadConfigChangedFile[];
+  total_sources: number;
+}
+
 export interface IntegrationFileResponse {
   filename: string;
   content: string;
@@ -547,10 +564,7 @@ class ApiClient {
 
   // --- System ---
 
-  async reloadConfig(): Promise<{
-    message: string;
-    affected_sources: string[];
-  }> {
+  async reloadConfig(): Promise<ReloadConfigResponse> {
     const res = await this.request(`/system/reload`, {
       method: "POST",
     });
