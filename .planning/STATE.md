@@ -62,5 +62,4 @@ Last activity: 2026-03-14 - Completed quick task 006: SDUI schema 去重重构�
 - [ ] [2026-03-07] security-static-analysis (Area: security)
 - [ ] [2026-03-07] frontend-duplicate-requests-bug (Area: ui)
 - [ ] [2026-03-07] integration-preset-choices (Area: ui, integration)
-- [ ] [2026-03-07] sidebar-last-run-and-refresh-config (Area: ui, core)
 - [ ] [2026-03-07] click-to-copy-interaction (Area: ui)
