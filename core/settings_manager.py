@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
 
+from core.refresh_policy import DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,6 +15,11 @@ class SystemSettings(BaseModel):
     proxy: str = ""  # e.g. "http://127.0.0.1:7890"
     encryption_enabled: bool = False
     debug_logging_enabled: bool = False
+    # Global auto-refresh interval in minutes. 0 means disabled.
+    refresh_interval_minutes: int = Field(
+        default=DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES,
+        ge=0,
+    )
     # Timeout for a single webview scraper task in seconds.
     # Timed-out tasks are skipped so queue can continue.
     scraper_timeout_seconds: int = Field(default=10, ge=1, le=300)

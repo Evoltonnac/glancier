@@ -208,6 +208,9 @@ class IntegrationConfig(BaseModel):
     id: str
     name: Optional[str] = None
     description: Optional[str] = None
+    # Integration-level default auto-refresh interval in minutes.
+    # None means unset, 0 means disabled.
+    default_refresh_interval_minutes: Optional[int] = Field(default=None, ge=0)
     flow: Optional[List[StepConfig]] = None
     # View Templates - defined in Integration YAML
     templates: List[ViewComponent] = Field(default_factory=list)

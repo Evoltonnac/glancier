@@ -562,6 +562,26 @@ class ApiClient {
     return res.json();
   }
 
+  async updateSourceRefreshInterval(
+    sourceId: string,
+    intervalMinutes: number | null
+  ): Promise<{ source_id: string; refresh_interval_minutes: number | null }> {
+    const encodedSourceId = encodeURIComponent(sourceId);
+    const res = await this.request(
+      `/sources/${encodedSourceId}/refresh-interval`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval_minutes: intervalMinutes }),
+      }
+    );
+    if (!res.ok) {
+      const fallback = `Failed to update refresh interval for ${sourceId}`;
+      throw new Error(await this.parseErrorMessage(res, fallback));
+    }
+    return res.json();
+  }
+
   // --- System ---
 
   async reloadConfig(): Promise<ReloadConfigResponse> {
@@ -633,6 +653,7 @@ export interface SystemSettings {
   proxy: string;
   encryption_enabled: boolean;
   debug_logging_enabled: boolean;
+  refresh_interval_minutes: number;
   scraper_timeout_seconds: number;
   master_key?: string | null;
   theme?: string;

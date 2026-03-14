@@ -9,6 +9,13 @@ import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Separator } from "../components/ui/separator";
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "../components/ui/select";
+import {
     Tabs,
     TabsList,
     TabsTrigger,
@@ -45,11 +52,21 @@ const DEFAULT_SETTINGS: SystemSettings = {
     proxy: "",
     encryption_enabled: false,
     debug_logging_enabled: false,
+    refresh_interval_minutes: 0,
     scraper_timeout_seconds: 10,
     master_key: null,
     theme: "system",
     density: "normal",
 };
+
+const REFRESH_INTERVAL_OPTIONS: Array<{ value: number; label: string }> = [
+    { value: 0, label: "关闭自动刷新" },
+    { value: 5, label: "5 分钟" },
+    { value: 15, label: "15 分钟" },
+    { value: 30, label: "30 分钟" },
+    { value: 60, label: "1 小时" },
+    { value: 180, label: "3 小时" },
+];
 
 const SCRAPER_TIMEOUT_MIN_SECONDS = 1;
 const SCRAPER_TIMEOUT_MAX_SECONDS = 300;
@@ -163,6 +180,10 @@ export default function SettingsPage() {
                 ...swrSettings,
                 autostart: autostartEnabled,
                 debug_logging_enabled: Boolean(swrSettings.debug_logging_enabled),
+                refresh_interval_minutes:
+                    typeof swrSettings.refresh_interval_minutes === "number"
+                        ? swrSettings.refresh_interval_minutes
+                        : 0,
                 scraper_timeout_seconds: normalizeScraperTimeoutSeconds(
                     swrSettings.scraper_timeout_seconds,
                 ),
@@ -428,6 +449,70 @@ export default function SettingsPage() {
                                             />
                                         </div>
                                     </div>
+
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-2 text-base font-semibold mb-2">
+                                            <RefreshCw className="w-4 h-4 text-brand" />
+                                            数据刷新
+                                        </div>
+                                        <div className="rounded-xl border border-border px-5 py-4 bg-surface hover:border-foreground/20 hover:shadow-soft-elevation transition-all duration-150">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                <div className="space-y-1 flex-1">
+                                                    <Label
+                                                        htmlFor="global-refresh-interval"
+                                                        className="text-sm font-medium"
+                                                    >
+                                                        全局自动刷新
+                                                    </Label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        默认刷新间隔。source 或 integration 可单独覆盖。
+                                                    </p>
+                                                </div>
+                                                <div className="w-full sm:w-[180px]">
+                                                    <Select
+                                                        value={String(
+                                                            settings.refresh_interval_minutes,
+                                                        )}
+                                                        onValueChange={async (value) => {
+                                                            const newSettings = {
+                                                                ...settings,
+                                                                refresh_interval_minutes: Number(
+                                                                    value,
+                                                                ),
+                                                            };
+                                                            setSettings(newSettings);
+                                                            try {
+                                                                await api.updateSettings(newSettings);
+                                                            } catch (err) {
+                                                                console.error(
+                                                                    "Failed to auto-save refresh interval:",
+                                                                    err,
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        <SelectTrigger id="global-refresh-interval">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {REFRESH_INTERVAL_OPTIONS.map(
+                                                                (option) => (
+                                                                    <SelectItem
+                                                                        key={option.value}
+                                                                        value={String(
+                                                                            option.value,
+                                                                        )}
+                                                                    >
+                                                                        {option.label}
+                                                                    </SelectItem>
+                                                                ),
+                                                            )}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </TabsContent>
 
                                 {/* ── 高级 (Advanced) ── */}
@@ -481,10 +566,11 @@ export default function SettingsPage() {
                                             抓取设置
                                         </div>
                                         <div className="rounded-xl border border-border px-5 py-4 bg-surface hover:border-foreground/20 hover:shadow-soft-elevation transition-all duration-150">
-                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                                <div className="space-y-1 flex-1">
-                                                    <Label
-                                                        htmlFor="scraper-timeout"
+                                            <div className="flex flex-col gap-4">
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                    <div className="space-y-1 flex-1">
+                                                        <Label
+                                                            htmlFor="scraper-timeout"
                                                         className="text-sm font-medium"
                                                     >
                                                         抓取超时 (秒)
@@ -494,8 +580,8 @@ export default function SettingsPage() {
                                                         秒。超时后任务会自动跳过。
                                                     </p>
                                                 </div>
-                                                <Input
-                                                    id="scraper-timeout"
+                                                    <Input
+                                                        id="scraper-timeout"
                                                     type="number"
                                                     min={
                                                         SCRAPER_TIMEOUT_MIN_SECONDS
@@ -522,6 +608,7 @@ export default function SettingsPage() {
                                                     className="w-full sm:w-[120px] bg-background text-center font-mono"
                                                 />
                                             </div>
+                                        </div>
                                         </div>
                                     </section>
 

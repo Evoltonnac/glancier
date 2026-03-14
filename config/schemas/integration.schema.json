@@ -1452,6 +1452,19 @@
       "default": null,
       "title": "Description"
     },
+    "default_refresh_interval_minutes": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default Refresh Interval Minutes"
+    },
     "flow": {
       "items": {
         "$ref": "#/$defs/StepConfig"

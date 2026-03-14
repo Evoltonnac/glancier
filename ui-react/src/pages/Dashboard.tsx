@@ -37,6 +37,13 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import {
@@ -66,7 +73,6 @@ import {
     Plus,
     Clock,
     MoreVertical,
-    LayoutGrid,
 } from "lucide-react";
 
 // GridStack layout constants - now dynamically read from CSS variables
@@ -241,6 +247,65 @@ function getSourceErrorDetails(
     );
 }
 
+const REFRESH_INTERVAL_OPTIONS: Array<{ value: number; label: string }> = [
+    { value: 0, label: "关闭自动刷新" },
+    { value: 5, label: "5 分钟" },
+    { value: 15, label: "15 分钟" },
+    { value: 30, label: "30 分钟" },
+    { value: 60, label: "1 小时" },
+    { value: 180, label: "3 小时" },
+];
+
+function formatRefreshInterval(minutes: number | null | undefined): string {
+    if (typeof minutes !== "number" || !Number.isFinite(minutes)) {
+        return "未设置";
+    }
+    if (minutes <= 0) {
+        return "关闭自动刷新";
+    }
+    if (minutes % 60 === 0) {
+        return `${minutes / 60}h`;
+    }
+    return `${minutes}m`;
+}
+
+function getFreshnessText(
+    updatedAt: number,
+    nowSeconds: number,
+): string {
+    const deltaSeconds = Math.max(0, Math.floor(nowSeconds - updatedAt));
+    if (deltaSeconds < 60) {
+        return `${deltaSeconds}s`;
+    }
+    if (deltaSeconds < 3600) {
+        return `${Math.floor(deltaSeconds / 60)}m`;
+    }
+    if (deltaSeconds < 86400) {
+        return `${Math.floor(deltaSeconds / 3600)}h`;
+    }
+    return `${Math.floor(deltaSeconds / 86400)}d`;
+}
+
+function getFreshnessStyles(
+    updatedAt: number | null | undefined,
+    nowSeconds: number,
+): string {
+    if (typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) {
+        return "hidden";
+    }
+    const deltaSeconds = Math.max(0, Math.floor(nowSeconds - updatedAt));
+    if (deltaSeconds < 300) {
+        // 5 mins - Fresh (bright green gradient, higher transparency)
+        return "bg-gradient-to-r from-green-500/40 to-emerald-500/20 text-green-700 dark:text-green-300";
+    }
+    if (deltaSeconds < 3600) {
+        // 1 hour - Recent (yellow/amber gradient, higher transparency)
+        return "bg-gradient-to-r from-amber-400/40 to-yellow-400/20 text-amber-700 dark:text-amber-300";
+    }
+    // Stale (gray gradient, higher transparency)
+    return "bg-gradient-to-r from-muted/50 to-muted/20 text-muted-foreground/60";
+}
+
 export default function Dashboard() {
     const navigate = useNavigate();
     const {
@@ -270,13 +335,7 @@ export default function Dashboard() {
     const isDataLoading = swrLoading && storeSources.length === 0;
 
     // Density settings
-    const { settings, mutateSettings } = useSettings();
-    const densityOptions = ["compact", "normal", "relaxed"] as const;
-    const densityLabels: Record<string, string> = {
-        compact: "紧凑",
-        normal: "普通",
-        relaxed: "宽松",
-    };
+    const { settings } = useSettings();
 
     // Get current density (default to "normal")
     const currentDensity = settings?.density || "normal";
@@ -293,28 +352,6 @@ export default function Dashboard() {
     useEffect(() => {
         document.documentElement.setAttribute("data-density", currentDensity);
     }, [currentDensity]);
-
-    const cycleDensity = async () => {
-        const currentIndex = densityOptions.indexOf(currentDensity as typeof densityOptions[number]);
-        const nextIndex = (currentIndex + 1) % densityOptions.length;
-        const newDensity = densityOptions[nextIndex];
-
-        // Optimistic update
-        document.documentElement.setAttribute("data-density", newDensity);
-
-        // Save to backend
-        try {
-            await api.updateSettings({
-                ...settings,
-                density: newDensity,
-            } as any);
-            mutateSettings();
-        } catch (error) {
-            console.error("Failed to save density setting:", error);
-            // Revert on error
-            document.documentElement.setAttribute("data-density", currentDensity);
-        }
-    };
 
     useEffect(() => {
         if (swrLoading) {
@@ -341,6 +378,18 @@ export default function Dashboard() {
     const gridRef = useRef<HTMLDivElement>(null);
     const gsInstanceRef = useRef<GridStack | null>(null);
     const suppressGridChangeRef = useRef(false);
+    const autoRefreshInFlightRef = useRef<Set<string>>(new Set());
+    const lastAutoRefreshTriggerRef = useRef<Record<string, number>>({});
+    const [nowSeconds, setNowSeconds] = useState<number>(() =>
+        Math.floor(Date.now() / 1000),
+    );
+
+    useEffect(() => {
+        const timer = window.setInterval(() => {
+            setNowSeconds(Math.floor(Date.now() / 1000));
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     const handleAddWidget = async (
         sourceId: string,
@@ -644,7 +693,7 @@ export default function Dashboard() {
         return () => window.removeEventListener("app:refresh_data", onRefresh);
     }, [sources, setSources, setSkippedScrapers]);
 
-    const handleRefreshSource = async (sourceId: string) => {
+    const handleRefreshSource = useCallback(async (sourceId: string) => {
         const currentActiveScraper = useStore.getState().activeScraper;
         if (currentActiveScraper === sourceId) {
             console.log(
@@ -672,7 +721,19 @@ export default function Dashboard() {
             // Rollback by re-fetching
             invalidateSources();
         }
-    };
+    }, [setSkippedScrapers]);
+
+    const handleUpdateSourceRefreshInterval = useCallback(
+        async (sourceId: string, intervalMinutes: number | null) => {
+            try {
+                await api.updateSourceRefreshInterval(sourceId, intervalMinutes);
+                await invalidateSources();
+            } catch (error) {
+                console.error(`更新 ${sourceId} 自动刷新间隔失败:`, error);
+            }
+        },
+        [],
+    );
 
     const handleDeleteSource = async (sourceId: string) => {
         try {
@@ -698,6 +759,61 @@ export default function Dashboard() {
             console.error("刷新失败:", error);
         }
     };
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            if (document.hidden) {
+                return;
+            }
+
+            const nowMs = Date.now();
+            for (const source of sources) {
+                const intervalMinutes = source.effective_refresh_interval_minutes;
+                if (
+                    typeof intervalMinutes !== "number" ||
+                    !Number.isFinite(intervalMinutes) ||
+                    intervalMinutes <= 0
+                ) {
+                    continue;
+                }
+                if (source.status === "refreshing") {
+                    continue;
+                }
+
+                const lastSuccessAt =
+                    typeof source.last_success_at === "number"
+                        ? source.last_success_at
+                        : source.updated_at;
+                if (
+                    typeof lastSuccessAt !== "number" ||
+                    !Number.isFinite(lastSuccessAt)
+                ) {
+                    continue;
+                }
+
+                const dueAtMs = (lastSuccessAt + intervalMinutes * 60) * 1000;
+                if (nowMs < dueAtMs) {
+                    continue;
+                }
+
+                if (autoRefreshInFlightRef.current.has(source.id)) {
+                    continue;
+                }
+                const lastTriggeredAt = lastAutoRefreshTriggerRef.current[source.id] || 0;
+                if (nowMs - lastTriggeredAt < 30_000) {
+                    continue;
+                }
+
+                autoRefreshInFlightRef.current.add(source.id);
+                lastAutoRefreshTriggerRef.current[source.id] = nowMs;
+                void handleRefreshSource(source.id).finally(() => {
+                    autoRefreshInFlightRef.current.delete(source.id);
+                });
+            }
+        }, 10_000);
+
+        return () => clearInterval(timer);
+    }, [handleRefreshSource, sources]);
 
     const openErrorDialog = useCallback((source: SourceSummary) => {
         setErrorSourceId(source.id);
@@ -984,28 +1100,60 @@ export default function Dashboard() {
                                     );
                                     const statusConfig =
                                         getStatusConfig(source);
+                                    const currentSourceInterval =
+                                        typeof source.refresh_interval_minutes === "number"
+                                            ? source.refresh_interval_minutes
+                                            : null;
+                                    const inheritedInterval =
+                                        typeof source.integration_refresh_interval_minutes === "number"
+                                            ? source.integration_refresh_interval_minutes
+                                            : source.global_refresh_interval_minutes;
+                                    const inheritedSourceLabel =
+                                        typeof source.integration_refresh_interval_minutes === "number"
+                                            ? "integration"
+                                            : "global";
+                                    const lastUpdated =
+                                        source.updated_at ??
+                                        source.last_success_at;
+                                    const freshnessStyle = getFreshnessStyles(
+                                        lastUpdated,
+                                        nowSeconds,
+                                    );
+
                                     return (
                                         <Card
                                             key={source.id}
-                                            className="bg-surface border-border/50 transition-shadow duration-150 hover:shadow-soft-elevation"
+                                            className="relative bg-surface border-border/50 transition-shadow duration-150 hover:shadow-soft-elevation group"
                                         >
                                             <CardContent className="p-3">
-                                                <div className="flex items-center justify-between gap-1">
-                                                    <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
-                                                        <Tooltip>
-                                                            <TooltipTrigger
-                                                                asChild
-                                                            >
-                                                                <span className="font-medium text-sm truncate">
-                                                                    {
-                                                                        source.name
-                                                                    }
-                                                                </span>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent side="top">
-                                                                {source.name}
-                                                            </TooltipContent>
-                                                        </Tooltip>
+                                                {lastUpdated && (
+                                                    <div
+                                                        className={cn(
+                                                            "absolute -top-px -left-px px-1.5 py-0.5 rounded-tl-md rounded-br-md text-[9px] font-medium leading-none tabular-nums",
+                                                            freshnessStyle,
+                                                        )}
+                                                    >
+                                                        {getFreshnessText(lastUpdated, nowSeconds)}
+                                                    </div>
+                                                )}
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                                                        <div className="flex items-center gap-2 overflow-hidden min-w-0">
+                                                            <Tooltip>
+                                                                <TooltipTrigger
+                                                                    asChild
+                                                                >
+                                                                    <span className="font-medium text-sm truncate">
+                                                                        {
+                                                                            source.name
+                                                                        }
+                                                                    </span>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="top">
+                                                                    {source.name}
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-1 shrink-0">
                                                         {actionableInteraction ? (
@@ -1123,6 +1271,72 @@ export default function Dashboard() {
                                                                         刷新
                                                                     </span>
                                                                 </DropdownMenuItem>
+                                                                <DropdownMenuSub>
+                                                                    <DropdownMenuSubTrigger>
+                                                                        <Clock className="mr-2 h-4 w-4" />
+                                                                        <span>
+                                                                            自动刷新
+                                                                        </span>
+                                                                    </DropdownMenuSubTrigger>
+                                                                    <DropdownMenuSubContent>
+                                                                        <DropdownMenuLabel>
+                                                                            source 级间隔
+                                                                        </DropdownMenuLabel>
+                                                                        <DropdownMenuRadioGroup
+                                                                            value={
+                                                                                currentSourceInterval === null
+                                                                                    ? "inherit"
+                                                                                    : String(
+                                                                                          currentSourceInterval,
+                                                                                      )
+                                                                            }
+                                                                            onValueChange={(
+                                                                                value,
+                                                                            ) => {
+                                                                                const interval =
+                                                                                    value ===
+                                                                                    "inherit"
+                                                                                        ? null
+                                                                                        : Number(
+                                                                                              value,
+                                                                                          );
+                                                                                void handleUpdateSourceRefreshInterval(
+                                                                                    source.id,
+                                                                                    interval,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <DropdownMenuRadioItem value="inherit">
+                                                                                跟随默认 (
+                                                                                {formatRefreshInterval(
+                                                                                    inheritedInterval,
+                                                                                )}{" "}
+                                                                                ·{" "}
+                                                                                {inheritedSourceLabel}
+                                                                                )
+                                                                            </DropdownMenuRadioItem>
+                                                                            {REFRESH_INTERVAL_OPTIONS.map(
+                                                                                (
+                                                                                    option,
+                                                                                ) => (
+                                                                                    <DropdownMenuRadioItem
+                                                                                        key={
+                                                                                            option.value
+                                                                                        }
+                                                                                        value={String(
+                                                                                            option.value,
+                                                                                        )}
+                                                                                    >
+                                                                                        {
+                                                                                            option.label
+                                                                                        }
+                                                                                    </DropdownMenuRadioItem>
+                                                                                ),
+                                                                            )}
+                                                                        </DropdownMenuRadioGroup>
+                                                                    </DropdownMenuSubContent>
+                                                                </DropdownMenuSub>
+                                                                <DropdownMenuSeparator />
                                                                 <DropdownMenuItem
                                                                     className="text-destructive"
                                                                     onClick={() =>

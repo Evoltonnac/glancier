@@ -109,6 +109,7 @@ class DataController:
             "source_id": source_id,
             "data": data,
             "updated_at": now,
+            "last_success_at": now,
         }
         with self._lock:
             payload = self._load_payload_locked()

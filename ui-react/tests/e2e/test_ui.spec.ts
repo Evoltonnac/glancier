@@ -123,6 +123,8 @@ test.beforeEach(async ({ page }) => {
                     autostart: false,
                     proxy: "",
                     encryption_enabled: false,
+                    debug_logging_enabled: false,
+                    refresh_interval_minutes: 0,
                     scraper_timeout_seconds: 10,
                     master_key: null,
                 }),

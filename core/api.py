@@ -13,6 +13,12 @@ from pydantic import BaseModel
 from core.models import StoredSource, StoredView, ViewItem
 from core.integration_manager import IntegrationManager
 from core.source_state import SourceStatus, InteractionType
+from core.refresh_policy import (
+    DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES,
+    REFRESH_INTERVAL_OPTIONS_MINUTES,
+    normalize_refresh_interval_minutes,
+    resolve_refresh_interval_minutes,
+)
 import yaml
 
 class FileContentRequest(BaseModel):
@@ -55,6 +61,11 @@ def init_api(executor, data_controller, config, auth_manager, secrets_controller
     _settings_manager = settings_manager
 
 
+def get_runtime_config():
+    """Expose current runtime config snapshot (used by background services)."""
+    return _config
+
+
 def _apply_runtime_log_level(debug_enabled: bool) -> None:
     level = logging.DEBUG if debug_enabled else logging.INFO
     logging.getLogger().setLevel(level)
@@ -69,6 +80,18 @@ def _apply_runtime_log_level(debug_enabled: bool) -> None:
 async def list_sources() -> list[dict]:
     """获取所有存储的数据源，包含运行时状态。"""
     stored_sources = _resource_manager.load_sources()
+    global_refresh_interval = DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
+    if _settings_manager is not None:
+        try:
+            loaded_settings = _settings_manager.load_settings()
+            global_refresh_interval = (
+                normalize_refresh_interval_minutes(
+                    getattr(loaded_settings, "refresh_interval_minutes", None),
+                )
+                or DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
+            )
+        except Exception:
+            logger.warning("Failed to load settings for refresh policy; fallback to global default")
 
     result = []
     for source in stored_sources:
@@ -98,6 +121,23 @@ async def list_sources() -> list[dict]:
         interaction = persisted_interaction if persisted_interaction else (runtime_state.interaction.model_dump() if runtime_state and runtime_state.interaction else None)
 
         # 构建 SourceSummary
+        source_refresh_interval = normalize_refresh_interval_minutes(
+            source.config.get("refresh_interval_minutes")
+            if isinstance(source.config, dict)
+            else None
+        )
+        integration_refresh_interval = None
+        effective_refresh_interval = global_refresh_interval
+        effective_refresh_source = "global"
+        last_success_at = (
+            latest_data.get("last_success_at")
+            if latest_data and isinstance(latest_data, dict)
+            else None
+        )
+        if last_success_at is None and latest_data and latest_data.get("data") is not None:
+            # Backward-compatible fallback for old records before `last_success_at` was introduced.
+            last_success_at = latest_data.get("updated_at")
+
         summary = {
             "id": source.id,
             "name": source.name,
@@ -113,6 +153,12 @@ async def list_sources() -> list[dict]:
             "status": status,
             "message": message,
             "interaction": interaction,
+            "refresh_interval_minutes": source_refresh_interval,
+            "integration_refresh_interval_minutes": integration_refresh_interval,
+            "global_refresh_interval_minutes": global_refresh_interval,
+            "effective_refresh_interval_minutes": effective_refresh_interval,
+            "effective_refresh_interval_source": effective_refresh_source,
+            "last_success_at": last_success_at,
         }
 
         # Try to determine auth_type from flow
@@ -125,6 +171,19 @@ async def list_sources() -> list[dict]:
                 elif step.use.value == "api_key":
                     summary["auth_type"] = "api_key"
                     break
+        integration_refresh_interval = normalize_refresh_interval_minutes(
+            getattr(integration, "default_refresh_interval_minutes", None)
+            if integration
+            else None,
+        )
+        effective_refresh_interval, effective_refresh_source = resolve_refresh_interval_minutes(
+            source_refresh_interval,
+            integration_refresh_interval,
+            global_refresh_interval,
+        )
+        summary["integration_refresh_interval_minutes"] = integration_refresh_interval
+        summary["effective_refresh_interval_minutes"] = effective_refresh_interval
+        summary["effective_refresh_interval_source"] = effective_refresh_source
 
         result.append(summary)
 
@@ -830,6 +889,39 @@ async def update_stored_source(source_id: str, source: StoredSource) -> StoredSo
     if source.id != source_id:
         raise HTTPException(400, "ID mismatch")
     return _resource_manager.save_source(source)
+
+
+class RefreshIntervalUpdateRequest(BaseModel):
+    interval_minutes: int | None = None
+
+
+@router.put("/sources/{source_id}/refresh-interval")
+async def update_source_refresh_interval(
+    source_id: str,
+    request: RefreshIntervalUpdateRequest,
+) -> dict[str, Any]:
+    """更新 source 级自动刷新间隔。None 表示未设置，0 表示关闭自动刷新。"""
+    stored = _get_stored_source(source_id)
+    if stored is None:
+        raise HTTPException(404, f"数据源 '{source_id}' 不存在")
+
+    normalized_interval = normalize_refresh_interval_minutes(request.interval_minutes)
+    if request.interval_minutes is not None and normalized_interval is None:
+        options = ", ".join(str(option) for option in REFRESH_INTERVAL_OPTIONS_MINUTES)
+        raise HTTPException(400, f"Invalid refresh interval. Supported values: {options}, or null")
+
+    config = dict(stored.config) if isinstance(stored.config, dict) else {}
+    if normalized_interval is None:
+        config.pop("refresh_interval_minutes", None)
+    else:
+        config["refresh_interval_minutes"] = normalized_interval
+
+    updated = stored.model_copy(update={"config": config})
+    _resource_manager.save_source(updated)
+    return {
+        "source_id": source_id,
+        "refresh_interval_minutes": normalized_interval,
+    }
 
 
 @router.delete("/sources/{source_id}")

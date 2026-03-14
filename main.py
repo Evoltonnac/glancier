@@ -25,6 +25,7 @@ from core.auth.manager import AuthManager
 from core.resource_manager import ResourceManager
 from core.integration_manager import IntegrationManager
 from core.settings_manager import SettingsManager
+from core.refresh_scheduler import RefreshScheduler
 from core import api
 
 
@@ -102,6 +103,9 @@ class StartupBackgroundTasks:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan 事件处理：启动时和关闭时的逻辑。"""
+    refresh_scheduler = getattr(app.state, "refresh_scheduler", None)
+    if refresh_scheduler is not None:
+        await refresh_scheduler.start()
 
     startup_tasks = getattr(app.state, "startup_background_tasks", None)
     if startup_tasks is not None:
@@ -118,6 +122,8 @@ async def lifespan(app: FastAPI):
 
     # 关闭时：关闭数据库连接
     logger.info("正在关闭...")
+    if refresh_scheduler is not None:
+        await refresh_scheduler.stop()
     app.state.data_controller.close()
 
 
@@ -210,11 +216,23 @@ def create_app() -> FastAPI:
     app.include_router(api.router)
 
     # 将组件存到 app.state，供 lifespan 访问
+    refresh_scheduler = RefreshScheduler(
+        executor=executor,
+        data_controller=data_controller,
+        resource_manager=resource_manager,
+        settings_manager=settings_manager,
+        get_config=api.get_runtime_config,
+        resolve_stored_source=api._resolve_stored_source,
+        tick_seconds=10,
+        workers=1,
+    )
+
     app.state.config = config
     app.state.executor = executor
     app.state.data_controller = data_controller
     app.state.resource_manager = resource_manager
     app.state.startup_background_tasks = startup_background_tasks
+    app.state.refresh_scheduler = refresh_scheduler
 
     return app
 

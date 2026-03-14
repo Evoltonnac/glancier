@@ -86,6 +86,12 @@ export interface SourceSummary {
     status: SourceStatus;
     message?: string;
     interaction?: InteractionRequest;
+    refresh_interval_minutes?: number | null;
+    integration_refresh_interval_minutes?: number | null;
+    global_refresh_interval_minutes?: number | null;
+    effective_refresh_interval_minutes?: number | null;
+    effective_refresh_interval_source?: "source" | "integration" | "global";
+    last_success_at?: number | null;
 }
 
 export interface DataResponse {
