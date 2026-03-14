@@ -63,8 +63,11 @@ function coerceTemplatePrimitive(rawValue: unknown, resolvedValue: unknown, key:
 
     const trimmed = resolvedValue.trim();
 
-    if (NUMERIC_TEMPLATE_KEYS.has(key) && /^-?\d+(?:\.\d+)?$/.test(trimmed)) {
-        return Number(trimmed);
+    if (NUMERIC_TEMPLATE_KEYS.has(key)) {
+        if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+            return Number(trimmed);
+        }
+        return undefined;
     }
 
     if (BOOLEAN_TEMPLATE_KEYS.has(key)) {
@@ -74,6 +77,7 @@ function coerceTemplatePrimitive(rawValue: unknown, resolvedValue: unknown, key:
         if (/^false$/i.test(trimmed)) {
             return false;
         }
+        return undefined;
     }
 
     return resolvedValue;
