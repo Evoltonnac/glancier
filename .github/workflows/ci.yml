@@ -57,8 +57,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-14
+            rust_target: aarch64-apple-darwin
+            tauri_args: --bundles dmg --target aarch64-apple-darwin
+          - platform: macos-13
+            rust_target: x86_64-apple-darwin
+            tauri_args: --bundles dmg --target x86_64-apple-darwin
           - platform: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            tauri_args: --bundles nsis --target x86_64-pc-windows-msvc
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout
@@ -78,6 +85,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
 
       - name: Install backend dependencies
         run: pip install -r requirements.txt
@@ -105,6 +114,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: ui-react
+          args: ${{ matrix.tauri_args }}
           tagName: v${{ steps.get_version.outputs.VERSION }}
           releaseName: "Glancier v${{ steps.get_version.outputs.VERSION }}"
           releaseBody: "Automated release for Glancier v${{ steps.get_version.outputs.VERSION }}."

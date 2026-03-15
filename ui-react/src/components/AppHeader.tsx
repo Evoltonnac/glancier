@@ -19,7 +19,11 @@ export function AppHeader({
     contentClassName = "flex items-center justify-between w-full",
 }: AppHeaderProps) {
     const inTauri = isTauri();
-    const containerClasses = inTauri ? "h-24 pt-6" : "h-16";
+    const isMacTauri =
+        inTauri &&
+        typeof navigator !== "undefined" &&
+        /mac|darwin/i.test(navigator.userAgent);
+    const containerClasses = isMacTauri ? "h-24 pt-6" : "h-16";
 
     const handleMouseDown = useCallback(
         (e: React.MouseEvent) => {

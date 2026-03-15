@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(not(debug_assertions))]
 use std::process::{Child, Stdio};
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+use std::os::windows::process::CommandExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(not(debug_assertions))]
 use std::sync::Mutex;
@@ -51,6 +53,8 @@ const MAX_WEB_MODE_REQUEST_HEADER_BYTES: usize = 64 * 1024;
 const MAX_WEB_MODE_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
 #[cfg(not(debug_assertions))]
 const BACKEND_BINARY_BASENAME: &str = "glancier-server";
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 const DEVTOOLS_GUARD_INTERVAL: Duration = Duration::from_millis(80);
 
 #[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
@@ -114,6 +118,11 @@ fn set_autostart(
     ensure_command_window(&window, &["main"], "set_autostart")?;
     use tauri_plugin_autostart::ManagerExt;
     let autostart = app.autolaunch();
+    let current = autostart.is_enabled().map_err(|e| e.to_string())?;
+    if current == enabled {
+        return Ok(());
+    }
+
     if enabled {
         autostart.enable().map_err(|e| e.to_string())
     } else {
@@ -216,10 +225,17 @@ fn resolve_log_dir(app: &tauri::AppHandle) -> PathBuf {
 }
 
 fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("explorer");
+        cmd.arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder '{}': {e}", path.display()))?;
+        return Ok(());
+    }
+
     #[cfg(target_os = "macos")]
     let mut cmd = Command::new("/usr/bin/open");
-    #[cfg(target_os = "windows")]
-    let mut cmd = Command::new("explorer");
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut cmd = Command::new("xdg-open");
 
@@ -530,6 +546,11 @@ fn spawn_backend_process(
             .current_dir(root);
     } else {
         command.current_dir(&bundle_dir);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(CREATE_NO_WINDOW);
     }
 
     let mut child = command.spawn().map_err(|e| {

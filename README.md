@@ -59,7 +59,8 @@ npm --prefix ui-react install
 | `make dev` | Run backend + web frontend |
 | `make dev-tauri` | Run backend + Tauri app |
 | `make build-backend` | Build Python sidecar artifacts |
-| `make build-desktop` | Build desktop package |
+| `make build-mac` | Build macOS arm64 desktop package (.dmg) |
+| `make build-win` | Build Windows x64 desktop package (.exe) |
 | `make test-backend` | Backend core test gate |
 | `make test-frontend` | Frontend core test gate |
 | `make test-typecheck` | Frontend tests + TypeScript gate |

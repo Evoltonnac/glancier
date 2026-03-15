@@ -17,7 +17,8 @@ Use root `Makefile` commands first:
 | `make dev` | Backend + web frontend dev mode | `npm --prefix ui-react run dev:all` |
 | `make dev-tauri` | Backend + Tauri dev mode | `npm --prefix ui-react run tauri:dev:all` |
 | `make build-backend` | Build Python sidecar archive only | `bash scripts/build.sh --prepare-only` |
-| `make build-desktop` | Build desktop package | `npm --prefix ui-react run tauri:build` |
+| `make build-mac` | Build macOS arm64 desktop package (.dmg) | `npm --prefix ui-react run tauri:build:mac` |
+| `make build-win` | Build Windows x64 desktop package (.exe) | `npm --prefix ui-react run tauri:build:win` |
 | `make test-backend` | Backend core gate | `bash scripts/test_backend_core.sh` |
 | `make test-frontend` | Frontend core gate | `bash scripts/test_frontend_core.sh` |
 | `make test-typecheck` | Frontend core + typecheck gate | `bash scripts/test_frontend_core.sh --with-typecheck` |
@@ -35,6 +36,9 @@ These remain valid, but are secondary to `make` entrypoints:
 | `ui-react/package.json` | `npm --prefix ui-react run dev:backend` | Keep (backend-only helper from UI workspace) |
 | `ui-react/package.json` | `npm --prefix ui-react run tauri` | Keep (raw Tauri CLI passthrough) |
 | `ui-react/package.json` | `npm --prefix ui-react run tauri:dev` | Keep (desktop shell debug) |
+| `ui-react/package.json` | `npm --prefix ui-react run tauri:build` | Keep (host-platform auto build wrapper, compatibility) |
+| `ui-react/package.json` | `npm --prefix ui-react run tauri:build:mac` | Keep (explicit macOS package build) |
+| `ui-react/package.json` | `npm --prefix ui-react run tauri:build:win` | Keep (explicit Windows package build) |
 | `ui-react/package.json` | `npm --prefix ui-react run preview` | Keep (preview built web assets) |
 | `ui-react/package.json` | `npm --prefix ui-react run test` | Keep (full frontend test runner) |
 | `ui-react/package.json` | `npm --prefix ui-react run test:core` | Keep (focused core suite) |

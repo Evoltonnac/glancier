@@ -7,10 +7,34 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 TAURI_BINARIES_DIR="$PROJECT_ROOT/ui-react/src-tauri/binaries"
 PREPARE_ONLY=false
+TARGET_PLATFORM="auto"
 
-if [ "${1:-}" = "--prepare-only" ]; then
-    PREPARE_ONLY=true
-fi
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --prepare-only)
+            PREPARE_ONLY=true
+            ;;
+        --platform)
+            if [ $# -lt 2 ]; then
+                echo "❌ Missing value for --platform (expected: mac or win)"
+                exit 1
+            fi
+            TARGET_PLATFORM="$2"
+            shift
+            ;;
+        --platform=*)
+            TARGET_PLATFORM="${1#*=}"
+            ;;
+        *)
+            echo "❌ Unknown argument: $1"
+            echo "Usage: bash scripts/build.sh [--prepare-only] [--platform mac|win]"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+TARGET_PLATFORM="$(echo "$TARGET_PLATFORM" | tr '[:upper:]' '[:lower:]')"
 
 if [ "${SKIP_TAURI_BUILD:-0}" = "1" ]; then
     PREPARE_ONLY=true
@@ -22,21 +46,25 @@ echo "=== Glancier Build Script ==="
 ARCH=$(uname -m)
 OS=$(uname -s)
 BINARY_EXT=""
+HOST_PLATFORM=""
 
 case "$OS" in
     Darwin)
+        HOST_PLATFORM="mac"
         case "$ARCH" in
             arm64) TARGET_TRIPLE="aarch64-apple-darwin" ;;
             x86_64) TARGET_TRIPLE="x86_64-apple-darwin" ;;
         esac
         ;;
     Linux)
+        HOST_PLATFORM="linux"
         case "$ARCH" in
             x86_64) TARGET_TRIPLE="x86_64-unknown-linux-gnu" ;;
             aarch64) TARGET_TRIPLE="aarch64-unknown-linux-gnu" ;;
         esac
         ;;
     MINGW*|MSYS*|CYGWIN*)
+        HOST_PLATFORM="win"
         case "$ARCH" in
             x86_64|amd64) TARGET_TRIPLE="x86_64-pc-windows-msvc"; BINARY_EXT=".exe" ;;
             aarch64|arm64) TARGET_TRIPLE="aarch64-pc-windows-msvc"; BINARY_EXT=".exe" ;;
@@ -101,15 +129,50 @@ if [ "$PREPARE_ONLY" = true ]; then
     exit 0
 fi
 
+if [ "$TARGET_PLATFORM" = "auto" ]; then
+    TARGET_PLATFORM="$HOST_PLATFORM"
+fi
+
+case "$TARGET_PLATFORM" in
+    mac)
+        if [ "$HOST_PLATFORM" != "mac" ]; then
+            echo "❌ build target 'mac' must run on macOS host"
+            exit 1
+        fi
+        if [ "$TARGET_TRIPLE" != "aarch64-apple-darwin" ]; then
+            echo "❌ build target 'mac' requires Apple Silicon host (arm64)"
+            exit 1
+        fi
+        TAURI_BUNDLES="dmg"
+        TAURI_TARGET="aarch64-apple-darwin"
+        ;;
+    win)
+        if [ "$HOST_PLATFORM" != "win" ]; then
+            echo "❌ build target 'win' must run on Windows host (Git Bash/MSYS)"
+            exit 1
+        fi
+        if [ "$TARGET_TRIPLE" != "x86_64-pc-windows-msvc" ]; then
+            echo "❌ build target 'win' currently supports x86_64 Windows host only"
+            exit 1
+        fi
+        TAURI_BUNDLES="nsis"
+        TAURI_TARGET="x86_64-pc-windows-msvc"
+        ;;
+    *)
+        echo "❌ Unsupported --platform '$TARGET_PLATFORM' (expected: mac or win)"
+        exit 1
+        ;;
+esac
+
 # Step 3: Build Tauri app.
 echo ""
-echo "=== Step 3: Build Tauri app ==="
+echo "=== Step 3: Build Tauri app ($TARGET_PLATFORM) ==="
 cd "$PROJECT_ROOT/ui-react"
 
 source "$HOME/.cargo/env" 2>/dev/null || true
 
 # Execute build.
-npx tauri build --bundles dmg
+npx tauri build --bundles "$TAURI_BUNDLES" --target "$TAURI_TARGET"
 
 echo ""
 echo "=== ✅ Build complete! ==="

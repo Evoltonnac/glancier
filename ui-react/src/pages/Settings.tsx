@@ -196,13 +196,29 @@ export default function SettingsPage() {
 
     const handleSave = async () => {
         setSaving(true);
-        try {
-            // 1. Handle autostart via Tauri command (must use Tauri, not http API)
-            await invoke("set_autostart", { enabled: settings.autostart });
+        let autostartError: unknown = null;
 
-            // 2. Save proxy & encryption settings to Python backend
+        try {
+            // Avoid redundant autostart IPC on Windows where unchanged state can fail.
+            if (tauriRuntime && settings.autostart !== autostartEnabled) {
+                try {
+                    await invoke("set_autostart", { enabled: settings.autostart });
+                    setAutostartEnabled(settings.autostart);
+                } catch (err) {
+                    autostartError = err;
+                }
+            }
+
+            // Persist backend-owned settings even if autostart command fails.
             await api.updateSettings(settings);
-            showToast("设置已保存");
+            if (autostartError) {
+                showToast(
+                    `设置已保存，但开机启动更新失败：${String(autostartError)}`,
+                    "error",
+                );
+            } else {
+                showToast("设置已保存");
+            }
         } catch (err) {
             console.error("保存设置失败:", err);
             showToast("保存设置失败：" + err, "error");

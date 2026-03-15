@@ -1,13 +1,14 @@
 SHELL := /bin/bash
 
-.PHONY: help dev dev-tauri build-backend build-desktop test test-backend test-frontend test-typecheck test-impacted gen-schemas clean-artifacts
+.PHONY: help dev dev-tauri build-backend build-mac build-win build-desktop test test-backend test-frontend test-typecheck test-impacted gen-schemas clean-artifacts
 
 help:
 	@echo "Available targets:"
 	@echo "  make dev                    # Start backend + web frontend"
 	@echo "  make dev-tauri              # Start backend + Tauri dev app"
 	@echo "  make build-backend          # Build Python backend sidecar archive only"
-	@echo "  make build-desktop          # Build desktop app package"
+	@echo "  make build-mac              # Build macOS arm64 desktop package (.dmg)"
+	@echo "  make build-win              # Build Windows x64 desktop package (.exe)"
 	@echo "  make test                   # Run backend + frontend core tests"
 	@echo "  make test-backend           # Run backend core tests"
 	@echo "  make test-frontend          # Run frontend core tests"
@@ -25,7 +26,14 @@ dev-tauri:
 build-backend:
 	bash scripts/build.sh --prepare-only
 
+build-mac:
+	npm --prefix ui-react run tauri:build:mac
+
+build-win:
+	npm --prefix ui-react run tauri:build:win
+
 build-desktop:
+	@echo "build-desktop is deprecated. Use make build-mac or make build-win."
 	npm --prefix ui-react run tauri:build
 
 test-backend:

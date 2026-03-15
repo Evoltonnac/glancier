@@ -11,6 +11,8 @@
         "tauri:dev": "tauri dev",
         "tauri:dev:all": "concurrently -n backend,tauri -c blue,yellow \"npm run dev:backend\" \"npm run tauri:dev\"",
         "tauri:build": "bash ../scripts/build.sh",
+        "tauri:build:mac": "bash ../scripts/build.sh --platform mac",
+        "tauri:build:win": "bash ../scripts/build.sh --platform win",
         "build": "tsc && vite build",
         "preview": "vite preview",
         "test": "vitest",
