@@ -18,12 +18,22 @@ Return Structure:
         - headers (dict): The response headers.
 """
 
+import asyncio
 import httpx
 from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.config_loader import StepConfig, SourceConfig
     from core.executor import Executor
+
+_RETRYABLE_NETWORK_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.PoolTimeout,
+    httpx.RemoteProtocolError,
+)
 
 
 async def execute_http_step(
@@ -43,35 +53,52 @@ async def execute_http_step(
     url = args.get("url")
     method = args.get("method", "GET")
     headers = args.get("headers", {}).copy()
+    timeout_seconds = float(args.get("timeout", 30.0))
+    retries = int(args.get("retries", 2))
+    backoff_seconds = float(args.get("retry_backoff_seconds", 0.5))
+    retries = max(0, retries)
+    backoff_seconds = max(0.0, backoff_seconds)
 
     proxy_url = executor._get_proxy_url()
-    client_kwargs = {}
+    client_kwargs: Dict[str, Any] = {
+        # Use app settings as the single source of proxy truth.
+        # Avoid inheriting shell proxy env unexpectedly.
+        "trust_env": False,
+        "timeout": timeout_seconds,
+    }
     if proxy_url:
         client_kwargs["proxy"] = proxy_url
 
     async with httpx.AsyncClient(**client_kwargs) as client:
-        response = await client.request(method, url, headers=headers)
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as http_status_error:
-            classified_error = executor._classify_http_status_error(
-                source=source,
-                step=step,
-                error=http_status_error,
-            )
-            raise classified_error from http_status_error
+        for attempt in range(retries + 1):
+            try:
+                response = await client.request(method, url, headers=headers)
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as http_status_error:
+                    classified_error = executor._classify_http_status_error(
+                        source=source,
+                        step=step,
+                        error=http_status_error,
+                    )
+                    raise classified_error from http_status_error
 
-        # Let the caller handle output mapping based on step.outputs
-        # The executor's _run_flow logic maps keys from this dict to outputs.
-        # However, for 'http_response', we might encounter JSON decode errors if it's not JSON.
-        # We can try/except it.
-        try:
-            json_resp = response.json()
-        except Exception:
-            json_resp = None
+                # Let the caller handle output mapping based on step.outputs
+                # The executor's _run_flow logic maps keys from this dict to outputs.
+                # However, for 'http_response', we might encounter JSON decode errors if it's not JSON.
+                # We can try/except it.
+                try:
+                    json_resp = response.json()
+                except Exception:
+                    json_resp = None
 
-        return {
-            "http_response": json_resp,
-            "raw_data": response.text,
-            "headers": dict(response.headers),
-        }
+                return {
+                    "http_response": json_resp,
+                    "raw_data": response.text,
+                    "headers": dict(response.headers),
+                }
+            except _RETRYABLE_NETWORK_ERRORS:
+                if attempt >= retries:
+                    raise
+                if backoff_seconds > 0:
+                    await asyncio.sleep(backoff_seconds * (2**attempt))
