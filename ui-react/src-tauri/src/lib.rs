@@ -224,21 +224,36 @@ fn resolve_log_dir(app: &tauri::AppHandle) -> PathBuf {
         .unwrap_or_else(|_| env::temp_dir().join("glancier-logs"))
 }
 
+#[cfg(target_os = "windows")]
 fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        let mut cmd = Command::new("explorer");
-        cmd.arg(path)
-            .spawn()
-            .map_err(|e| format!("Failed to open folder '{}': {e}", path.display()))?;
-        return Ok(());
-    }
+    let mut cmd = Command::new("explorer");
+    cmd.arg(path)
+        .spawn()
+        .map_err(|e| format!("Failed to open folder '{}': {e}", path.display()))?;
+    Ok(())
+}
 
-    #[cfg(target_os = "macos")]
+#[cfg(target_os = "macos")]
+fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
     let mut cmd = Command::new("/usr/bin/open");
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut cmd = Command::new("xdg-open");
+    cmd.arg(path);
+    cmd.status()
+        .map_err(|e| format!("Failed to open folder '{}': {e}", path.display()))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "File manager exited with status {status} for '{}'",
+                    path.display()
+                ))
+            }
+        })
+}
 
+#[cfg(all(unix, not(target_os = "macos")))]
+fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
+    let mut cmd = Command::new("xdg-open");
     cmd.arg(path);
     cmd.status()
         .map_err(|e| format!("Failed to open folder '{}': {e}", path.display()))
