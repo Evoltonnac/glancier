@@ -1,45 +1,46 @@
-# Glancier OAuth Step 专项说明
+# Glancier OAuth Step Guide
 
-## 1. 适用范围
+## 1. Scope
 
-`oauth` step 用于需要授权码换令牌或设备授权的场景。Flow 侧负责“缺凭据时阻塞，授权完成后恢复”。
+The `oauth` step is used for authorization-code exchange and device authorization.
+Flow is responsible for blocking when credentials are missing and resuming after authorization completes.
 
-参考：
-- [Flow 架构总览](./01_architecture_and_orchestration.md)
-- [Flow Step 参考](./02_step_reference.md)
+References:
+- [Flow Architecture](./01_architecture_and_orchestration.md)
+- [Flow Step Reference](./02_step_reference.md)
 
-## 2. 执行阶段
+## 2. Execution Stages
 
-1. 检查是否已有有效 token（Secrets）。
-2. 无 token 或 token 失效时触发 OAuth 交互。
-3. 用户完成授权后回传 token。
-4. Flow 持久化 token 并恢复后续步骤。
+1. Check whether a valid token already exists in secrets.
+2. If missing/expired, start OAuth interaction.
+3. Receive user-authorized token data.
+4. Persist token and resume downstream Flow steps.
 
-## 3. 支持的复杂场景
+## 3. Supported Advanced Scenarios
 
 - Authorization Code + PKCE
-- Device Flow（RFC 8628）
-- Client Credentials（服务端凭据）
-- Callback 兼容 `?code=` 与 `#access_token=`
+- Device Flow (RFC 8628)
+- Client Credentials
+- Callback compatibility for both `?code=` and `#access_token=`
 
-## 4. 建议输出与持久化
+## 4. Recommended Outputs and Persistence
 
-建议至少维护以下字段：
+Recommended fields:
 - `access_token`
-- `refresh_token`（如有）
-- `expires_at` 或 `expires_in`
+- `refresh_token` (if present)
+- `expires_at` or `expires_in`
 - `token_type`
 
-并在 `secrets` 中明确映射，保证续期与恢复可追踪。
+Map these fields explicitly under `secrets` so refresh/resume behavior is traceable.
 
-## 5. 错误与恢复
+## 5. Errors and Recovery
 
-常见失败：
-- 用户拒绝授权
+Common failures:
+- User denied authorization
 - `invalid_client`
-- token 过期或刷新失败
+- Expired token or refresh failure
 
-建议处理：
-- 保持 source 状态可恢复（不崩溃）
-- 在 UI 提示明确“重连 OAuth”动作
-- 失败样例见 [04_step_failure_test_inputs.md](./04_step_failure_test_inputs.md)
+Recommended handling:
+- Keep source state recoverable (no crash path)
+- Provide a clear “Reconnect OAuth” UI action
+- Failure examples: [04_step_failure_test_inputs.md](./04_step_failure_test_inputs.md)

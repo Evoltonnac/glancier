@@ -1,51 +1,51 @@
-# Glancier Flow Step 参考
+# Glancier Flow Step Reference
 
-架构背景见 [01_architecture_and_orchestration.md](./01_architecture_and_orchestration.md)。
+Architecture background: [01_architecture_and_orchestration.md](./01_architecture_and_orchestration.md)
 
-## 1. 鉴权/阻塞类步骤
+## 1. Auth and Blocking Steps
 
 ### `api_key`
-- 用途：请求用户输入 API Key 或 Token。
-- 常见 `args`：`label`、`description`。
-- 常见 `secrets`：`api_key`。
+- Purpose: ask the user for API key/token input.
+- Common `args`: `label`, `description`
+- Common `secrets`: `api_key`
 
 ### `oauth`
-- 用途：执行 OAuth 授权流程并写回 token。
-- 输出：`access_token`（可扩展 refresh/expiry）。
-- 专项说明见 [03_step_oauth.md](./03_step_oauth.md)。
+- Purpose: run OAuth and persist tokens.
+- Typical output: `access_token` (optionally refresh/expiry fields)
+- See details: [03_step_oauth.md](./03_step_oauth.md)
 
 ### `curl`
-- 用途：提示用户粘贴浏览器抓包 cURL 指令。
-- 常见 `secrets`：`curl_command`。
+- Purpose: ask the user to paste a browser-captured cURL command.
+- Common `secrets`: `curl_command`
 
 ### `webview`
-- 用途：在桌面端后台打开页面并截取目标接口响应。
-- 常见 `args`：`url`、`intercept_api`。
-- 常见 `secrets`：`webview_data`。
-- 运行细节见 [../webview-scraper/01_architecture_and_dataflow.md](../webview-scraper/01_architecture_and_dataflow.md)。
+- Purpose: open a background page in desktop runtime and intercept target API responses.
+- Common `args`: `url`, `intercept_api`
+- Common `secrets`: `webview_data`
+- Runtime details: [../webview-scraper/01_architecture_and_dataflow.md](../webview-scraper/01_architecture_and_dataflow.md)
 
-## 2. 数据处理类步骤
+## 2. Data Processing Steps
 
-### 输出映射格式
-- `outputs` 统一使用：`目标变量: 来源路径`。
-- 来源路径支持：
-  - 直接键名（如 `http_response`）
-  - 点路径（如 `headers.Authorization`）
-  - JSONPath（如 `$.data[0].id`，适用于支持结构化输出的步骤）
+### Output Mapping Format
+- `outputs` uses the unified format: `target_var: source_path`
+- Supported source paths:
+  - direct key (for example `http_response`)
+  - dotted path (for example `headers.Authorization`)
+  - JSONPath (for example `$.data[0].id`)
 
 ### `http`
-- 用途：标准 HTTP 请求。
-- 典型输出：`http_response`、`raw_data`、`headers`。
+- Purpose: execute a standard HTTP request.
+- Typical outputs: `http_response`, `raw_data`, `headers`
 
 ### `extract`
-- 用途：从结构化数据中提取字段。
-- 常见 `args`：`source`、`type`（`jsonpath`/`key`）。
-- 支持多输出：在 `outputs` 中为每个目标变量声明来源路径/表达式。
+- Purpose: extract fields from structured data.
+- Common `args`: `source`, `type` (`jsonpath` / `key`)
+- Multi-output supported via multiple mappings in `outputs`
 
 ### `script`
-- 用途：执行轻量脚本转换数据（受运行时策略约束）。
+- Purpose: run lightweight script-based transformation (subject to runtime policy)
 
-## 3. 示例（WebView + Extract）
+## 3. Example (WebView + Extract)
 
 ```yaml
 flow:
@@ -67,6 +67,6 @@ flow:
       currency: "$.billing.currency"
 ```
 
-## 4. 失败回放样例
+## 4. Failure Replay Inputs
 
-见 [04_step_failure_test_inputs.md](./04_step_failure_test_inputs.md)。
+See [04_step_failure_test_inputs.md](./04_step_failure_test_inputs.md)

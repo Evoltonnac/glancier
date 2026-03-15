@@ -1,12 +1,13 @@
 """
-执行器：负责调度和运行数据源抓取任务。
-捕捉异常并更新 SourceState。
+Executor: schedules and runs source fetch tasks.
+Captures exceptions and updates SourceState.
 """
 
 import logging
 import time
 import asyncio
 import httpx
+import os
 import shlex
 import re
 import traceback
@@ -39,23 +40,60 @@ _PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
 _ESCAPED_TEMPLATE_CHAR_PATTERN = re.compile(r"\\([{}\\])")
 _ESCAPE_TOKEN_PATTERN = re.compile("\u0000(\\d+)\u0000")
 _MISSING = object()
+_DEFAULT_MAX_CONCURRENT_FETCHES = 4
 
 
 class Executor:
     """
-    负责执行 SourceConfig 定义的抓取流程。
-    维护内存中的 SourceState。
+    Execute SourceConfig-defined fetch flows.
+    Maintain in-memory SourceState snapshots.
     """
 
-    def __init__(self, data_controller, secrets_controller, settings_manager=None):
+    def __init__(
+        self,
+        data_controller,
+        secrets_controller,
+        settings_manager=None,
+        max_concurrent_fetches: int | None = None,
+    ):
         self._data_controller = data_controller
         self._secrets = secrets_controller
         self._settings_manager = settings_manager
         # source_id -> SourceState
         self._states: Dict[str, SourceState] = {}
+        resolved_max_concurrency = self._resolve_max_concurrent_fetches(max_concurrent_fetches)
+        self._fetch_semaphore = asyncio.Semaphore(resolved_max_concurrency)
+        self._inflight_source_ids: set[str] = set()
+        self._inflight_lock = asyncio.Lock()
+
+    def _resolve_max_concurrent_fetches(self, configured: int | None) -> int:
+        if isinstance(configured, int) and configured > 0:
+            return configured
+
+        env_raw = os.getenv("GLANCIER_MAX_CONCURRENT_FETCHES")
+        if env_raw:
+            try:
+                parsed = int(env_raw)
+                if parsed > 0:
+                    return parsed
+            except ValueError:
+                logger.warning("Invalid GLANCIER_MAX_CONCURRENT_FETCHES=%s; fallback to default", env_raw)
+
+        return _DEFAULT_MAX_CONCURRENT_FETCHES
+
+    async def _try_mark_source_inflight(self, source_id: str) -> bool:
+        async with self._inflight_lock:
+            if source_id in self._inflight_source_ids:
+                return False
+            self._inflight_source_ids.add(source_id)
+            return True
+
+    async def _clear_source_inflight(self, source_id: str) -> None:
+        async with self._inflight_lock:
+            self._inflight_source_ids.discard(source_id)
 
     def _get_proxy_url(self) -> str | None:
-        """从系统设置中读取代理地址，无代理则返回 None。"""
+        """Read proxy URL from system settings; return None if unset."""
         if self._settings_manager is None:
             return None
         try:
@@ -65,14 +103,14 @@ class Executor:
             return None
 
     def get_source_state(self, source_id: str) -> SourceState:
-        """获取指定数据源的运行时状态。"""
+        """Get runtime state for source."""
         if source_id not in self._states:
-            # 初始化默认状态
+            # Initialize default state.
             self._states[source_id] = SourceState(source_id=source_id)
         return self._states[source_id]
 
     def update_source_state(self, source_id: str, state: SourceState):
-        """更新指定数据源的运行时状态。"""
+        """Update runtime state for source."""
         if source_id not in self._states:
             self._states[source_id] = SourceState(source_id=source_id)
         self._states[source_id].status = state.status
@@ -100,7 +138,7 @@ class Executor:
         interaction: InteractionRequest | None = None,
         error: str | None = None,
     ):
-        """更新状态并记录日志，同时持久化到 data.json。"""
+        """Update state, log it, and persist to data.json."""
         state = self.get_source_state(source_id)
         state.status = status
         state.message = message
@@ -108,7 +146,7 @@ class Executor:
         state.last_updated = time.time()
         logger.info(f"[{source_id}] State -> {status.value}: {message}")
 
-        # 持久化状态到数据库，供前端渲染授权按钮等
+        # Persist state so frontend can render actions (for example auth prompts).
         try:
             interaction_dict = interaction.model_dump() if interaction else None
             self._data_controller.set_state(
@@ -123,12 +161,24 @@ class Executor:
 
     async def fetch_source(self, source: SourceConfig):
         """
-        执行数据源抓取。
-        如果发生异常，根据异常类型设置 InteractionRequest。
+        Execute source fetch flow.
+        On failure, map exception type to InteractionRequest when possible.
         """
+        marked = await self._try_mark_source_inflight(source.id)
+        if not marked:
+            logger.info("[%s] Fetch already in progress; skipping duplicate trigger", source.id)
+            return
+
+        try:
+            async with self._fetch_semaphore:
+                await self._fetch_source_once(source)
+        finally:
+            await self._clear_source_inflight(source.id)
+
+    async def _fetch_source_once(self, source: SourceConfig):
         try:
             self._update_state(source.id, SourceStatus.ACTIVE, "Starting fetch...")
-            
+
             # If flow is defined, execute flow steps
             if source.flow:
                 data = await self._run_flow(source)
@@ -156,7 +206,7 @@ class Executor:
                         logger.warning(f"[{source.id}] Retry after OAuth refresh failed: {retry_error}")
                         normalized_error = self._normalize_interaction_error(source, retry_error)
 
-            # 将异常转换为交互请求
+            # Convert exception into interaction request when possible.
             interaction = self._exception_to_interaction(source, normalized_error)
             if interaction:
                 status = self._interaction_status_for_error(normalized_error)
@@ -744,7 +794,7 @@ class Executor:
         )
 
     def _exception_to_interaction(self, source: SourceConfig, error: Exception) -> InteractionRequest | None:
-        """根据异常生成特定的交互请求。"""
+        """Build interaction request from exception type."""
         
         if isinstance(error, RequiredSecretMissing):
             return InteractionRequest(
@@ -798,7 +848,7 @@ class Executor:
                 data=interaction_data,
             )
             
-        # 通用网络错误 -> 重试
+        # Generic network errors -> retry.
         # if isinstance(error, (httpx.ConnectError, TimeoutError)):
         #     return InteractionRequest(
         #         type=InteractionType.RETRY,
@@ -808,7 +858,7 @@ class Executor:
         return None
 
 class RequiredSecretMissing(Exception):
-    """自定义异常：缺少必要凭证。"""
+    """Custom exception: required credential is missing."""
     def __init__(self, source_id: str, interaction_type: InteractionType, fields: list[InteractionField], message: str, data: dict = None, warning_message: str = None):
         self.source_id = source_id
         self.interaction_type = interaction_type
@@ -820,7 +870,7 @@ class RequiredSecretMissing(Exception):
 
 
 class InvalidCredentialsError(Exception):
-    """自定义异常：凭证已提供但无效。"""
+    """Custom exception: credentials were provided but are invalid."""
 
     def __init__(
         self,
@@ -837,7 +887,7 @@ class InvalidCredentialsError(Exception):
 
 
 class WebScraperBlockedError(Exception):
-    """自定义异常：WebScraper 命中登录墙/验证码等场景。"""
+    """Custom exception: WebScraper was blocked (login wall/captcha/etc.)."""
 
     def __init__(
         self,
@@ -856,7 +906,7 @@ class WebScraperBlockedError(Exception):
 
 
 class FlowExecutionError(Exception):
-    """Flow 执行失败的结构化异常。"""
+    """Structured exception for flow execution failure."""
 
     def __init__(self, summary: str, details: str):
         self.summary = summary
@@ -865,7 +915,7 @@ class FlowExecutionError(Exception):
 
 
 class _RuntimeStreamRelay:
-    """将 stdout/stderr 内容转发到状态消息，模拟流式输出。"""
+    """Forward stdout/stderr chunks into runtime status messages."""
 
     def __init__(self, on_chunk):
         self._on_chunk = on_chunk

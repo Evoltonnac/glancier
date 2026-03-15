@@ -1,5 +1,5 @@
 """
-OAuth 2.0 标准参数与常量定义。
+OAuth 2.0 standard parameter and constant definitions.
 """
 
 from enum import Enum
@@ -19,7 +19,7 @@ class CodeChallengeMethod(str, Enum):
     S256 = "S256"
     PLAIN = "plain"
 
-# 标准 OAuth 参数名常量
+# Standard OAuth parameter names.
 class OAuthParams:
     OAUTH_SECRETS = "oauth_secrets"
     CLIENT_ID = "client_id"
@@ -37,5 +37,5 @@ class OAuthParams:
     ACCESS_TOKEN = "access_token"
     EXPIRES_IN = "expires_in"
 
-# 默认配置
+# Default configuration.
 DEFAULT_TIMEOUT_SECONDS = 300  # 5 minutes for PKCE state

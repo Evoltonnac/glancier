@@ -1,27 +1,30 @@
-# Glancier SDUI 模板表达式规范
+# Glancier SDUI Template Expression Specification
 
-本规范定义 SDUI 模板字段可用表达式语法与安全边界。
+This document defines supported expression syntax and safety boundaries for SDUI template fields.
 
-关联文档：
-- [架构与模板配置指南](./01_architecture_and_guidelines.md)
-- [组件地图与分类字典](./02_component_map_and_categories.md)
+Related docs:
+- [Architecture and Template Guidelines](./01_architecture_and_guidelines.md)
+- [Component Map and Category Dictionary](./02_component_map_and_categories.md)
 
-## 1. 使用方式
+## 1. Usage Forms
 
-- 整体表达式：`"{...}"`，返回原始类型（number/boolean/string/null）。
-- 插值表达式：`"prefix {...} suffix"`，结果转字符串后拼接。
-- 转义写法：使用反斜杠转义模板控制符，`\{` / `\}` 输出字面量花括号，`\\` 输出字面量反斜杠。
-- YAML 双引号字符串中反斜杠本身也要转义：写入 `\\{` / `\\}` 才会得到 `\{` / `\}`。
+- Full expression: `"{...}"` -> returns original type (`number` / `boolean` / `string` / `null`).
+- Interpolation expression: `"prefix {...} suffix"` -> stringified and concatenated.
+- Escaping: use backslash to escape template control chars.
+  - `\{` / `\}` outputs literal braces.
+  - `\\` outputs literal backslash.
+- In YAML double-quoted strings, backslashes must be escaped too:
+  - write `\\{` / `\\}` to produce `\{` / `\}`.
 
-## 2. 可用语法
+## 2. Supported Syntax
 
-- 字面量：数字、字符串、布尔、`null`、`undefined`
-- 变量与路径：`usage`、`key_item.percent`、`items[0]`
-- 运算：`+ - * / %`、比较、逻辑、`??`
-- 三元：`condition ? a : b`
-- 分组与一元：`( )`、`!`、`+x`、`-x`
+- Literals: number, string, boolean, `null`, `undefined`
+- Variables and paths: `usage`, `key_item.percent`, `items[0]`
+- Operators: `+ - * / %`, comparisons, logical operators, `??`
+- Ternary: `condition ? a : b`
+- Grouping and unary: `( )`, `!`, `+x`, `-x`
 
-## 3. 白名单函数
+## 3. Whitelisted Functions
 
 - `fixed(value, digits)`
 - `round(value, digits = 0)`
@@ -33,21 +36,21 @@
 - `string(value)`
 - `number(value, fallback = 0)`
 
-## 4. 不支持能力
+## 4. Unsupported Capabilities
 
-- 任意代码执行（`eval` / `new Function` / `import`）
-- 赋值、声明、循环、语句块
-- 对象/数组字面量
-- 任意方法调用（如 `obj.fn()`）
+- Arbitrary code execution (`eval`, `new Function`, `import`)
+- Assignment, declarations, loops, statement blocks
+- Object/array literals
+- Arbitrary method calls (for example `obj.fn()`)
 
-## 5. 安全边界
+## 5. Safety Boundary
 
-- 由受限解析器执行，不走 JS 动态执行。
-- 仅允许白名单函数。
-- 禁止 `__proto__` / `prototype` / `constructor`。
-- 解析失败返回 `undefined`，并降级为空值渲染，不中断页面。
+- Expressions are executed by a restricted parser, not dynamic JS execution.
+- Only whitelisted functions are allowed.
+- `__proto__`, `prototype`, and `constructor` access is blocked.
+- Parse failures return `undefined` and degrade rendering gracefully.
 
-## 6. 示例
+## 6. Examples
 
 - `"{fixed(credits_data.remaining, 2)}"`
 - `"{usage > 80 ? 'High' : 'Normal'}"`

@@ -9,7 +9,7 @@ flow:
           token_url: "https://github.com/login/oauth/access_token"
           scopes: ["repo", "user"]
           doc_url: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow"
-          client_id: "" # 请在此填入 GitHub OAuth App 的 Client ID
+          client_id: "" # Fill in your GitHub OAuth App Client ID
           token_request_type: "json" # GitHub requires JSON token request to get JSON response
           device_poll_interval: 5
       outputs:

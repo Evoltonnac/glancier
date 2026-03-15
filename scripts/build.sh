@@ -1,5 +1,5 @@
 #!/bin/bash
-# 打包脚本：先用 PyInstaller 打包 Python 后端，再构建 Tauri 应用
+# Packaging script: bundle Python backend with PyInstaller, then build Tauri app.
 set -e
 set -u
 
@@ -16,9 +16,9 @@ if [ "${SKIP_TAURI_BUILD:-0}" = "1" ]; then
     PREPARE_ONLY=true
 fi
 
-echo "=== Glancier 打包脚本 ==="
+echo "=== Glancier Build Script ==="
 
-# 检测当前平台的 Tauri target triple
+# Detect current platform Tauri target triple.
 ARCH=$(uname -m)
 OS=$(uname -s)
 BINARY_EXT=""
@@ -49,11 +49,11 @@ if [ -z "${TARGET_TRIPLE:-}" ]; then
     exit 1
 fi
 
-echo "📦 平台: $TARGET_TRIPLE"
+echo "📦 Platform: $TARGET_TRIPLE"
 
-# Step 1: PyInstaller 打包 Python 后端（onedir）
+# Step 1: Package Python backend with PyInstaller (onedir).
 echo ""
-echo "=== Step 1: 打包 Python 后端 ==="
+echo "=== Step 1: Package Python backend ==="
 cd "$PROJECT_ROOT"
 
 pyinstaller \
@@ -68,11 +68,11 @@ pyinstaller \
     --hidden-import uvicorn.lifespan.on \
     main.py
 
-echo "✅ Python 后端打包完成"
+echo "✅ Python backend packaging complete"
 
-# Step 2: 打包后端目录为归档并复制到 Tauri binaries（带 target triple 后缀）
+# Step 2: Archive backend directory and copy to Tauri binaries (target-triple suffix).
 echo ""
-echo "=== Step 2: 打包归档到 Tauri binaries ==="
+echo "=== Step 2: Archive to Tauri binaries ==="
 mkdir -p "$TAURI_BINARIES_DIR"
 rm -rf "$TAURI_BINARIES_DIR"/glancier-server-*
 
@@ -93,24 +93,24 @@ fi
 
 COPYFILE_DISABLE=1 tar -C "$PROJECT_ROOT/dist" -czf "$TARGET_ARCHIVE" "glancier-server"
 
-echo "✅ 已生成归档: binaries/$(basename "$TARGET_ARCHIVE")"
+echo "✅ Archive generated: binaries/$(basename "$TARGET_ARCHIVE")"
 
 if [ "$PREPARE_ONLY" = true ]; then
     echo ""
-    echo "=== ✅ 预构建完成（已跳过 Tauri build）==="
+    echo "=== ✅ Prepare-only completed (Tauri build skipped) ==="
     exit 0
 fi
 
-# Step 3: 构建 Tauri 应用
+# Step 3: Build Tauri app.
 echo ""
-echo "=== Step 3: 构建 Tauri 应用 ==="
+echo "=== Step 3: Build Tauri app ==="
 cd "$PROJECT_ROOT/ui-react"
 
 source "$HOME/.cargo/env" 2>/dev/null || true
 
-# 执行构建
+# Execute build.
 npx tauri build --bundles dmg
 
 echo ""
-echo "=== ✅ 打包完成！==="
-echo "产物位于: ui-react/src-tauri/target/release/bundle/"
+echo "=== ✅ Build complete! ==="
+echo "Artifacts: ui-react/src-tauri/target/release/bundle/"

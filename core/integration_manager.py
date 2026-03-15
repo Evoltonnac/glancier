@@ -1,5 +1,5 @@
 """
-集成管理器和数据源 YAML 文件管理。
+Integration manager for integration/source YAML file operations.
 """
 
 import os
@@ -9,7 +9,7 @@ from typing import Any, List, Optional
 import yaml
 
 
-# 使用与 config_loader 相同的逻辑查找配置根目录
+# Use the same config-root discovery logic as config_loader.
 def find_config_root() -> Path:
     """Find the root config directory."""
     base = Path(os.getenv("GLANCIER_DATA_DIR", "."))
@@ -20,7 +20,7 @@ def find_config_root() -> Path:
 
 
 class IntegrationManager:
-    """管理集成和数据源 YAML 文件。"""
+    """Manage integration and source YAML files."""
 
     def __init__(self, config_root: Optional[str] = None):
         if config_root:
@@ -30,7 +30,7 @@ class IntegrationManager:
 
         self.integrations_dir = self.config_root / "integrations"
 
-        # 确保目录存在
+        # Ensure directory exists.
         self.integrations_dir.mkdir(parents=True, exist_ok=True)
 
     def _iter_integration_files(self) -> List[Path]:
@@ -55,11 +55,11 @@ class IntegrationManager:
         return self.integrations_dir / normalized
 
     def list_integration_files(self) -> List[str]:
-        """列出所有集成配置文件名。"""
+        """List all integration config filenames."""
         return [file_path.name for file_path in self._iter_integration_files()]
 
     def _read_display_name_from_file(self, file_path: Path) -> Optional[str]:
-        """读取单个 integration 文件的顶层 name 字段。"""
+        """Read top-level `name` field from a single integration file."""
         try:
             with open(file_path, "r", encoding="utf-8") as fp:
                 content = yaml.safe_load(fp)
@@ -77,14 +77,14 @@ class IntegrationManager:
         return display_name or None
 
     def get_integration_display_name(self, filename: str) -> Optional[str]:
-        """返回 integration 文件的显示名（顶层 name）。"""
+        """Return display name (top-level `name`) for an integration file."""
         file_path = self._resolve_file_path(filename)
         if not file_path.exists():
             return None
         return self._read_display_name_from_file(file_path)
 
     def get_integration_path(self, filename: str) -> Optional[str]:
-        """返回 integration 文件的绝对路径。"""
+        """Return absolute path for an integration file."""
         file_path = self._resolve_file_path(filename)
         if not file_path.exists():
             return None
@@ -94,7 +94,7 @@ class IntegrationManager:
             return str(file_path)
 
     def list_integration_file_metadata(self) -> List[dict[str, Any]]:
-        """列出 integration 文件元数据（filename/id/name）。"""
+        """List integration file metadata (`filename` / `id` / `name`)."""
         items: List[dict[str, Any]] = []
         for file_path in self._iter_integration_files():
             items.append(
@@ -107,7 +107,7 @@ class IntegrationManager:
         return items
 
     def get_integration_ids_in_file(self, filename: str) -> List[str]:
-        """返回文件对应的 integration id（文件名去扩展名）。"""
+        """Return integration IDs for file (stem-based)."""
         file_path = self._resolve_file_path(filename)
         if not file_path.exists():
             return []
@@ -120,18 +120,18 @@ class IntegrationManager:
             print(f"Error reading integration ids from {file_path}: {exc}")
             return []
 
-        # 空文件允许存在，id 仍以文件名为准。
+        # Empty file is allowed; ID still comes from filename stem.
         if content is None:
             return [integration_id]
 
-        # 新格式应为对象；对象内的 id 字段会被忽略并由文件名注入。
+        # New format must be object; any internal id is ignored in favor of filename.
         if not isinstance(content, dict):
             return []
 
         return [integration_id]
 
     def find_files_by_integration_id(self, integration_id: str) -> List[str]:
-        """查找与 integration id 同名（stem 匹配）的文件名列表。"""
+        """Find filenames whose stem matches integration ID."""
         target = integration_id.strip()
         if not target:
             return []
@@ -143,7 +143,7 @@ class IntegrationManager:
         ]
 
     def get_integration(self, filename: str) -> Optional[str]:
-        """读取集成配置文件内容（按文件名）。"""
+        """Read integration file content by filename."""
         file_path = self._resolve_file_path(filename)
         if not file_path.exists():
             return None
@@ -151,7 +151,7 @@ class IntegrationManager:
             return file_obj.read()
 
     def save_integration(self, filename: str, content: str) -> bool:
-        """保存集成配置文件内容（按文件名）。"""
+        """Save integration file content by filename."""
         file_path = self._resolve_file_path(filename)
         if not file_path.exists():
             return False
@@ -164,7 +164,7 @@ class IntegrationManager:
             return False
 
     def create_integration(self, filename: str, content: str = "") -> bool:
-        """创建新的集成配置文件（按文件名）。"""
+        """Create a new integration file by filename."""
         try:
             file_path = self._resolve_file_path(filename)
         except ValueError as exc:
@@ -180,7 +180,7 @@ class IntegrationManager:
             return False
 
     def delete_integration(self, filename: str) -> bool:
-        """删除集成配置文件（按文件名）。"""
+        """Delete integration file by filename."""
         file_path = self._resolve_file_path(filename)
         if file_path.exists():
             try:

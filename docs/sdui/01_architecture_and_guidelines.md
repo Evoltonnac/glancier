@@ -1,20 +1,20 @@
-# Glancier SDUI 架构与模板配置指南
+# Glancier SDUI Architecture and Template Guidelines
 
-## 1. 目标
+## 1. Goal
 
-Glancier 视图层采用 SDUI（Schema-Driven UI）：
-- 通过 YAML/JSON 模板声明 UI，不为每个业务场景硬编码 React 页面。
-- 渲染器负责解析、校验、降级，不负责请求和业务流程控制。
-- 数据获取与鉴权交给 Flow，SDUI 仅负责展示。
+Glancier uses SDUI (Schema-Driven UI) in the view layer:
+- Declare UI with YAML/JSON templates instead of hardcoding per-scenario pages.
+- Renderer handles parsing/validation/fallback, not request orchestration.
+- Flow owns authentication and fetching; SDUI only renders data.
 
-相关文档：
-- [组件地图与分类字典](./02_component_map_and_categories.md)
-- [模板表达式规范](./03_template_expression_spec.md)
-- [Flow 编排文档入口](../flow/README.md)
+Related docs:
+- [Component Map and Categories](./02_component_map_and_categories.md)
+- [Template Expression Spec](./03_template_expression_spec.md)
+- [Flow Docs Entry](../flow/README.md)
 
-## 2. 模板结构（`templates`）
+## 2. Template Structure (`templates`)
 
-每个集成可以声明多个模板，当前模板类型以 `source_card` 为主：
+Each integration can define multiple templates. Current primary template type: `source_card`.
 
 ```yaml
 templates:
@@ -35,61 +35,61 @@ templates:
             label: "Usage"
 ```
 
-字段说明：
-- `id`：模板唯一标识。
-- `type`：模板类型（当前主类型为 `source_card`）。
-- `ui`：卡片层元信息（如 `title`、`icon`）。
-- `widgets`：SDUI 组件树入口。
+Field meanings:
+- `id`: unique template identifier
+- `type`: template type (`source_card` for now)
+- `ui`: card-level metadata (`title`, `icon`, ...)
+- `widgets`: SDUI widget tree entry
 
-## 3. 通用 Props 规范（Widgets）
+## 3. Shared Widget Props
 
-所有 widget 仅暴露最小通用能力，统一使用以下枚举：
-
+All widgets expose a minimal common prop model:
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
 - `align_x` / `align_y`: `start` | `center` | `end`
 
-约束：
-- 不再支持旧值（如 `small/default/large`、`compact/relaxed`、`good/attention`、`left/right/top/bottom`）。
-- 视觉细节（padding、radius、复杂 style 变体）由项目 UI 层统一控制，不通过模板暴露。
+Constraints:
+- Legacy values are not supported (`small/default/large`, `compact/relaxed`, etc.).
+- Visual details (padding/radius/complex style variants) stay in project UI, not templates.
 
-> **SDUI 组件编码规范**：在编写 SDUI 组件时，所有间距（gap、padding、margin）必须使用 CSS 变量，禁止硬编码像素值。项目提供以下间距变量：
-> - `--qb-gap-1` ~ `--qb-gap-6`：2px ~ 20px（可配合 `--qb-density` 实现密度响应式）
-> - `--qb-card-pad-x` / `--qb-card-pad-y`：卡片内边距
-> - `--qb-grid-gap`：网格间距
+> **SDUI component coding rule**: use CSS variables for all spacing (`gap`, `padding`, `margin`); avoid hardcoded pixels.
+> Provided variables:
+> - `--qb-gap-1` ~ `--qb-gap-6`: 2px ~ 20px (density-responsive via `--qb-density`)
+> - `--qb-card-pad-x` / `--qb-card-pad-y`: card padding
+> - `--qb-grid-gap`: grid spacing
 >
-> 示例：`className="gap-[var(--qb-gap-3)]"` 或 `style={{ padding: 'var(--qb-card-pad-y) var(--qb-card-pad-x)' }}`
+> Example: `className="gap-[var(--qb-gap-3)]"` or `style={{ padding: 'var(--qb-card-pad-y) var(--qb-card-pad-x)' }}`
 
-## 4. 模板绑定语法
+## 4. Template Binding Syntax
 
-### 4.1 直接值绑定
+### 4.1 Direct Value Binding
 
-字段是完整表达式 `"{...}"` 时，返回原始类型：
+If a field is a full expression `"{...}"`, keep original type:
 - `value: "{quota_percent}"` -> number
 - `show: "{quota_percent > 80}"` -> boolean
 
-### 4.2 字符串插值
+### 4.2 String Interpolation
 
-表达式嵌入字符串时，结果会转字符串拼接：
+Expressions embedded in strings are stringified and concatenated:
 - `text: "Usage: {used}/{limit}"`
 
-### 4.2.1 转义
+### 4.2.1 Escaping
 
-需要输出字面量模板符号时，使用反斜杠：
-- `\{` / `\}` -> 输出 `{` / `}`
-- `\\` -> 输出 `\`
-- 若使用 YAML 双引号字符串，需写成 `\\{` / `\\}` / `\\\\`（因为 YAML 会先处理一轮反斜杠转义）
+To output literal template markers, use backslash escapes:
+- `\{` / `\}` -> `{` / `}`
+- `\\` -> `\`
+- In YAML double-quoted strings, write `\\{` / `\\}` / `\\\\`
 
-### 4.3 表达式边界
+### 4.3 Expression Safety Boundary
 
-- 仅允许白名单语法与函数。
-- 禁止任意代码执行。
-- 解析失败时降级为空值，不中断卡片渲染。
+- Only whitelisted syntax/functions are allowed.
+- Arbitrary code execution is forbidden.
+- Parse failures degrade to empty values without breaking card rendering.
 
-完整规则见 [03_template_expression_spec.md](./03_template_expression_spec.md)。
+Full rules: [03_template_expression_spec.md](./03_template_expression_spec.md)
 
-## 5. 列表与布局编排
+## 5. List and Layout Composition
 
 ```yaml
 - type: "List"
@@ -108,34 +108,31 @@ templates:
       label: "Usage"
 ```
 
-组件职责见 [02_component_map_and_categories.md](./02_component_map_and_categories.md)。
+Component responsibilities: [02_component_map_and_categories.md](./02_component_map_and_categories.md)
 
-### 5.1 Widgets 视觉基线（Spacing 与 List Item）
+### 5.1 Widget Visual Baseline (Spacing and List Item)
 
-为保证布局层级清晰，Widgets 间距采用两级语义：
+To keep hierarchy clear, widget spacing uses two semantic levels:
+- **Layout spacing** (`Container` / `ColumnSet` / `Column` / `List`): larger for structure grouping.
+- **Micro spacing** (`FactSet` / `ActionSet`): tighter for compact inner content.
 
-- **Layout spacing**（`Container` / `ColumnSet` / `Column` / `List`）：相对更大，用于结构分组。
-- **Micro spacing**（`FactSet` / `ActionSet`）：相对更紧凑，用于元组件内部信息编排。
+For the same `spacing` token: **Layout >= Micro**. Current mapping:
+- Layout: `sm -> qb-gap-2`, `md -> qb-gap-3`, `lg -> qb-gap-4`
+- Micro: `sm -> qb-gap-1`, `md -> qb-gap-2`, `lg -> qb-gap-3`
 
-同一 `spacing` token 下，要求 **Layout >= Micro**。当前实现映射：
+`List` applies lightweight item grouping borders by default for scanability:
+- Recommended baseline: `rounded-md border border-border/40 bg-surface/20`
+- Principle: grouping should be visible but not overpower content.
 
-- Layout：`sm -> qb-gap-2`，`md -> qb-gap-3`，`lg -> qb-gap-4`
-- Micro：`sm -> qb-gap-1`，`md -> qb-gap-2`，`lg -> qb-gap-3`
+## 6. Schema-First Constraints
 
-`List` 默认每个 item 增加轻量分组边框（细边框 + 轻背景 + 圆角），用于提升扫描效率：
+1. Define schema first, then derive component props.
+2. Run schema `safeParse` before rendering.
+3. Invalid nodes must degrade gracefully, never white-screen.
+4. Update SDUI docs whenever components are added/changed.
 
-- 推荐基线：`rounded-md border border-border/40 bg-surface/20`
-- 原则：视觉分组要明确，但不应压过内容本身。
+## 7. Boundary with Flow
 
-## 6. Schema-First 约束
-
-1. 先定义 Schema，再推导组件 Props。
-2. 渲染前必须执行 schema `safeParse`。
-3. 无效节点必须降级而非白屏。
-4. 新增/修改组件时同步更新 SDUI 文档。
-
-## 7. 与 Flow 的边界
-
-- SDUI：展示层。
-- Flow：鉴权、抓取、提取、恢复执行。
-- Flow 入口见 [../flow/README.md](../flow/README.md)。
+- SDUI: presentation layer only.
+- Flow: auth/fetch/extract/resume execution.
+- Flow docs entry: [../flow/README.md](../flow/README.md)

@@ -9,8 +9,8 @@ flow:
           token_url: "https://gitlab.com/oauth/token"
           scopes: ["api", "read_api", "read_user", "read_repository"]
           doc_url: "https://docs.gitlab.com/integration/oauth_provider/"
-          client_id: "5e1da1f2c428dd23ca5893477f68ebca01f038033448da44c36d33d206cfa548" # 请在此填入 GitLab OAuth App 的 Application ID
-          client_secret: "" # GitLab 的 Public Client (非机密应用) 支持不带 secret 的 PKCE，此处留空即可
+          client_id: "5e1da1f2c428dd23ca5893477f68ebca01f038033448da44c36d33d206cfa548" # Fill in your GitLab OAuth App Application ID
+          client_secret: "" # GitLab public clients (non-confidential apps) can use PKCE without a secret
           supports_pkce: true
       secrets:
           oauth_secrets: "oauth_secrets"

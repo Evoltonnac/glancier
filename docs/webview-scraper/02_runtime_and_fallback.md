@@ -1,30 +1,30 @@
-# WebView Scraper 运行时约束与降级策略
+# WebView Scraper Runtime Constraints and Fallback Strategy
 
-## 1. Tauri 与 Web 环境差异
+## 1. Tauri vs Web Runtime
 
-WebView Scraper 依赖 Tauri 原生窗口与 IPC：
-- Tauri 环境：支持任务队列、日志、超时控制。
-- 纯 Web 环境：不支持抓取执行，必须提供降级提示与下载客户端引导。
+WebView Scraper depends on native Tauri windows and IPC:
+- Tauri runtime: supports task queue, logs, and timeout control.
+- Pure Web runtime: scraping execution is unavailable and must degrade gracefully.
 
-## 2. 运行时行为约束
+## 2. Runtime Constraints
 
-- 非 Tauri 环境下，Scraper 相关动作必须 no-op，不可尝试调用 Tauri API。
-- 每个抓取任务应配置 timeout（默认值由设置项提供）。
-- 超时任务应自动出队，调度器继续后续任务。
-- 抓取日志应可在 UI 可视化展示，便于排障。
+- In non-Tauri runtime, scraper actions must no-op and must not call Tauri APIs.
+- Each scraping task should have a timeout (default from settings).
+- Timed-out tasks should be dequeued automatically so the scheduler can continue.
+- Scraper logs should be visible in UI for troubleshooting.
 
-## 3. 交互降级策略
+## 3. Interaction Fallback
 
-当 Flow 进入 `webview_scrape` 但运行在浏览器：
-1. 对话框明确提示“Web 端不可执行网页抓取”。
-2. 提供桌面客户端下载入口。
-3. 隐藏/替换手动启动按钮，避免用户无效操作。
+When Flow enters `webview_scrape` in browser runtime:
+1. Show a clear message: web runtime cannot execute scraping.
+2. Provide a desktop download entry.
+3. Hide/replace manual-start actions that cannot work in browser.
 
-## 4. 状态可观测性
+## 4. State Observability
 
-建议同时展示：
-- 当前任务状态（idle/running/timeout/failed）
-- 队列长度
-- 最近错误摘要
+Recommended signals:
+- current task status (`idle` / `running` / `timeout` / `failed`)
+- queue length
+- latest error summary
 
-Flow 侧失败样例见 [../flow/04_step_failure_test_inputs.md](../flow/04_step_failure_test_inputs.md)。
+Flow-side failure examples: [../flow/04_step_failure_test_inputs.md](../flow/04_step_failure_test_inputs.md)

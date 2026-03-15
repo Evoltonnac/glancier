@@ -1,5 +1,5 @@
 """
-配置加载器：将 YAML 配置文件解析为 Pydantic 模型。
+Config loader: parse YAML config files into Pydantic models.
 """
 
 import logging
@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 logger = logging.getLogger(__name__)
 
 
-# ── 枚举 ──────────────────────────────────────────────
+# ── Enums ─────────────────────────────────────────────
 
 class AuthType(str, Enum):
     API_KEY = "api_key"
@@ -28,7 +28,7 @@ class ParserType(str, Enum):
     JSONPATH = "jsonpath"
     CSS = "css"
     REGEX = "regex"
-    SCRIPT = "script"  # 自定义 Python 脚本
+    SCRIPT = "script"  # Custom Python script
 
 
 class HttpMethod(str, Enum):
@@ -50,7 +50,7 @@ class ViewComponentType(str, Enum):
 
 
 
-# ── 鉴权配置 ──────────────────────────────────────────
+# ── Auth config ───────────────────────────────────────
 
 class TokenEndpointAuthMethod(str, Enum):
     CLIENT_SECRET_BASIC = "client_secret_basic"
@@ -65,14 +65,14 @@ class OAuthFlowType(str, Enum):
 
 class AuthConfig(BaseModel):
     type: AuthType = AuthType.NONE
-    # API Key 模式
+    # API key mode
     api_key: Optional[str] = None
     header_name: str = "Authorization"
     header_prefix: str = "Bearer"
-    # Browser Cookie 模式
+    # Browser cookie mode
     browser: str = "chrome"  # chrome / edge / firefox
     domain: Optional[str] = None
-    # OAuth 模式
+    # OAuth mode
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     auth_url: Optional[str] = None
@@ -122,7 +122,7 @@ class AuthConfig(BaseModel):
     # User Info Field Mapping
     user_info_field_map: Dict[str, str] = Field(default_factory=dict)  # e.g. {"email": "user_email", "id": "user_id"}
     
-# ── 请求配置 ──────────────────────────────────────────
+# ── Request config ────────────────────────────────────
 
 class RequestConfig(BaseModel):
     url: str
@@ -133,7 +133,7 @@ class RequestConfig(BaseModel):
     timeout: float = 30.0
 
 
-# ── 解析配置 ──────────────────────────────────────────
+# ── Parser config ─────────────────────────────────────
 
 class FieldMapping(BaseModel):
     name: str
@@ -144,17 +144,17 @@ class FieldMapping(BaseModel):
 class ParserConfig(BaseModel):
     type: ParserType = ParserType.JSONPATH
     fields: List[FieldMapping] = Field(default_factory=list)
-    script: Optional[str] = None  # script 模式: Python 脚本路径
+    script: Optional[str] = None  # Script mode: Python script path
 
 
-# ── 调度配置 ──────────────────────────────────────────
+# ── Schedule config ───────────────────────────────────
 
 class ScheduleConfig(BaseModel):
-    cron: Optional[str] = None  # Cron 表达式 (如 "*/30 * * * *")
-    interval_minutes: int = 60  # 默认 60 分钟
+    cron: Optional[str] = None  # Cron expression (for example "*/30 * * * *")
+    interval_minutes: int = 60  # Default: 60 minutes
 
 
-# ── 数据源配置 ────────────────────────────────────────
+# ── Source config ─────────────────────────────────────
 
 # ── Flow Configuration ────────────────────────────────────────
 
@@ -179,7 +179,7 @@ class StepConfig(BaseModel):
     secrets: Dict[str, str] = Field(default_factory=dict)
 
 
-# ── 视图组件配置 ──────────────────────────────────────
+# ── View component config ─────────────────────────────
 
 class ViewComponent(BaseModel):
     id: str
@@ -247,7 +247,7 @@ class SourceConfig(BaseModel):
 
 
 
-# ── 顶层配置 ──────────────────────────────────────────
+# ── Top-level config ──────────────────────────────────
 
 class AppConfig(BaseModel):
     sources: List[SourceConfig] = Field(default_factory=list)
@@ -274,7 +274,7 @@ class AppConfig(BaseModel):
         return None
 
     def get_integration(self, integration_id: str) -> Optional[IntegrationConfig]:
-        """根据 ID 获取集成配置。"""
+        """Get integration config by ID."""
         for i in self.integrations:
             if i.id == integration_id:
                 return i

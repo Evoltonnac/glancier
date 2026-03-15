@@ -1,6 +1,5 @@
 """
-数据源运行时状态定义。
-包含状态枚举、交互请求模型等。
+Runtime state models for sources, including status enums and interaction payloads.
 """
 
 from enum import Enum
@@ -12,10 +11,10 @@ from pydantic import BaseModel, Field
 class SourceStatus(str, Enum):
     ACTIVE = "active"
     ERROR = "error"
-    SUSPENDED = "suspended" # 挂起，等待用户交互
+    SUSPENDED = "suspended"  # Suspended, waiting for user interaction.
     DISABLED = "disabled"
-    CONFIG_CHANGED = "config_changed" # 配置已更改，需要重新加载
-    REFRESHING = "refreshing" # 正在刷新中
+    CONFIG_CHANGED = "config_changed"  # Config changed, reload required.
+    REFRESHING = "refreshing"  # Refresh in progress.
 
 
 class InteractionType(str, Enum):
@@ -25,15 +24,15 @@ class InteractionType(str, Enum):
     COOKIES_REFRESH = "cookies_refresh"
     CAPTCHA = "captcha"
     CONFIRM = "confirm"
-    RETRY = "retry" # 简单的重试按钮
-    WEBVIEW_SCRAPE = "webview_scrape" # 静默 Webview 采集
+    RETRY = "retry"  # Simple retry action.
+    WEBVIEW_SCRAPE = "webview_scrape"  # Silent WebView scraping.
 
 
 class InteractionField(BaseModel):
-    """描述交互所需的字段。"""
+    """Describe one field required by an interaction."""
     key: str
     label: str
-    type: str = "text" # text, password, etc.
+    type: str = "text"  # text, password, etc.
     description: Optional[str] = None
     required: bool = True
     default: Optional[Any] = None
@@ -41,27 +40,27 @@ class InteractionField(BaseModel):
 
 class InteractionRequest(BaseModel):
     """
-    后端发起的交互请求。
-    当数据源处于 SUSPENDED 状态时，通过此对象告知前端需要做什么。
+    Interaction request emitted by backend.
+    When a source is suspended, this payload tells the frontend what to do.
     """
     type: InteractionType
-    step_id: Optional[str] = None # 触发交互的 Flow Step ID
-    source_id: Optional[str] = None # 关联的数据源 ID
+    step_id: Optional[str] = None  # Flow step ID that triggered interaction.
+    source_id: Optional[str] = None  # Associated source ID.
 
     title: str = "Action Required"
     message: Optional[str] = None
     warning_message: Optional[str] = None
     
     fields: List[InteractionField] = Field(default_factory=list)
-    data: Dict[str, Any] | None = None # 其他元数据 (e.g. oauth_url)
+    data: Dict[str, Any] | None = None  # Additional metadata (for example oauth_url).
 
 
 class SourceState(BaseModel):
-    """数据源的运行时状态。"""
+    """Runtime state for one source."""
     source_id: str
     status: SourceStatus = SourceStatus.ACTIVE
     message: Optional[str] = None
     last_updated: float = 0.0
     
-    # 当状态为 SUSPENDED 时，必须包含 interaction
+    # When status is SUSPENDED, interaction should be present.
     interaction: Optional[InteractionRequest] = None

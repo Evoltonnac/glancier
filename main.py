@@ -1,5 +1,5 @@
 """
-Glancier 主入口：启动 FastAPI 后端服务。
+Glancier entrypoint: boot the FastAPI backend service.
 """
 
 import asyncio
@@ -41,20 +41,20 @@ def resolve_initial_log_level() -> int:
 
 
 def resolve_stored_source(stored: "StoredSource", config: AppConfig) -> SourceConfig | None:
-    """将 StoredSource 解析为可执行的 SourceConfig。"""
-    # 查找对应的集成配置
+    """Resolve a StoredSource into an executable SourceConfig."""
+    # Find the referenced integration config.
     integration = config.get_integration(stored.integration_id) if stored.integration_id else None
 
     if not integration:
-        logger.warning(f"[{stored.id}] 集成 '{stored.integration_id}' 未找到")
+        logger.warning(f"[{stored.id}] integration '{stored.integration_id}' not found")
         return None
 
-    # 构建基础配置
+    # Build base config.
     base = copy.deepcopy(integration.model_dump())
     base.pop("id", None)
     base.pop("templates", None)
 
-    # 应用变量替换
+    # Apply variable substitution.
     variables = stored.vars
     for k, v in base.items():
         if isinstance(v, str):
@@ -65,19 +65,19 @@ def resolve_stored_source(stored: "StoredSource", config: AppConfig) -> SourceCo
         elif isinstance(v, dict):
             base[k] = {key: val.format(**variables) if isinstance(val, str) else val for key, val in v.items()}
 
-    # 覆盖配置
+    # Apply source-level overrides.
     for key, val in stored.config.items():
         if key == "vars":
             continue
         base[key] = val
 
-    # 添加必需字段
+    # Add required fields.
     base["id"] = stored.id
     base["name"] = stored.name
 
     return SourceConfig.model_validate(base)
 
-# 日志配置
+# Logging setup.
 logging.basicConfig(
     level=resolve_initial_log_level(),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -102,7 +102,7 @@ class StartupBackgroundTasks:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan 事件处理：启动时和关闭时的逻辑。"""
+    """Lifespan hook with startup and shutdown handling."""
     refresh_scheduler = getattr(app.state, "refresh_scheduler", None)
     if refresh_scheduler is not None:
         await refresh_scheduler.start()
@@ -116,19 +116,19 @@ async def lifespan(app: FastAPI):
                 asyncio.create_task(result)
             scheduled += 1
         if scheduled:
-            logger.info("启动时已调度 %d 个 bootstrap source 刷新任务", scheduled)
+            logger.info("scheduled %d bootstrap source refresh tasks on startup", scheduled)
 
-    yield  # 应用运行中
+    yield  # App is running.
 
-    # 关闭时：关闭数据库连接
-    logger.info("正在关闭...")
+    # Shutdown: stop scheduler and close data controller.
+    logger.info("shutting down...")
     if refresh_scheduler is not None:
         await refresh_scheduler.stop()
     app.state.data_controller.close()
 
 
 def create_app() -> FastAPI:
-    """创建并配置 FastAPI 应用。"""
+    """Create and configure the FastAPI app."""
     app = FastAPI(
         title="Glancier API",
         description="API for metric monitoring and data aggregation",
@@ -136,7 +136,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS 中间件
+    # CORS middleware.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -153,40 +153,40 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ── 初始化资源管理器（用于首启样例） ───────────────────────
+    # Initialize resource managers (used by first-launch seeding).
     resource_manager = ResourceManager()
     integration_manager = IntegrationManager()
     existing_source_ids_before_seed = {source.id for source in resource_manager.load_sources()}
     seeded = seed_first_launch_workspace(integration_manager, resource_manager)
 
-    # ── 加载配置 ──────────────────────────────────────────────
-    logger.info("正在加载配置...")
+    # Load configuration.
+    logger.info("loading configuration...")
     try:
         config = load_config()
-        logger.info(f"已加载 {len(config.integrations)} 个集成配置")
+        logger.info("loaded %d integration configs", len(config.integrations))
     except Exception as exc:
-        logger.error("配置加载失败，使用空配置启动: %s", exc, exc_info=True)
+        logger.error("failed to load config; starting with empty config: %s", exc, exc_info=True)
         config = AppConfig()
 
-    # 数据持久化
+    # Persistent data store.
     data_controller = DataController()
 
-    # 敏感信息存储
+    # Sensitive secret storage.
     secrets_controller = SecretsController()
 
-    # 鉴权管理器
+    # Authentication manager.
     auth_manager = AuthManager(secrets_controller, app_config=config)
 
-    # 系统设置管理器
+    # System settings manager.
     settings_manager = SettingsManager()
 
-    # 执行器
+    # Executor.
     executor = Executor(data_controller, secrets_controller, settings_manager)
 
-    # 将 SettingsManager 注入 SecretsController，开启自适应加解密
+    # Inject SettingsManager into SecretsController for adaptive encryption/decryption.
     secrets_controller.inject_settings_manager(settings_manager)
 
-    # 使用与 API 创建 source 一致的核心流程，为 bootstrap 新建 source 自动触发刷新
+    # Reuse the same core flow as API source creation and trigger refresh for seeded sources.
     startup_background_tasks = StartupBackgroundTasks()
     if seeded:
         source_by_id = {source.id: source for source in resource_manager.load_sources()}
@@ -200,7 +200,7 @@ def create_app() -> FastAPI:
                 background_tasks=startup_background_tasks,
             )
 
-    # 注入依赖到 API 模块
+    # Inject dependencies into API module.
     api.init_api(
         executor=executor,
         data_controller=data_controller,
@@ -212,10 +212,10 @@ def create_app() -> FastAPI:
         settings_manager=settings_manager,
     )
 
-    # 注册 API 路由
+    # Register API routes.
     app.include_router(api.router)
 
-    # 将组件存到 app.state，供 lifespan 访问
+    # Store components in app.state for lifespan access.
     refresh_scheduler = RefreshScheduler(
         executor=executor,
         data_controller=data_controller,
@@ -238,10 +238,10 @@ def create_app() -> FastAPI:
 
 
 def main():
-    """主入口。"""
+    """Application entrypoint."""
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8400
 
-    logger.info(f"🚀 启动 Glancier 后端 (port={port})...")
+    logger.info("starting Glancier backend (port=%s)...", port)
 
     app = create_app()
 

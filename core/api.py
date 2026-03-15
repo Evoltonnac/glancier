@@ -1,5 +1,5 @@
 """
-FastAPI 路由：暴露 REST API 供展现层和外部调用。
+FastAPI routes exposing REST APIs for frontend and external callers.
 """
 
 import logging
@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
-# 这些全局引用会在 main.py 中注入
-# 这些全局引用会在 main.py 中注入
+# These global references are injected from main.py.
+# These global references are injected from main.py.
 _executor = None
 _data_controller = None
 _config = None
@@ -49,7 +49,7 @@ _settings_manager = None
 
 
 def init_api(executor, data_controller, config, auth_manager, secrets_controller, resource_manager, integration_manager, settings_manager=None):
-    """注入全局依赖（由 main.py 调用）。"""
+    """Inject global dependencies (called by main.py)."""
     global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager
     _executor = executor
     _data_controller = data_controller
@@ -74,11 +74,11 @@ def _apply_runtime_log_level(debug_enabled: bool) -> None:
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 
-# ── 数据源列表 ────────────────────────────────────────
+# ── Source Listing ────────────────────────────────────
 
 @router.get("/sources")
 async def list_sources() -> list[dict]:
-    """获取所有存储的数据源，包含运行时状态。"""
+    """Return all stored sources with runtime state snapshot."""
     stored_sources = _resource_manager.load_sources()
     global_refresh_interval = DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
     if _settings_manager is not None:
@@ -95,32 +95,32 @@ async def list_sources() -> list[dict]:
 
     result = []
     for source in stored_sources:
-        # 获取持久化状态（来自 data.json）
+        # Read persisted state (from data.json).
         latest_data = _data_controller.get_latest(source.id)
 
-        # 优先使用持久化状态，其次回退到内存运行时状态
-        # 注意：内存状态在服务重启后会丢失，因此优先使用持久化数据
+        # Prefer persisted state; fallback to in-memory runtime state.
+        # Runtime memory state is lost on restart, so persisted data comes first.
         persisted_status = latest_data.get("status") if latest_data else None
         persisted_message = latest_data.get("message") if latest_data else None
         persisted_interaction = latest_data.get("interaction") if latest_data else None
 
-        # 获取运行时状态（内存中）
+        # Read runtime state (in-memory).
         runtime_state = _executor.get_source_state(source.id)
 
-        # 确定 has_data
+        # Resolve has_data.
         has_data = latest_data is not None and latest_data.get("data") is not None
 
-        # 确定 error（优先使用持久化错误，其次回落到运行时 ERROR 状态消息首行）
+        # Resolve error (persisted error first, then runtime ERROR first line).
         error = latest_data.get("error") if latest_data else None
         if not error and runtime_state and runtime_state.status == SourceStatus.ERROR and runtime_state.message:
             error = runtime_state.message.splitlines()[0].strip() or "Execution failed"
 
-        # 优先使用持久化状态，如果没有则使用运行时状态
+        # Prefer persisted status/message; fallback to runtime values.
         status = persisted_status if persisted_status else (runtime_state.status.value if runtime_state else "disabled")
         message = persisted_message if persisted_message else (runtime_state.message if runtime_state else None)
         interaction = persisted_interaction if persisted_interaction else (runtime_state.interaction.model_dump() if runtime_state and runtime_state.interaction else None)
 
-        # 构建 SourceSummary
+        # Build SourceSummary.
         source_refresh_interval = normalize_refresh_interval_minutes(
             source.config.get("refresh_interval_minutes")
             if isinstance(source.config, dict)
@@ -144,7 +144,7 @@ async def list_sources() -> list[dict]:
             "integration_id": source.integration_id,
             "description": "", # Integration doesn't have description at top level in StoredSource config usually
             "icon": None,
-            "enabled": True,  # StoredSource 默认启用
+            "enabled": True,  # StoredSource is enabled by default.
             "auth_type": "none", # Will be updated below
             "has_data": has_data,
             "updated_at": latest_data.get("updated_at") if latest_data else None,
@@ -190,10 +190,10 @@ async def list_sources() -> list[dict]:
     return result
 
 
-# ── 数据查询 ──────────────────────────────────────────
+# ── Data Query ────────────────────────────────────────
 
 def _get_stored_source(source_id: str) -> "StoredSource | None":
-    """从 JSON 存储获取数据源。"""
+    """Read source from JSON storage."""
     stored_sources = _resource_manager.load_sources()
     for stored in stored_sources:
         if stored.id == source_id:
@@ -202,7 +202,7 @@ def _get_stored_source(source_id: str) -> "StoredSource | None":
 
 @router.get("/data/{source_id}")
 async def get_data(source_id: str) -> dict[str, Any]:
-    """获取指定数据源的最新数据。"""
+    """Get latest data for a source."""
     stored = _get_stored_source(source_id)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
@@ -215,7 +215,7 @@ async def get_data(source_id: str) -> dict[str, Any]:
 
 @router.get("/data/{source_id}/history")
 async def get_history(source_id: str, limit: int = 100) -> list[dict]:
-    """获取指定数据源的历史数据。"""
+    """Get historical data for a source."""
     stored = _get_stored_source(source_id)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
@@ -223,26 +223,26 @@ async def get_history(source_id: str, limit: int = 100) -> list[dict]:
     return _data_controller.get_history(source_id, limit=limit)
 
 
-# ── 手动刷新 ──────────────────────────────────────────
+# ── Manual Refresh ────────────────────────────────────
 
 def _resolve_stored_source_with_config(stored: "StoredSource", config):
-    """将 StoredSource 解析为可执行的 SourceConfig。"""
+    """Resolve StoredSource into executable SourceConfig."""
     import copy
     from core.config_loader import SourceConfig
 
-    # 查找对应的集成配置
+    # Find referenced integration config.
     integration = config.get_integration(stored.integration_id) if stored.integration_id else None
 
     if not integration:
-        logger.warning(f"[{stored.id}] 集成 '{stored.integration_id}' 未找到")
+        logger.warning(f"[{stored.id}] integration '{stored.integration_id}' not found")
         return None
 
-    # 构建基础配置
+    # Build base config.
     base = copy.deepcopy(integration.model_dump())
     base.pop("id", None)
     base.pop("templates", None)
 
-    # 应用变量替换
+    # Apply variable substitution.
     variables = stored.vars
     for k, v in base.items():
         if isinstance(v, str):
@@ -253,17 +253,17 @@ def _resolve_stored_source_with_config(stored: "StoredSource", config):
         elif isinstance(v, dict):
             base[k] = {key: val.format(**variables) if isinstance(val, str) else val for key, val in v.items()}
 
-    # 覆盖配置
+    # Apply source-level overrides.
     for key, val in stored.config.items():
         if key == "vars":
             continue
         base[key] = val
 
-    # 添加必需字段
+    # Add required fields.
     base["id"] = stored.id
     base["name"] = stored.name
 
-    # 确保 schedule 字段存在
+    # Ensure schedule field exists.
     if "schedule" not in base:
         base["schedule"] = {}
 
@@ -276,8 +276,8 @@ def _resolve_stored_source(stored: "StoredSource"):
 
 def _resume_source_after_oauth(source_id: str, background_tasks: BackgroundTasks, message: str) -> None:
     """
-    OAuth 成功后自动恢复 source 主流程执行。
-    仅当 source 当前处于 OAuth 交互挂起状态时触发，避免重复拉取。
+    Auto-resume source flow after OAuth success.
+    Trigger only when source is currently suspended on OAuth interaction.
     """
     if _executor is None:
         return
@@ -494,8 +494,8 @@ def create_stored_view_record(
 
 @router.post("/refresh/{source_id}")
 async def refresh_source(source_id: str, background_tasks: BackgroundTasks) -> dict:
-    """手动触发单个数据源刷新。"""
-    # 从 JSON 存储中获取
+    """Manually trigger refresh for one source."""
+    # Read source from JSON storage.
     stored_sources = _resource_manager.load_sources()
     matched_stored = None
     source = None
@@ -514,7 +514,7 @@ async def refresh_source(source_id: str, background_tasks: BackgroundTasks) -> d
             f"数据源 '{source_id}' 的集成配置 '{integration_id}' 未找到或无效，无法刷新",
         )
 
-    # 同步更新状态为正在刷新，防止前端立即请求 loadData 时读到旧状态
+    # Update status immediately so frontend does not read stale state.
     _executor._update_state(source_id, SourceStatus.REFRESHING, "Fetching latest data...")
     background_tasks.add_task(_executor.fetch_source, source)
     return {"message": f"已触发刷新: {source.name}", "source_id": source_id}
@@ -522,16 +522,16 @@ async def refresh_source(source_id: str, background_tasks: BackgroundTasks) -> d
 
 @router.post("/refresh")
 async def refresh_all(background_tasks: BackgroundTasks) -> dict:
-    """手动触发所有数据源刷新。"""
+    """Manually trigger refresh for all sources."""
     source_ids = []
     skipped_sources = []
 
-    # 刷新 JSON 存储的数据源
+    # Refresh sources from JSON storage.
     stored_sources = _resource_manager.load_sources()
     for stored in stored_sources:
         resolved = _resolve_stored_source(stored)
         if resolved:
-            # 同步更新状态为正在刷新
+            # Update status to refreshing immediately.
             _executor._update_state(stored.id, SourceStatus.REFRESHING, "Refreshing all sources...")
             background_tasks.add_task(_executor.fetch_source, resolved)
             source_ids.append(stored.id)
@@ -550,12 +550,12 @@ async def refresh_all(background_tasks: BackgroundTasks) -> dict:
     }
 
 
-# ── 配置查询 ──────────────────────────────────────────
+# ── Config Query ──────────────────────────────────────
 
 @router.get("/config")
 async def get_config() -> dict[str, Any]:
-    """获取当前配置摘要（不暴露敏感信息）。"""
-    # 返回 JSON 存储的数据源
+    """Get config summary without sensitive fields."""
+    # Return sources from JSON storage.
     stored_sources = _resource_manager.load_sources()
     sources = []
     for s in stored_sources:
@@ -585,7 +585,7 @@ async def get_config() -> dict[str, Any]:
     }
 
 
-# ── OAuth 授权回调 ───────────────────────────────────
+# ── OAuth Callbacks ───────────────────────────────────
 
 @router.get("/oauth/authorize/{source_id}")
 async def oauth_authorize(source_id: str, redirect_uri: Optional[str] = None) -> dict:
@@ -684,19 +684,19 @@ async def oauth_device_status(source_id: str, background_tasks: BackgroundTasks)
 
 
 
-# ── 交互接口 ──────────────────────────────────────────
+# ── Interaction API ───────────────────────────────────
 
 @router.post("/sources/{source_id}/interact")
 async def interact_source(source_id: str, data: dict[str, Any], background_tasks: BackgroundTasks) -> dict:
     """
-    处理数据源的交互请求（如提交 API Key、Captcha 等）。
-    data 格式依赖于 interaction.type。
+    Handle source interaction requests (for example API key, captcha).
+    Data shape depends on interaction.type.
     """
     stored = _get_stored_source(source_id)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
 
-    # 将 StoredSource 解析为 SourceConfig
+    # Resolve StoredSource into SourceConfig.
     source = _resolve_stored_source(stored)
     if source is None:
         raise HTTPException(500, f"无法解析数据源 '{source_id}'")
@@ -755,29 +755,29 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         background_tasks.add_task(_executor.fetch_source, source)
         return {"message": "OAuth Token 已保存", "source_id": source_id}
     
-    # 检查是否有挂起的交互请求
+    # Check pending interaction request.
     if not state.interaction:
-        # 如果没有明确的交互请求，假设是通用的更新
+        # If there is no explicit pending request, treat as generic update.
         logger.warning(f"[{source_id}] Received interaction but no pending interaction request found.")
     
-    # 获取 source_id (优先从挂起的交互请求中获取)
+    # Resolve source_id (prefer pending interaction source_id).
     target_source_id = state.interaction.source_id if state.interaction else None
 
-    # 如果请求中包含 source_id，覆盖状态中的 (允许前端显式指定)
+    # Allow request payload source_id to override pending-state source_id.
     if "source_id" in data:
         target_source_id = data.pop("source_id")
 
-    # 如果没有找到 source_id，回退到默认 (source_id)
+    # Fallback to route source_id when unresolved.
     if not target_source_id:
         target_source_id = source_id
 
     if data:
-        # 将数据保存到 Secrets，使用 source_id 作为键
-        # 注意：这里假设 data 是平面字典，直接存入。
+        # Save interaction data into Secrets keyed by source_id.
+        # Assumes data is a flat dictionary.
         _secrets.set_secrets(target_source_id, data)
         logger.info(f"[{source_id}] Received interaction data for source '{target_source_id}'.")
     
-    # 同步更新状态为正在刷新
+    # Update status to refreshing.
     _executor._update_state(source_id, SourceStatus.REFRESHING, "Processing interaction results...")
     # Trigger retry/resume
     # fetch_source handles "resume" by just running again and hopefully succeeding this time
@@ -786,22 +786,22 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
     return {"message": "Interact received, retrying source.", "source_id": source_id}
 
 
-# ── 鉴权状态查询 ──────────────────────────────────────
+# ── Auth Status ───────────────────────────────────────
 
 @router.get("/sources/{source_id}/auth-status")
 async def get_auth_status(source_id: str) -> dict[str, Any]:
-    """查询数据源的认证状态。"""
+    """Query authentication status for source."""
     stored = _get_stored_source(source_id)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
 
     source = _resolve_stored_source(stored)
 
-    # 懒加载：确保鉴权处理器已经注册
+    # Lazy registration: ensure auth handler exists.
     if source and _auth_manager.get_oauth_handler(source_id) is None:
         _auth_manager.register_source(source)
 
-    # 获取 integration 配置来确定 auth 类型
+    # Determine auth type from integration flow.
     auth_type = "none"
     if source:
         if source.flow:
@@ -813,7 +813,7 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
                     auth_type = "api_key"
                     break
 
-    # 检查是否有注册错误
+    # Check registration errors.
     error = _auth_manager.get_source_error(source_id)
     if error:
         return {
@@ -823,7 +823,7 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
             "message": error,
         }
     
-    # OAuth 特殊处理：检查是否有 token
+    # OAuth-specific check: token availability.
     if auth_type == "oauth":
         handler = _auth_manager.get_oauth_handler(source_id)
         if handler and handler.has_token:
@@ -861,7 +861,7 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
                 "message": "需要 OAuth 授权",
             }
     
-    # 其他类型默认返回 ok（实际鉴权在请求时验证）
+    # Other auth types default to ok (validated during real requests).
     return {
         "source_id": source_id,
         "auth_type": auth_type,
@@ -873,7 +873,7 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
 
 @router.post("/sources")
 async def create_stored_source(source: StoredSource, background_tasks: BackgroundTasks) -> StoredSource:
-    """创建新的存储数据源。"""
+    """Create a new stored source."""
     return create_stored_source_record(
         source,
         _resource_manager,
@@ -885,7 +885,7 @@ async def create_stored_source(source: StoredSource, background_tasks: Backgroun
 
 @router.put("/sources/{source_id}")
 async def update_stored_source(source_id: str, source: StoredSource) -> StoredSource:
-    """更新存储的数据源。"""
+    """Update an existing stored source."""
     if source.id != source_id:
         raise HTTPException(400, "ID mismatch")
     return _resource_manager.save_source(source)
@@ -900,7 +900,7 @@ async def update_source_refresh_interval(
     source_id: str,
     request: RefreshIntervalUpdateRequest,
 ) -> dict[str, Any]:
-    """更新 source 级自动刷新间隔。None 表示未设置，0 表示关闭自动刷新。"""
+    """Update source-level refresh interval. None=unset, 0=disabled."""
     stored = _get_stored_source(source_id)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
@@ -926,7 +926,7 @@ async def update_source_refresh_interval(
 
 @router.delete("/sources/{source_id}")
 async def delete_stored_source(source_id: str) -> dict:
-    """删除存储的数据源。"""
+    """Delete stored source."""
     if not _resource_manager.delete_source(source_id):
         raise HTTPException(404, f"Source {source_id} not found")
 
@@ -966,7 +966,7 @@ async def delete_stored_source(source_id: str) -> dict:
         )
         cleanup_warnings.append("views")
 
-    # 尽量清理运行时内存态，避免继续显示已删除 source 的状态。
+    # Best-effort cleanup of runtime memory state for removed source.
     try:
         if _executor and hasattr(_executor, "_states"):
             _executor._states.pop(source_id, None)
@@ -998,7 +998,7 @@ async def delete_stored_source(source_id: str) -> dict:
 
 @router.get("/views")
 async def list_stored_views() -> list[StoredView]:
-    """获取所有存储的视图。"""
+    """Get all stored views."""
     views = _resource_manager.load_views()
     if not views:
         return views
@@ -1020,13 +1020,13 @@ async def list_stored_views() -> list[StoredView]:
 
 @router.post("/views")
 async def create_stored_view(view: StoredView) -> StoredView:
-    """创建新的存储视图。"""
+    """Create new stored view."""
     return create_stored_view_record(view, _resource_manager, config=_config)
 
 
 @router.put("/views/{view_id}")
 async def update_stored_view(view_id: str, view: StoredView) -> StoredView:
-    """更新存储的视图。"""
+    """Update stored view."""
     if view.id != view_id:
         raise HTTPException(400, "ID mismatch")
     return create_stored_view_record(view, _resource_manager, config=_config)
@@ -1034,7 +1034,7 @@ async def update_stored_view(view_id: str, view: StoredView) -> StoredView:
 
 @router.delete("/views/{view_id}")
 async def delete_stored_view(view_id: str) -> dict:
-    """删除存储的视图。"""
+    """Delete stored view."""
     if _resource_manager.delete_view(view_id):
         return {"message": f"View {view_id} deleted"}
     raise HTTPException(404, f"View {view_id} not found")
@@ -1044,7 +1044,7 @@ async def delete_stored_view(view_id: str) -> dict:
 
 @router.get("/integrations/{integration_id}/templates")
 async def get_integration_templates(integration_id: str) -> list[dict]:
-    """获取指定集成的视图模板。"""
+    """Get view templates for integration."""
     integration = _config.get_integration(integration_id)
     if integration is None:
         raise HTTPException(404, f"Integration {integration_id} not found")
@@ -1055,19 +1055,19 @@ async def get_integration_templates(integration_id: str) -> list[dict]:
 
 @router.get("/integrations/files")
 async def list_integration_files() -> list[str]:
-    """列出所有集成配置文件。"""
+    """List all integration config files."""
     return _integration_manager.list_integration_files()
 
 
 @router.get("/integrations/files/meta")
 async def list_integration_file_metadata() -> list[dict]:
-    """列出所有集成配置文件元数据。"""
+    """List integration file metadata."""
     return _integration_manager.list_integration_file_metadata()
 
 
 @router.get("/integrations/presets")
 async def list_integration_presets() -> list[IntegrationPresetPayload]:
-    """列出集成创建 Preset（来自 config/presets/*.yaml）。"""
+    """List integration presets (from config/presets/*.yaml)."""
     config_root = getattr(_integration_manager, "config_root", None)
     if not config_root:
         return []
@@ -1120,7 +1120,7 @@ async def list_integration_presets() -> list[IntegrationPresetPayload]:
 
 @router.get("/integrations/files/{filename}")
 async def get_integration_file(filename: str) -> dict:
-    """获取集成 YAML 文件内容。"""
+    """Get integration YAML file content."""
     content = _integration_manager.get_integration(filename)
     if content is None:
         raise HTTPException(404, f"Integration file {filename} not found")
@@ -1135,7 +1135,7 @@ async def get_integration_file(filename: str) -> dict:
 
 @router.post("/integrations/files")
 async def create_integration_file(filename: str, request: FileContentRequest) -> dict:
-    """创建新的集成 YAML 文件。"""
+    """Create new integration YAML file."""
     try:
         normalized_filename = _integration_manager.normalize_filename(filename)
     except ValueError as exc:
@@ -1153,20 +1153,20 @@ async def create_integration_file(filename: str, request: FileContentRequest) ->
 
 @router.put("/integrations/files/{filename}")
 async def update_integration_file(filename: str, request: FileContentRequest) -> dict:
-    """更新集成 YAML 文件内容。"""
-    # 先进行 Pydantic 校验
+    """Update integration YAML file content."""
+    # Run Pydantic validation first.
     from core.config_loader import IntegrationConfig
     from pydantic import ValidationError
 
     try:
-        # 解析 YAML 内容
+        # Parse YAML content.
         parsed = yaml.safe_load(request.content)
         if parsed is None:
             raise HTTPException(400, "Empty YAML content")
         if not isinstance(parsed, dict):
             raise HTTPException(400, "YAML top-level must be an object")
 
-        # 运行时 id 由文件名决定
+        # Runtime integration id is derived from filename.
         file_based_id = Path(filename).stem
         integration_payload = dict(parsed)
         diagnostics = []
@@ -1190,7 +1190,7 @@ async def update_integration_file(filename: str, request: FileContentRequest) ->
         try:
             IntegrationConfig.model_validate(integration_payload)
         except ValidationError as exc:
-            # 将 Pydantic ValidationError 转换为前端可用的诊断信息
+            # Convert Pydantic ValidationError into frontend-friendly diagnostics.
             for error in exc.errors():
                 field_path = ".".join(str(loc) for loc in error["loc"])
                 diagnostics.append({
@@ -1200,7 +1200,7 @@ async def update_integration_file(filename: str, request: FileContentRequest) ->
                     "fieldPath": field_path or "",
                 })
 
-        # 如果有校验错误，返回详细信息
+        # Return diagnostics when validation fails.
         if diagnostics:
             raise HTTPException(
                 status_code=400,
@@ -1211,13 +1211,13 @@ async def update_integration_file(filename: str, request: FileContentRequest) ->
             )
 
     except yaml.YAMLError as exc:
-        # YAML 语法错误
+        # YAML syntax error.
         error_text = str(exc)
         escape_hint = ""
         if "unknown escape character" in error_text and ("{" in error_text or "}" in error_text):
             escape_hint = (
-                " Hint: YAML 双引号字符串中 \\{ / \\} 是非法转义。"
-                "请使用 \\\\{ / \\\\}，或改用单引号字符串。"
+                " Hint: In YAML double-quoted strings, \\{ / \\} is invalid escaping."
+                "Use \\\\{ / \\\\}, or switch to single-quoted strings."
             )
         raise HTTPException(400, f"Invalid YAML syntax: {exc}{escape_hint}")
     except HTTPException:
@@ -1226,7 +1226,7 @@ async def update_integration_file(filename: str, request: FileContentRequest) ->
         logger.error("Validation error: %s", exc, exc_info=True)
         raise HTTPException(400, f"Validation failed: {exc}")
 
-    # 校验通过，保存文件
+    # Save file after validation succeeds.
     success = _integration_manager.save_integration(filename, request.content)
     if not success:
         raise HTTPException(404, f"Integration file {filename} not found")
@@ -1235,7 +1235,7 @@ async def update_integration_file(filename: str, request: FileContentRequest) ->
 
 @router.delete("/integrations/files/{filename}")
 async def delete_integration_file(filename: str) -> dict:
-    """删除集成 YAML 文件。"""
+    """Delete integration YAML file."""
     success = _integration_manager.delete_integration(filename)
     if not success:
         raise HTTPException(404, f"Integration file {filename} not found")
@@ -1246,7 +1246,7 @@ async def delete_integration_file(filename: str) -> dict:
 
 @router.get("/system/health")
 async def system_health() -> dict:
-    """轻量健康检查，用于前端等待后端就绪。"""
+    """Lightweight health check for frontend readiness wait."""
     return {"status": "ok"}
 
 
@@ -1282,11 +1282,11 @@ def _is_logic_change(changed_fields: list[str]) -> bool:
 @router.post("/system/reload")
 async def reload_config(background_tasks: BackgroundTasks) -> dict:
     """
-    重新加载配置文件，区分视图改动/逻辑改动，并在逻辑改动时自动刷新受影响 source。
+    Reload config, classify changes as view/logic, and auto-refresh affected sources on logic changes.
     """
     global _config
 
-    # 重新加载配置
+    # Reload config.
     from core.config_loader import load_config
     try:
         new_config = load_config()
@@ -1343,7 +1343,7 @@ async def reload_config(background_tasks: BackgroundTasks) -> dict:
             }
         )
 
-    # 更新全局配置
+    # Update global config snapshot.
     _config = new_config
 
     affected_sources: list[str] = []
@@ -1396,7 +1396,7 @@ async def reload_config(background_tasks: BackgroundTasks) -> dict:
 
 @router.get("/integrations/files/{filename}/sources")
 async def get_integration_sources(filename: str) -> list[dict]:
-    """获取使用指定文件中任一 integration 的所有数据源。"""
+    """Get all sources using any integration declared in the specified file."""
     content = _integration_manager.get_integration(filename)
     if content is None:
         raise HTTPException(404, f"Integration file {filename} not found")
@@ -1405,7 +1405,7 @@ async def get_integration_sources(filename: str) -> list[dict]:
     if not integration_ids:
         return []
 
-    # 从 JSON 存储中查找
+    # Look up related sources from JSON storage.
     all_sources = _resource_manager.load_sources()
     related = [s for s in all_sources if s.integration_id in integration_ids]
     return [s.model_dump() for s in related]
@@ -1417,14 +1417,14 @@ from core.settings_manager import SystemSettings
 
 @router.get("/settings")
 async def get_system_settings() -> SystemSettings:
-    """获取所有系统设置"""
+    """Get all system settings."""
     if _settings_manager is None:
         return SystemSettings()
     return _settings_manager.load_settings()
 
 @router.put("/settings")
 async def update_system_settings(settings: SystemSettings) -> SystemSettings:
-    """更新所有系统设置，并在加密开关变更时触发全量迁移。"""
+    """Update all system settings and trigger migration on encryption-toggle change."""
     if _settings_manager is None:
         _apply_runtime_log_level(settings.debug_logging_enabled)
         return settings
@@ -1433,25 +1433,24 @@ async def update_system_settings(settings: SystemSettings) -> SystemSettings:
     old_enc = old.encryption_enabled
     new_enc = settings.encryption_enabled
 
-    # 保存新设置（写入 master_key 之前需先确保主密钥存在）
+    # Save new settings (ensure master key exists before writing).
     if new_enc and not settings.master_key:
-        # 如果新开启了加密但没有主密钥，先生成一个
+        # If encryption is newly enabled and key is missing, generate it first.
         settings.master_key = _settings_manager.get_or_create_master_key()
 
     _settings_manager.save_settings(settings)
     _apply_runtime_log_level(settings.debug_logging_enabled)
 
-    # 将新 master_key 注入 secrets_controller（以防刚切换）
-    # secrets_controller 会在 _master_key() 中重新读取 settings.json，
-    # 所以不需要额外注入，但可以触发迁移
+    # Inject new master key context into secrets controller after toggle.
+    # secrets_controller re-reads settings.json in _master_key(), but this also triggers migration.
     if old_enc != new_enc and _secrets:
         if new_enc:
-            # 开启加密：全量加密现有明文
+            # Enabling encryption: encrypt all existing plaintext.
             logger.info("加密开关开启，开始全量加密 secrets...")
             _secrets.inject_settings_manager(_settings_manager)
             _secrets.migrate_encrypt_all()
         else:
-            # 关闭加密：全量解密现有密文
+            # Disabling encryption: decrypt all existing ciphertext.
             logger.info("加密开关关闭，开始全量解密 secrets...")
             _secrets.inject_settings_manager(_settings_manager)
             _secrets.migrate_decrypt_all()
@@ -1459,14 +1458,14 @@ async def update_system_settings(settings: SystemSettings) -> SystemSettings:
     return settings
 
 
-# ── 密钥同步通行码（方案 A） ─────────────────────────────
+# ── Key Sync Passcode (Plan A) ────────────────────────
 
 class MasterKeyImportRequest(BaseModel):
     master_key: str
 
 @router.get("/settings/master-key/export")
 async def export_master_key() -> dict:
-    """导出当前主密钥（base64），用于设备间同步通行码。"""
+    """Export current base64 master key for cross-device sync."""
     if _settings_manager is None:
         raise HTTPException(500, "Settings manager not initialized")
     key = _settings_manager.get_or_create_master_key()
@@ -1475,7 +1474,7 @@ async def export_master_key() -> dict:
 
 @router.post("/settings/master-key/import")
 async def import_master_key(req: MasterKeyImportRequest) -> dict:
-    """导入主密钥（用于其他设备同步解密）。不触发迁移，仅替换本地主密钥。"""
+    """Import master key for cross-device decryption sync. No migration is triggered."""
     if _settings_manager is None:
         raise HTTPException(500, "Settings manager not initialized")
     settings = _settings_manager.load_settings()

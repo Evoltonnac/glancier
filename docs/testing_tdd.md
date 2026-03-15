@@ -1,30 +1,31 @@
-# Testing & TDD Policy（精简版）
+# Testing and TDD Policy (Condensed)
 
-本文件定义当前发布阻断测试门禁。详细失败样例见 [flow/04_step_failure_test_inputs.md](./flow/04_step_failure_test_inputs.md)。
+This file defines the current release-blocking test gates.
+Detailed failure examples: [flow/04_step_failure_test_inputs.md](./flow/04_step_failure_test_inputs.md)
 
-## 1. 必测范围
+## 1. Required Coverage
 
-- 后端核心：`core/executor.py`、`core/source_state.py`、`core/encryption.py`、`core/api.py` 高风险鉴权路径。
-- 前端核心：`Vitest + React Testing Library` 覆盖关键交互与状态流。
+- Backend core: high-risk auth/runtime paths in `core/executor.py`, `core/source_state.py`, `core/encryption.py`, `core/api.py`
+- Frontend core: key interaction/state flows covered by `Vitest + React Testing Library`
 
-## 2. 后端 TDD 规则
+## 2. Backend TDD Rules
 
-- 标准流程：RED -> GREEN -> REFACTOR。
-- 核心行为改动必须包含可复现 pytest 用例。
-- 紧急修复允许先改代码，但同次交付必须补回归测试。
+- Standard cycle: `RED -> GREEN -> REFACTOR`
+- Behavior changes in core paths must include reproducible pytest coverage
+- Emergency fixes may land first, but regression tests must be added in the same delivery
 
-## 3. 阻断命令
+## 3. Blocking Commands
 
-| 层级 | 命令 | 用途 |
+| Layer | Command | Purpose |
 | --- | --- | --- |
-| Backend | `make test-backend` | 后端核心门禁 |
-| Backend | `python -m pytest tests -q -k "interaction or auth or encryption"` | 高风险路径回归 |
-| Frontend | `make test-frontend` | 前端核心行为门禁 |
-| Frontend | `make test-typecheck` | TS 类型门禁 |
-| Cross-layer | `make test-impacted` | 变更文件驱动门禁 |
+| Backend | `make test-backend` | Backend core gate |
+| Backend | `python -m pytest tests -q -k "interaction or auth or encryption"` | High-risk regression gate |
+| Frontend | `make test-frontend` | Frontend behavior gate |
+| Frontend | `make test-typecheck` | TS type gate |
+| Cross-layer | `make test-impacted` | Change-driven gate |
 
-## 4. 测试组织约束
+## 4. Test Organization Constraints
 
-- 复用 `tests/conftest.py` 与 `tests/factories/`。
-- 测试必须可重复、无网络依赖、避免时序竞态。
-- 阻断路径优先行为断言，避免脆弱快照。
+- Reuse `tests/conftest.py` and `tests/factories/`
+- Tests must be repeatable, network-free, and avoid timing race dependence
+- Prefer behavior assertions for blocking paths; avoid brittle snapshots

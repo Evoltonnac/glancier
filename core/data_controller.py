@@ -1,6 +1,6 @@
 """
-数据控制器：基于 JSON 的数据持久化层。
-按 source_id 作为主键存储，避免序号 doc_id 带来的可读性与维护问题。
+Data controller: JSON-based persistence layer.
+Uses source_id as the primary key to avoid index-based doc_id ambiguity.
 """
 
 import json
@@ -17,7 +17,7 @@ _DATA_DIR = Path(os.getenv("GLANCIER_DATA_DIR", ".")) / "data"
 
 
 class DataController:
-    """JSON 数据操作封装（source_id keyed storage）。"""
+    """JSON data operations wrapper (source_id-keyed storage)."""
 
     def __init__(self, db_path: str | Path | None = None):
         if db_path is None:
@@ -29,7 +29,7 @@ class DataController:
         with self._lock:
             payload = self._load_payload_locked()
             self._save_payload_locked(payload)
-        logger.info(f"JSON 数据库已打开: {self.db_path}")
+        logger.info("JSON database opened: %s", self.db_path)
 
     def _empty_payload(self) -> dict[str, dict]:
         return {
@@ -49,7 +49,7 @@ class DataController:
                 "history_by_source": history if isinstance(history, dict) else {},
             }
 
-        # 兼容并迁移 legacy TinyDB 结构:
+        # Backward-compat migration for legacy TinyDB structure:
         # { "latest": {"1": {...}}, "history": {"2": {...}} }
         latest_by_source: dict[str, dict[str, Any]] = {}
         history_by_source: dict[str, list[dict[str, Any]]] = {}
@@ -88,7 +88,7 @@ class DataController:
             with open(self.db_path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
         except Exception as exc:
-            logger.error("读取 data 文件失败: %s", exc)
+            logger.error("failed to read data file: %s", exc)
             return self._empty_payload()
         return self._normalize_payload(payload)
 
@@ -96,13 +96,13 @@ class DataController:
         with open(self.db_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
 
-    # ── 写入 ──────────────────────────────────────────
+    # ── Writes ────────────────────────────────────────
 
     def upsert(self, source_id: str, data: dict[str, Any]):
         """
-        更新或插入最新数据（按 source_id 去重）。
-        不再追加历史记录。
-        成功时会清除之前存储的 error 信息。
+        Update or insert latest data (deduplicated by source_id).
+        No history records are appended here.
+        Clears previously stored error field on success.
         """
         now = time.time()
         record = {
@@ -115,10 +115,10 @@ class DataController:
             payload = self._load_payload_locked()
             payload["latest_by_source"][source_id] = record
             self._save_payload_locked(payload)
-        logger.debug(f"[{source_id}] 数据已更新 (不记录历史)")
+        logger.debug("[%s] latest data updated (history not appended)", source_id)
 
     def set_error(self, source_id: str, error: str):
-        """记录数据源抓取错误。"""
+        """Record source fetch error."""
         now = time.time()
         record = {
             "source_id": source_id,
@@ -140,8 +140,8 @@ class DataController:
         error: str | None = None,
     ):
         """
-        记录数据源的运行时状态（用于持久化 SourceState）。
-        当执行异常或需要用户交互时，调用此方法将状态存储到 data 中。
+        Persist runtime state for a source (used by SourceState persistence).
+        Call this when execution fails or requires user interaction.
         """
         now = time.time()
         with self._lock:
@@ -160,23 +160,23 @@ class DataController:
             if error is not None:
                 record["error"] = error
             elif status != "error":
-                # 非错误态主动清理旧错误，避免 UI 长期显示陈旧错误。
+                # Proactively clear stale error in non-error states.
                 record.pop("error", None)
             payload["latest_by_source"][source_id] = record
             self._save_payload_locked(payload)
-        logger.debug(f"[{source_id}] 状态已持久化: {status}")
+        logger.debug("[%s] state persisted: %s", source_id, status)
 
-    # ── 查询 ──────────────────────────────────────────
+    # ── Queries ───────────────────────────────────────
 
     def get_latest(self, source_id: str) -> dict | None:
-        """获取指定数据源的最新数据。"""
+        """Get latest data for a source."""
         with self._lock:
             payload = self._load_payload_locked()
             latest = payload["latest_by_source"].get(source_id)
             return dict(latest) if isinstance(latest, dict) else None
 
     def get_all_latest(self) -> list[dict]:
-        """获取所有数据源的最新数据。"""
+        """Get latest data for all sources."""
         with self._lock:
             payload = self._load_payload_locked()
             return [
@@ -190,7 +190,7 @@ class DataController:
         source_id: str,
         limit: int = 100,
     ) -> list[dict]:
-        """获取指定数据源的历史数据（按时间倒序）。"""
+        """Get source history records sorted by timestamp descending."""
         with self._lock:
             payload = self._load_payload_locked()
             records = payload["history_by_source"].get(source_id, [])
@@ -198,10 +198,10 @@ class DataController:
             records.sort(key=lambda r: r.get("timestamp", 0), reverse=True)
             return records[:limit]
 
-    # ── 管理 ──────────────────────────────────────────
+    # ── Management ────────────────────────────────────
 
     def clear_source(self, source_id: str):
-        """清除指定数据源的所有数据。"""
+        """Clear all stored data for a source."""
         with self._lock:
             payload = self._load_payload_locked()
             payload["latest_by_source"].pop(source_id, None)
@@ -209,5 +209,5 @@ class DataController:
             self._save_payload_locked(payload)
 
     def close(self):
-        """关闭数据库（JSON 模式无需关闭句柄）。"""
+        """Close database resources (no-op for JSON mode)."""
         return None

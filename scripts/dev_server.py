@@ -1,6 +1,6 @@
 """
-开发模式专用：监控 Python 文件变更，自动重启后端服务。
-用法: python scripts/dev_server.py [port]
+Development helper: watch Python file changes and auto-restart the backend.
+Usage: python scripts/dev_server.py [port]
 """
 
 import os
@@ -12,50 +12,50 @@ import time
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-# 项目根目录
+# Project root.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# 监控的目录
+# Watched directories.
 WATCH_DIRS = [
     os.path.join(PROJECT_ROOT, "core"),
 ]
-# 同时监控 main.py
+# Also watch main.py.
 WATCH_FILES_EXTRA = [
     os.path.join(PROJECT_ROOT, "main.py"),
 ]
 
-# 监控的文件扩展名
+# Watched file extensions.
 WATCH_EXTENSIONS = {".py", ".yaml", ".yml", ".json"}
 
-# 重启冷却时间（秒），防止多次触发
+# Restart cooldown (seconds) to prevent rapid repeated triggers.
 COOLDOWN = 1.5
 
 
 class BackendProcess:
-    """管理后端子进程的生命周期。"""
+    """Manage backend subprocess lifecycle."""
 
     def __init__(self, port: int):
         self.port = port
         self.process: subprocess.Popen | None = None
 
     def start(self):
-        print(f"\n🚀 启动 Python 后端 (port={self.port})...")
+        print(f"\n🚀 Starting Python backend (port={self.port})...")
         env = os.environ.copy()
         env["PYTHONPATH"] = PROJECT_ROOT
 
-        # 确保使用 pyenv 管理的 Python
+        # Ensure we use the pyenv-managed Python when available.
         python_path = self._get_pyenv_python()
         self.process = subprocess.Popen(
             [python_path, "main.py", str(self.port)],
             cwd=PROJECT_ROOT,
             env=env,
         )
-        print(f"✅ 后端已启动 (PID: {self.process.pid})")
+        print(f"✅ Backend started (PID: {self.process.pid})")
 
     def _get_pyenv_python(self) -> str:
-        """获取 pyenv 管理的 Python 解释器路径"""
+        """Get the pyenv-managed Python interpreter path."""
         import shutil
-        # 优先使用 pyenv which python
+        # Prefer `pyenv which python`.
         try:
             result = subprocess.run(
                 ["pyenv", "which", "python"],
@@ -66,21 +66,21 @@ class BackendProcess:
             return result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
-        # 回退到 sys.executable
+        # Fallback to sys.executable.
         return sys.executable
 
     def stop(self):
         if self.process and self.process.poll() is None:
-            print(f"🛑 停止后端 (PID: {self.process.pid})...")
-            # 发送 SIGTERM 让 uvicorn 优雅退出
+            print(f"🛑 Stopping backend (PID: {self.process.pid})...")
+            # Send SIGTERM so uvicorn can exit gracefully.
             self.process.send_signal(signal.SIGTERM)
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                print("⚠️  强制终止...")
+                print("⚠️  Forcing termination...")
                 self.process.kill()
                 self.process.wait()
-            print("✅ 后端已停止")
+            print("✅ Backend stopped")
 
     def restart(self):
         self.stop()
@@ -88,7 +88,7 @@ class BackendProcess:
 
 
 class HotReloadHandler(FileSystemEventHandler):
-    """文件变更事件处理：自动重启后端。"""
+    """Handle file change events and auto-restart backend."""
 
     def __init__(self, backend: BackendProcess):
         self.backend = backend
@@ -98,7 +98,7 @@ class HotReloadHandler(FileSystemEventHandler):
         _, ext = os.path.splitext(path)
         if ext not in WATCH_EXTENSIONS:
             return False
-        # __pycache__ 变更忽略
+        # Ignore __pycache__ changes.
         if "__pycache__" in path:
             return False
         return True
@@ -115,7 +115,7 @@ class HotReloadHandler(FileSystemEventHandler):
         self._last_trigger = now
 
         rel_path = os.path.relpath(event.src_path, PROJECT_ROOT)
-        print(f"\n🔄 检测到变更: {rel_path}")
+        print(f"\n🔄 Change detected: {rel_path}")
         self.backend.restart()
 
     def on_created(self, event):
@@ -134,27 +134,27 @@ def main():
     for watch_dir in WATCH_DIRS:
         if os.path.isdir(watch_dir):
             observer.schedule(handler, watch_dir, recursive=True)
-            print(f"👁️  监控目录: {os.path.relpath(watch_dir, PROJECT_ROOT)}/")
+            print(f"👁️  Watching directory: {os.path.relpath(watch_dir, PROJECT_ROOT)}/")
 
-    # 监控项目根目录下的特定文件（非递归）
+    # Watch specific root-level files (non-recursive).
     observer.schedule(handler, PROJECT_ROOT, recursive=False)
-    print(f"👁️  监控文件: main.py")
+    print("👁️  Watching file: main.py")
 
     observer.start()
-    print(f"\n🔥 开发模式已启动 — 文件变更将自动重启后端")
-    print(f"   后端地址: http://localhost:{port}")
-    print(f"   按 Ctrl+C 退出\n")
+    print("\n🔥 Development mode started — backend auto-restarts on file changes")
+    print(f"   Backend URL: http://localhost:{port}")
+    print("   Press Ctrl+C to exit\n")
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n👋 正在退出...")
+        print("\n👋 Exiting...")
         observer.stop()
         backend.stop()
 
     observer.join()
-    print("✅ 开发服务已完全停止")
+    print("✅ Dev service fully stopped")
 
 
 if __name__ == "__main__":

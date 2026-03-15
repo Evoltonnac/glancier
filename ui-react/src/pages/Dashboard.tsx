@@ -407,8 +407,6 @@ export default function Dashboard() {
     const gridRef = useRef<HTMLDivElement>(null);
     const gsInstanceRef = useRef<GridStack | null>(null);
     const suppressGridChangeRef = useRef(false);
-    const autoRefreshInFlightRef = useRef<Set<string>>(new Set());
-    const lastAutoRefreshTriggerRef = useRef<Record<string, number>>({});
     const [nowSeconds, setNowSeconds] = useState<number>(() =>
         Math.floor(Date.now() / 1000),
     );
@@ -641,7 +639,7 @@ export default function Dashboard() {
             try {
                 const updatedSources = await api.getSources();
 
-                // 优化：只请求 updated_at 变化的数据源详情
+                // Optimization: fetch details only for sources with changed updated_at
                 const needsUpdate = (source: SourceSummary): boolean => {
                     const cachedData = dataMap[source.id];
                     if (!cachedData) return true;
@@ -655,7 +653,7 @@ export default function Dashboard() {
                     (s) => !needsUpdate(s),
                 );
 
-                // 只获取需要更新的数据源详情
+                // Fetch details only for sources that need updates
                 const dataPromises = sourcesToFetch.map((s) =>
                     api
                         .getSourceData(s.id)
@@ -665,12 +663,12 @@ export default function Dashboard() {
 
                 const newDataMap: Record<string, DataResponse> = {};
 
-                // 添加需要更新的数据源
+                // Add sources that were freshly fetched
                 results.forEach(({ id, data }) => {
                     newDataMap[id] = data;
                 });
 
-                // 使用缓存中不需要更新的数据源
+                // Use cached data for sources that do not need updates
                 sourcesNeedingNoFetch.forEach((s) => {
                     if (dataMap[s.id]) {
                         newDataMap[s.id] = dataMap[s.id];
@@ -694,29 +692,33 @@ export default function Dashboard() {
         return () => clearInterval(interval);
     }, [sources, dataMap]);
 
+    const runGlobalRefresh = useCallback(async () => {
+        const currentActiveScraper = useStore.getState().activeScraper;
+        if (currentActiveScraper) {
+            console.log(`[Scraper] Global refresh: cancelling active task`);
+            try {
+                await invoke("cancel_scraper_task");
+            } catch (e) {
+                console.error("Failed to cancel on global refresh:", e);
+            }
+        }
+
+        setSources(sources.map((s) => ({ ...s, status: "refreshing" })));
+        setSkippedScrapers(new Set());
+        useStore.getState().setActiveScraper(null);
+
+        await api
+            .refreshAll()
+            .catch((e) => console.error("Refresh all failed:", e));
+    }, [setSkippedScrapers, setSources, sources]);
+
     useEffect(() => {
         const onRefresh = async () => {
-            const currentActiveScraper = useStore.getState().activeScraper;
-            if (currentActiveScraper) {
-                console.log(`[Scraper] Global refresh: cancelling active task`);
-                try {
-                    await invoke("cancel_scraper_task");
-                } catch (e) {
-                    console.error("Failed to cancel on global refresh:", e);
-                }
-            }
-
-            setSources(sources.map((s) => ({ ...s, status: "refreshing" })));
-            setSkippedScrapers(new Set());
-            useStore.getState().setActiveScraper(null);
-
-            await api
-                .refreshAll()
-                .catch((e) => console.error("Refresh all failed:", e));
+            await runGlobalRefresh();
         };
         window.addEventListener("app:refresh_data", onRefresh);
         return () => window.removeEventListener("app:refresh_data", onRefresh);
-    }, [sources, setSources, setSkippedScrapers]);
+    }, [runGlobalRefresh]);
 
     const handleRefreshSource = useCallback(
         async (sourceId: string) => {
@@ -784,69 +786,11 @@ export default function Dashboard() {
 
     const handleRefreshAll = async () => {
         try {
-            await api.refreshAll();
-            window.dispatchEvent(new CustomEvent("app:refresh_data"));
+            await runGlobalRefresh();
         } catch (error) {
             console.error("刷新失败:", error);
         }
     };
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            if (document.hidden) {
-                return;
-            }
-
-            const nowMs = Date.now();
-            for (const source of sources) {
-                const intervalMinutes =
-                    source.effective_refresh_interval_minutes;
-                if (
-                    typeof intervalMinutes !== "number" ||
-                    !Number.isFinite(intervalMinutes) ||
-                    intervalMinutes <= 0
-                ) {
-                    continue;
-                }
-                if (source.status === "refreshing") {
-                    continue;
-                }
-
-                const lastSuccessAt =
-                    typeof source.last_success_at === "number"
-                        ? source.last_success_at
-                        : source.updated_at;
-                if (
-                    typeof lastSuccessAt !== "number" ||
-                    !Number.isFinite(lastSuccessAt)
-                ) {
-                    continue;
-                }
-
-                const dueAtMs = (lastSuccessAt + intervalMinutes * 60) * 1000;
-                if (nowMs < dueAtMs) {
-                    continue;
-                }
-
-                if (autoRefreshInFlightRef.current.has(source.id)) {
-                    continue;
-                }
-                const lastTriggeredAt =
-                    lastAutoRefreshTriggerRef.current[source.id] || 0;
-                if (nowMs - lastTriggeredAt < 30_000) {
-                    continue;
-                }
-
-                autoRefreshInFlightRef.current.add(source.id);
-                lastAutoRefreshTriggerRef.current[source.id] = nowMs;
-                void handleRefreshSource(source.id).finally(() => {
-                    autoRefreshInFlightRef.current.delete(source.id);
-                });
-            }
-        }, 10_000);
-
-        return () => clearInterval(timer);
-    }, [handleRefreshSource, sources]);
 
     const openErrorDialog = useCallback((source: SourceSummary) => {
         setErrorSourceId(source.id);

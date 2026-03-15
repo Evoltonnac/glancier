@@ -9,8 +9,8 @@ flow:
           token_url: "https://github.com/login/oauth/access_token"
           scopes: ["repo", "user"]
           doc_url: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps"
-          client_id: "Ov23ctVAAmvFxqWhtwB0" # 请在此填入 GitHub OAuth App 的 Client ID
-          client_secret: "" # 若 GitHub App 支持不带 secret 的 PKCE 这里可留空
+          client_id: "Ov23ctVAAmvFxqWhtwB0" # Fill in your GitHub OAuth App Client ID
+          client_secret: "" # Leave empty when your GitHub app supports PKCE without secret
           supports_pkce: true
           token_request_type: "json" # GitHub requires JSON token request to get JSON response
       secrets:

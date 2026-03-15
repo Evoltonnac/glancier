@@ -1,11 +1,11 @@
 """
-加密模块：AES-GCM 对称加密，用于保护 secrets.json 中的敏感数据。
+Encryption module: AES-GCM symmetric encryption for sensitive secrets.json data.
 
-设计：
-- 每个加密值使用 `ENC:` 前缀标识，兼容明文值（自适应读取）
-- 使用 AES-256-GCM 算法（authenticated encryption）
-- 主密钥优先存储在系统 Keychain（keyring），本地 settings.json 仅作兼容回退
-- 多端同步时，主密钥通过用户手动"导出同步通行码"共享
+Design:
+- Every encrypted value uses `ENC:` prefix and remains backward-compatible with plaintext.
+- Uses AES-256-GCM (authenticated encryption).
+- Master key is stored in system keychain first; settings.json is fallback only.
+- For multi-device sync, users can manually export/import the sync passcode.
 """
 
 import base64
@@ -29,19 +29,19 @@ except Exception:  # pragma: no cover - import failure depends on runtime env
 
 
 def generate_master_key() -> str:
-    """生成一个随机 256-bit 主密钥，返回 base64 编码字符串。"""
+    """Generate a random 256-bit master key (base64-encoded)."""
     raw_key = os.urandom(MASTER_KEY_BYTES)  # 256 bits
     return base64.b64encode(raw_key).decode("utf-8")
 
 
 def _load_raw_key(master_key_b64: str) -> bytes:
-    """将 base64 编码的主密钥还原为 bytes，并做长度校验。"""
+    """Decode base64 master key to bytes and validate key length."""
     try:
         raw_key = base64.b64decode(master_key_b64, validate=True)
     except Exception as e:
-        raise ValueError("主密钥格式非法，必须是 base64 编码。") from e
+        raise ValueError("Invalid master key format: must be base64.") from e
     if len(raw_key) != MASTER_KEY_BYTES:
-        raise ValueError("主密钥长度非法，必须是 256-bit。")
+        raise ValueError("Invalid master key length: must be 256-bit.")
     return raw_key
 
 
@@ -49,13 +49,13 @@ def get_keychain_master_key(
     service: str = KEYCHAIN_SERVICE,
     account: str = KEYCHAIN_ACCOUNT,
 ) -> str | None:
-    """从系统 keychain 读取主密钥。读取失败或不可用时返回 None。"""
+    """Read master key from system keychain; return None if unavailable."""
     if keyring is None:
         return None
     try:
         value = keyring.get_password(service, account)
     except Exception as e:
-        logger.warning(f"读取 keychain 主密钥失败: {e}")
+        logger.warning("failed to read keychain master key: %s", e)
         return None
     if not value:
         return None
@@ -65,7 +65,7 @@ def get_keychain_master_key(
     try:
         _load_raw_key(value)
     except Exception:
-        logger.warning("Keychain 中主密钥格式非法，已忽略。")
+        logger.warning("invalid key format in keychain; ignored")
         return None
     return value
 
@@ -75,7 +75,7 @@ def set_keychain_master_key(
     service: str = KEYCHAIN_SERVICE,
     account: str = KEYCHAIN_ACCOUNT,
 ) -> bool:
-    """写入主密钥到系统 keychain。成功返回 True，失败返回 False。"""
+    """Persist master key to system keychain. Returns True on success."""
     if keyring is None:
         return False
     try:
@@ -84,14 +84,14 @@ def set_keychain_master_key(
         keyring.set_password(service, account, normalized_key)
         return True
     except Exception as e:
-        logger.warning(f"写入 keychain 主密钥失败: {e}")
+        logger.warning("failed to write keychain master key: %s", e)
         return False
 
 
 def encrypt_value(plaintext: str, master_key_b64: str) -> str:
     """
-    使用 AES-256-GCM 加密字符串，返回带 ENC: 前缀的密文字符串。
-    格式：ENC:<base64(nonce + ciphertext)>
+    Encrypt plaintext with AES-256-GCM and return ENC-prefixed ciphertext.
+    Format: ENC:<base64(nonce + ciphertext)>
     """
     key = _load_raw_key(master_key_b64)
     aesgcm = AESGCM(key)
@@ -103,8 +103,8 @@ def encrypt_value(plaintext: str, master_key_b64: str) -> str:
 
 def decrypt_value(ciphertext_str: str, master_key_b64: str) -> str:
     """
-    解密带 ENC: 前缀的密文字符串，返回明文。
-    如果不是加密值则直接返回原始字符串（容错）。
+    Decrypt ENC-prefixed ciphertext and return plaintext.
+    If input is not encrypted, return the original string.
     """
     if not ciphertext_str.startswith(ENC_PREFIX):
         return ciphertext_str
@@ -117,17 +117,17 @@ def decrypt_value(ciphertext_str: str, master_key_b64: str) -> str:
         plaintext = aesgcm.decrypt(nonce, ct, None)
         return plaintext.decode("utf-8")
     except Exception as e:
-        logger.error(f"解密失败: {e}")
-        raise ValueError(f"无法解密密钥，请检查是否使用了正确的主密钥。") from e
+        logger.error("decryption failed: %s", e)
+        raise ValueError("Unable to decrypt value. Check whether the master key is correct.") from e
 
 
 def is_encrypted(value: Any) -> bool:
-    """判断一个值是否为加密格式。"""
+    """Return whether a value uses ENC-prefixed encrypted format."""
     return isinstance(value, str) and value.startswith(ENC_PREFIX)
 
 
 def encrypt_dict(data: dict, master_key_b64: str) -> dict:
-    """对字典中所有字符串值进行加密（跳过已加密的值）。"""
+    """Encrypt all plaintext string values in dict (skip already encrypted)."""
     result = {}
     for k, v in data.items():
         if isinstance(v, str) and not is_encrypted(v):
@@ -138,7 +138,7 @@ def encrypt_dict(data: dict, master_key_b64: str) -> dict:
 
 
 def decrypt_dict(data: dict, master_key_b64: str) -> dict:
-    """对字典中所有加密字符串值进行解密（跳过明文值）。"""
+    """Decrypt all encrypted string values in dict (skip plaintext)."""
     result = {}
     for k, v in data.items():
         if is_encrypted(v):
@@ -149,10 +149,10 @@ def decrypt_dict(data: dict, master_key_b64: str) -> dict:
 
 
 def strip_encryption(data: dict, master_key_b64: str) -> dict:
-    """将字典中所有加密值还原为明文（用于关闭加密时的全量迁移）。"""
+    """Restore encrypted dict values to plaintext (used when disabling encryption)."""
     return decrypt_dict(data, master_key_b64)
 
 
 def apply_encryption(data: dict, master_key_b64: str) -> dict:
-    """将字典中所有明文字符串值加密（用于开启加密时的全量迁移）。"""
+    """Encrypt plaintext dict values (used for full migration when enabling encryption)."""
     return encrypt_dict(data, master_key_b64)

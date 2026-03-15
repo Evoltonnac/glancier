@@ -1,6 +1,6 @@
 """
-PKCE (Proof Key for Code Exchange) 工具类。
-符合 RFC 7636 标准。
+PKCE (Proof Key for Code Exchange) utility helpers.
+Compliant with RFC 7636.
 """
 
 import base64
@@ -14,9 +14,9 @@ class PKCEUtils:
     @staticmethod
     def generate_verifier(length: int = 128) -> str:
         """
-        生成 code_verifier。
-        长度必须在 43 到 128 个字符之间。
-        允许字符: A-Z, a-z, 0-9, "-", ".", "_", "~"
+        Generate a code_verifier.
+        Length must be between 43 and 128 characters.
+        Allowed chars: A-Z, a-z, 0-9, "-", ".", "_", "~"
         """
         if not (43 <= length <= 128):
             raise ValueError("code_verifier length must be between 43 and 128")
@@ -27,7 +27,7 @@ class PKCEUtils:
     @staticmethod
     def generate_challenge(verifier: str, method: CodeChallengeMethod = CodeChallengeMethod.S256) -> str:
         """
-        根据 verifier 生成 code_challenge。
+        Generate code_challenge from verifier.
         """
         if method == CodeChallengeMethod.S256:
             # SHA256 hash

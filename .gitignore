@@ -16,7 +16,7 @@ htmlcov/
 data/*.json
 data/tokens/
 
-# Config (含敏感 API Key)
+# Config (contains sensitive API keys)
 config/config.yaml
 
 # IDE

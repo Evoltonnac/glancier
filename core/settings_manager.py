@@ -36,8 +36,8 @@ _SETTINGS_FILE = "settings.json"
 
 class SettingsManager:
     """
-    负责管理系统级配置 (如开机自启状态、代理、加密开关等)。
-    独立于 data.json (用户视图配置) 存储，以防多端同步互相覆盖。
+    Manage system-level settings (autostart, proxy, encryption switch, etc.).
+    Stored separately from data.json (user view data) to avoid sync overwrite issues.
     """
 
     def __init__(self, settings_dir: str | Path | None = None):
@@ -79,9 +79,9 @@ class SettingsManager:
 
     def get_or_create_master_key(self) -> str:
         """
-        获取或创建本地主密钥。
-        首次调用时自动生成并持久化到 keychain 和 settings.json。
-        返回 base64 编码的主密钥字节串。
+        Get or create the local master key.
+        On first call, generate and persist to keychain and settings.json.
+        Returns the base64-encoded key bytes.
         """
         from core.encryption import (
             generate_master_key,
@@ -102,7 +102,7 @@ class SettingsManager:
                 account=str(self.settings_file.resolve()),
             )
             return settings.master_key
-        # 首次：生成并持久化
+        # First-time setup: generate and persist.
         new_key = generate_master_key()
         settings.master_key = new_key
         self.save_settings(settings)

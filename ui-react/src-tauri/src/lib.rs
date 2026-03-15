@@ -928,8 +928,8 @@ pub fn run() {
             start_devtools_guard(&app.handle());
             create_tray(&app.handle())?;
 
-            // 开发模式：跳过后端进程，由用户手动启动 Python 后端
-            // 生产模式：启动打包在 resources/binaries 下的 Python 后端目录
+            // Development mode: skip backend process; user starts Python backend manually
+            // Production mode: start packaged Python backend under resources/binaries
             #[cfg(not(debug_assertions))]
             {
                 let api_port = find_available_port(RELEASE_API_PREFERRED_PORT);

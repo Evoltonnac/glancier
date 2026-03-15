@@ -1,7 +1,7 @@
 """
-Secrets 控制器：负责安全存储 API Key、OAuth Token 等敏感信息。
-统一存储到 secrets.json 文件中，每个 secret_id 作为顶层 key。
-支持加密存储（AES-256-GCM），通过 SettingsManager 获取主密钥。
+Secrets controller for securely storing API keys, OAuth tokens, and other sensitive data.
+All secrets are stored in secrets.json with secret_id as top-level key.
+Supports AES-256-GCM encryption using master key from SettingsManager.
 """
 
 import os
@@ -18,9 +18,9 @@ _SECRETS_FILE = "secrets.json"
 
 class SecretsController:
     """
-    基于文件的安全存储。
-    所有 secrets 统一存储到 secrets.json 文件中，每个 secret_id 作为顶层 key。
-    当 settings_manager 注入后，根据加密开关自动加解密。
+    File-based secure storage.
+    All secrets live in secrets.json keyed by secret_id.
+    When settings_manager is injected, encryption/decryption follows current settings.
     """
 
     def __init__(self, secrets_dir: str | Path | None = None, settings_manager=None):
@@ -30,13 +30,13 @@ class SecretsController:
         self.secrets_dir.mkdir(parents=True, exist_ok=True)
         self.secrets_file = self.secrets_dir / _SECRETS_FILE
         self._settings_manager = settings_manager
-        logger.info(f"Secrets 存储文件: {self.secrets_file}")
+        logger.info("Secrets storage file: %s", self.secrets_file)
 
     def inject_settings_manager(self, settings_manager):
-        """延迟注入 SettingsManager（支持循环依赖的场景）。"""
+        """Inject SettingsManager lazily (supports circular dependency setup)."""
         self._settings_manager = settings_manager
 
-    # ── 内部辅助 ─────────────────────────────────────────
+    # ── Internal helpers ───────────────────────────────
 
     def _encryption_enabled(self) -> bool:
         if self._settings_manager is None:
@@ -55,55 +55,55 @@ class SecretsController:
             return None
 
     def _load_all(self) -> dict[str, Any]:
-        """加载所有 secrets（原始存储，可能包含 ENC: 前缀的密文）。"""
+        """Load all raw secrets (may include ENC-prefixed ciphertext)."""
         if not self.secrets_file.exists():
             return {}
         try:
             with open(self.secrets_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
-            logger.error(f"读取 secrets 文件失败: {e}")
+            logger.error("failed to read secrets file: %s", e)
             return {}
 
     def _save_all(self, data: dict[str, Any]):
-        """保存所有 secrets。"""
+        """Persist all secrets."""
         try:
             with open(self.secrets_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except IOError as e:
-            logger.error(f"保存 secrets 文件失败: {e}")
+            logger.error("failed to save secrets file: %s", e)
 
-    # ── 公共 API ─────────────────────────────────────────
+    # ── Public API ──────────────────────────────────────
 
     def get_secrets(self, secret_id: str) -> dict[str, Any]:
         """
-        获取指定 secret_id 的所有 secrets（自动解密）。
-        返回空字典如果不存在。
+        Get all secrets for secret_id (auto-decrypt when needed).
+        Returns empty dict if missing.
         """
         from core.encryption import decrypt_dict, is_encrypted
         all_secrets = self._load_all()
         raw = all_secrets.get(secret_id, {})
         if not raw:
             return raw
-        # 如果当前加密已开启或字段中存在加密值，则尝试解密
+        # Try decrypting when encrypted values are present.
         master_key = self._master_key()
         if master_key and any(is_encrypted(v) for v in raw.values()):
             try:
                 return decrypt_dict(raw, master_key)
             except Exception as e:
-                logger.error(f"解密 secrets[{secret_id}] 失败: {e}")
+                logger.error("failed to decrypt secrets[%s]: %s", secret_id, e)
                 raise
         return raw
 
     def get_secret(self, secret_id: str, key: str) -> Any:
-        """获取指定 secret_id 下的单个 secret 值（自动解密）。"""
+        """Get one secret value under secret_id (auto-decrypt when needed)."""
         secrets = self.get_secrets(secret_id)
         return secrets.get(key)
 
     def set_secrets(self, secret_id: str, data: dict[str, Any]):
         """
-        设置指定 secret_id 的 secrets（合并现有值）。
-        根据当前加密设置，自动对新写入值加密。
+        Set secrets for secret_id (merged with existing values).
+        Encrypt new values automatically when encryption is enabled.
         """
         from core.encryption import encrypt_dict
         all_secrets = self._load_all()
@@ -119,50 +119,50 @@ class SecretsController:
             all_secrets[secret_id] = data
 
         self._save_all(all_secrets)
-        logger.debug(f"Secrets 已保存: {secret_id}")
+        logger.debug("Secrets saved: %s", secret_id)
 
     def set_secret(self, secret_id: str, key: str, value: Any):
-        """设置单个 secret 值。"""
+        """Set one secret value."""
         self.set_secrets(secret_id, {key: value})
 
     def delete_secrets(self, secret_id: str):
-        """删除指定 secret_id 的所有 secrets。"""
+        """Delete all secrets under secret_id."""
         all_secrets = self._load_all()
         if secret_id in all_secrets:
             del all_secrets[secret_id]
             self._save_all(all_secrets)
-            logger.debug(f"Secrets 已删除: {secret_id}")
+            logger.debug("Secrets deleted: %s", secret_id)
 
     def delete_secret(self, secret_id: str, key: str):
-        """删除指定 secret_id 下的单个 secret。"""
+        """Delete one secret value under secret_id."""
         all_secrets = self._load_all()
         if secret_id in all_secrets and key in all_secrets[secret_id]:
             del all_secrets[secret_id][key]
             self._save_all(all_secrets)
-            logger.debug(f"Secret '{key}' 已删除: {secret_id}")
+            logger.debug("Secret '%s' deleted: %s", key, secret_id)
 
-    # ── 全量加密迁移（切换加密开关时调用） ─────────────────
+    # ── Full encryption migration (on encryption-toggle change) ──
 
     def migrate_encrypt_all(self):
-        """将所有现有明文 secrets 全量加密（开启加密时调用）。"""
+        """Encrypt all existing plaintext secrets (called when enabling encryption)."""
         from core.encryption import apply_encryption
         master_key = self._master_key()
         if not master_key:
-            logger.error("迁移加密失败：主密钥未找到")
+            logger.error("encryption migration failed: master key not found")
             return
         all_secrets = self._load_all()
         migrated = {k: apply_encryption(v, master_key) for k, v in all_secrets.items()}
         self._save_all(migrated)
-        logger.info("全量加密迁移完成")
+        logger.info("full encryption migration completed")
 
     def migrate_decrypt_all(self):
-        """将所有现有密文 secrets 全量解密（关闭加密时调用）。"""
+        """Decrypt all existing ciphertext secrets (called when disabling encryption)."""
         from core.encryption import strip_encryption
         master_key = self._master_key()
         if not master_key:
-            logger.error("迁移解密失败：主密钥未找到")
+            logger.error("decryption migration failed: master key not found")
             return
         all_secrets = self._load_all()
         migrated = {k: strip_encryption(v, master_key) for k, v in all_secrets.items()}
         self._save_all(migrated)
-        logger.info("全量解密迁移完成")
+        logger.info("full decryption migration completed")

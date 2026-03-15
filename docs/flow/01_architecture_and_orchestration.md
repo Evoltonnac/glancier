@@ -1,25 +1,27 @@
-# Glancier Flow 架构与编排总览
+# Glancier Flow Architecture and Orchestration
 
-## 1. 目标
+## 1. Goal
 
-Flow 是集成执行流水线，负责：
-- 鉴权与凭据恢复（API Key / OAuth / cURL / WebView）
-- 数据拉取与解析（HTTP / Extract / Script）
-- 交互阻塞与恢复执行（NeedsInteraction -> 用户完成 -> resume）
+Flow is the integration execution pipeline. It is responsible for:
+- Authentication and credential recovery (`api_key` / `oauth` / `curl` / `webview`)
+- Data fetching and parsing (`http` / `extract` / `script`)
+- Blocking interactions and resume execution (`NeedsInteraction -> user action -> resume`)
 
-## 2. Step 通用结构
+## 2. Generic Step Output Model
 
-每个 `flow` 节点均支持以下输出处理方式，它们都能使变量在后续 Step 中通过 `{var}` 引用，但持久化行为不同：
+Each `flow` step supports these output channels. All channels can be referenced as `{var}`
+in later steps, but they differ in persistence and security:
 
-| 字段 | 持久化方式 | 安全性 | 主要用途 |
+| Field | Persistence | Security | Primary Use |
 | --- | --- | --- | --- |
-| `outputs` | **持久化到 Data Store** | 公开（用于展示） | 最终展示给用户的数据（如余额、进度、文本）。 |
-| `secrets` | **持久化到 Secret Store** | 加密（受保护） | 敏感凭据（如 API Key, OAuth Token, Session）。 |
-| `context` | **仅保留在内存** | 临时（不落盘） | 流程中间变量（如临时 ID、仅供后续步骤使用的参数）。 |
+| `outputs` | Persisted to Data Store | Public/display data | Final user-facing values (balance/progress/text). |
+| `secrets` | Persisted to Secret Store | Encrypted/protected | Sensitive credentials (API Key, OAuth token, session). |
+| `context` | In-memory only | Ephemeral | Intermediate variables for downstream steps. |
 
-其中 `outputs` / `context` / `secrets` 的映射格式统一为：`目标变量: 来源路径`。
+Mapping format is unified for `outputs` / `secrets` / `context`:
+`target_var: source_path`
 
-示例：
+Example:
 
 ```yaml
 - id: fetch_api
@@ -27,31 +29,31 @@ Flow 是集成执行流水线，负责：
   args:
     url: "https://api.example.com/data"
   outputs:
-    display_value: "result.value"     # 存储到 data.json，SDUI 可用
+    display_value: "result.value"     # persisted to data.json
   secrets:
-    new_token: "headers.X-New-Token"  # 存储到 secrets.json，加密保存
+    new_token: "headers.X-New-Token"  # persisted to secrets.json (encrypted)
   context:
-    temp_id: "result.id"              # 仅内存有效，供下个 Step 使用
+    temp_id: "result.id"              # memory only
 ```
 
-## 3. 变量解析优先级
+## 3. Variable Resolution Priority
 
-`args` 中 `{var}` 的解析顺序：
-1. 上一步骤 `outputs`（短作用域）
-2. Flow 上下文变量
-3. Secrets 持久化存储
+When resolving `{var}` in `args`, priority is:
+1. Previous-step `outputs` (short scope)
+2. Flow context variables
+3. Persisted secrets
 
-## 4. 阻塞执行模型
+## 4. Blocking Execution Model
 
-当步骤依赖用户交互且上下文无可用凭据时，Flow 会进入 suspend：
-1. Python 侧标记 `NeedsInteraction`
-2. UI 展示对应输入或授权动作
-3. 用户完成后提交交互结果
-4. Flow 从中断点恢复并继续
+When a step requires user input and no valid credentials are available:
+1. Python marks `NeedsInteraction`
+2. UI renders the required interaction
+3. User submits interaction data
+4. Flow resumes from the interruption point
 
-这套机制适用于 `api_key` / `oauth` / `curl` / `webview`。
+This model applies to `api_key`, `oauth`, `curl`, and `webview`.
 
-## 5. 与 SDUI 和 WebView 的关系
+## 5. Boundary with SDUI and WebView
 
-- Flow 产生数据与状态；SDUI 负责展示：见 [../sdui/README.md](../sdui/README.md)
-- `webview` 步骤底层能力由 Scraper 模块提供：见 [../webview-scraper/README.md](../webview-scraper/README.md)
+- Flow produces data and runtime state; SDUI renders it: [../sdui/README.md](../sdui/README.md)
+- WebView step capabilities come from the Scraper subsystem: [../webview-scraper/README.md](../webview-scraper/README.md)

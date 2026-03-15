@@ -7,7 +7,7 @@ import type { SourceSummary, DataResponse } from "../types/config";
 const CACHE_KEY = "sources-with-data";
 
 const fetcher = async (key: string) => {
-  // 根据 key 映射到对应的 API 方法
+  // Map key to the corresponding API method
   switch (key) {
     case "sources":
       return api.getSources();
@@ -22,7 +22,7 @@ const fetcher = async (key: string) => {
     case "integration-metadata":
       return api.listIntegrationFileMetadata();
     default:
-      // 处理带参数的 key，如 "source-data-{id}"
+      // Handle parameterized keys, such as "source-data-{id}"
       if (key.startsWith("source-data-")) {
         const sourceId = key.replace("source-data-", "");
         return api.getSourceData(sourceId);
@@ -49,7 +49,7 @@ const sourcesWithDataFetcher = async (
 }> => {
   const sourcesData = await api.getSources();
 
-  // 如果没有缓存数据，则获取所有数据源的详情
+  // If cache is empty, fetch details for all sources
   if (!cachedData) {
     const dataPromises = sourcesData.map((s) =>
       api.getSourceData(s.id).then((data) => ({ id: s.id, data }))
@@ -64,33 +64,33 @@ const sourcesWithDataFetcher = async (
     return { sources: sourcesData, dataMap };
   }
 
-  // 优化：只请求 updated_at 比缓存新的数据源详情
+  // Optimization: request only sources newer than cached updated_at
   const needsUpdate = (source: SourceSummary): boolean => {
     const cachedSourceData = cachedData.dataMap?.[source.id];
-    if (!cachedSourceData) return true; // 没有缓存，需要获取
-    if (!source.updated_at) return true; // 没有更新时间，始终获取
-    if (!cachedSourceData.updated_at) return true; // 缓存没有更新时间，始终获取
-    return source.updated_at > cachedSourceData.updated_at; // 比较更新时间
+    if (!cachedSourceData) return true; // no cache, must fetch
+    if (!source.updated_at) return true; // missing updated_at, always fetch
+    if (!cachedSourceData.updated_at) return true; // cached item missing updated_at, always fetch
+    return source.updated_at > cachedSourceData.updated_at; // compare updated_at
   };
 
   const sourcesToFetch = sourcesData.filter(needsUpdate);
   const sourcesNeedingNoFetch = sourcesData.filter((s) => !needsUpdate(s));
 
-  // 并行获取需要更新的数据源详情
+  // Fetch details for stale sources in parallel
   const dataPromises = sourcesToFetch.map((s) =>
     api.getSourceData(s.id).then((data) => ({ id: s.id, data }))
   );
   const results = await Promise.all(dataPromises);
 
-  // 构建新的 dataMap：合并缓存数据和最新数据
+  // Build next dataMap by merging cache and fresh results
   const dataMap: Record<string, DataResponse> = {};
 
-  // 首先添加需要更新的数据源
+  // Insert freshly fetched sources first
   results.forEach(({ id, data }) => {
     dataMap[id] = data;
   });
 
-  // 然后添加不需要更新的数据源（使用缓存数据）
+  // Then add unchanged sources from cache
   sourcesNeedingNoFetch.forEach((s) => {
     if (cachedData.dataMap?.[s.id]) {
       dataMap[s.id] = cachedData.dataMap[s.id];
@@ -105,7 +105,7 @@ const sourcesWithDataFetcher = async (
 export function useSources() {
   const { cache } = useSWRConfig();
 
-  // 使用 getter 函数确保每次 fetcher 运行时都能获取最新缓存
+  // Use a getter so each fetcher run sees the latest cache
   const getCachedData = () =>
     cache.get(CACHE_KEY) as
       | { sources: SourceSummary[]; dataMap: Record<string, DataResponse> }

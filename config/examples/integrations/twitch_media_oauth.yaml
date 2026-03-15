@@ -9,8 +9,8 @@ flow:
           scopes: ["user:read:email"]
           doc_url: "https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/"
           token_request_type: "form"
-          client_id: "" # 请在此填入 Twitch Console 中的 Client ID
-          client_secret: "" # 请在此填入 Twitch Console 中的 Client Secret
+          client_id: "" # Fill in your Twitch Console Client ID
+          client_secret: "" # Fill in your Twitch Console Client Secret
           supports_pkce: false
       outputs:
           access_token: "access_token"

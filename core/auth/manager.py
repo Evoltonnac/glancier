@@ -1,5 +1,5 @@
 """
-鉴权管理器：统一管理各种鉴权方式（API Key, OAuth, Browser Cookie）。
+Authentication manager: unified handling for API Key, OAuth, and browser-cookie auth.
 """
 
 import logging
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class AuthManager:
     """
-    管理所有数据源的鉴权处理。
+    Manage authentication handling for all sources.
     """
 
     def __init__(self, secrets_controller: SecretsController, app_config: AppConfig | None = None):
@@ -32,12 +32,12 @@ class AuthManager:
         self._source_errors: dict[str, str] = {}
 
     def _find_oauth_step(self, source: SourceConfig) -> tuple[Any, AuthConfig] | None:
-        """从 source 或其引用的 integration 中查找 OAuth 步骤，并构建 AuthConfig。"""
-        # 首先检查 source 自身的 flow
+        """Find OAuth step from source/integration flow and build AuthConfig."""
+        # First check source's own flow.
         flow = source.flow
         integration = None
 
-        # 如果 source 没有 flow，检查引用的 integration
+        # If source has no flow, check referenced integration.
         if not flow and source.integration and self._app_config:
             integration = self._app_config.get_integration(source.integration)
             if integration:
@@ -46,13 +46,13 @@ class AuthManager:
         if not flow:
             return None
 
-        # 在 flow 中查找 OAuth 步骤
+        # Find OAuth step in flow.
         for step in flow:
             if step.use == StepType.OAUTH:
-                # 从 step.args 构建 AuthConfig
+                # Build AuthConfig from step.args.
                 args = step.args
 
-                # 处理 scope 参数（可能是字符串或列表）
+                # Handle scope argument (string or list).
                 scope_arg = args.get("scope") or args.get("scopes")
                 scopes = []
                 if scope_arg:
@@ -61,7 +61,7 @@ class AuthManager:
                     else:
                         scopes = [scope_arg]
 
-                # 获取 redirect_uri，如果没有则使用默认值
+                # Resolve redirect_uri with default fallback.
                 redirect_uri = args.get("redirect_uri") or "http://localhost:5173/oauth/callback"
 
                 # OAuth flow type
@@ -77,7 +77,7 @@ class AuthManager:
                 elif flow_arg in {"client_credentials", "client-credentials"}:
                     oauth_flow = OAuthFlowType.CLIENT_CREDENTIALS
 
-                # 解析 token_endpoint_auth_method
+                # Parse token_endpoint_auth_method.
                 auth_method_str = args.get("token_endpoint_auth_method")
                 token_endpoint_auth_method = TokenEndpointAuthMethod.NONE
                 if auth_method_str:
@@ -94,7 +94,7 @@ class AuthManager:
                     client_secret=args.get("client_secret"),
                     redirect_uri=redirect_uri,
                     scopes=scopes,
-                    # OAuth 自定义字段
+                    # OAuth custom field mappings.
                     token_request_type=args.get("token_request_type") or "form",
                     token_field=args.get("token_field") or "access_token",
                     token_type_field=args.get("token_type_field") or "token_type",
@@ -109,12 +109,12 @@ class AuthManager:
                     implicit_expires_in_field=args.get("implicit_expires_in_field") or "expires_in",
                     implicit_scope_field=args.get("implicit_scope_field") or "scope",
                     implicit_state_field=args.get("implicit_state_field") or "state",
-                    # PKCE 支持
+                    # PKCE support.
                     supports_pkce=args.get("supports_pkce", True),
                     code_challenge_method=args.get("code_challenge_method", "S256"),
                     response_type=args.get("response_type", "code"),
                     oauth_flow=oauth_flow,
-                    # Token Endpoint Auth Method
+                    # Token endpoint auth method.
                     token_endpoint_auth_method=token_endpoint_auth_method,
                     device_authorization_url=args.get("device_authorization_url") or args.get("device_authorization_endpoint"),
                     device_code_field=args.get("device_code_field") or "device_code",
@@ -127,7 +127,7 @@ class AuthManager:
                     oauth_error_description_field=args.get("oauth_error_description_field") or "error_description",
                     device_poll_interval=args.get("device_poll_interval", 5),
                     device_poll_timeout=args.get("device_poll_timeout", 900),
-                    # Documentation URL
+                    # Documentation URL.
                     doc_url=args.get("doc_url"),
                 )
                 return (step, auth_config)
@@ -135,11 +135,11 @@ class AuthManager:
         return None
 
     def register_source(self, source: SourceConfig):
-        """注册数据源的鉴权处理程序。"""
+        """Register auth handler for a source."""
         source_id = source.id
 
         try:
-            # source 或 integration 的 flow 中包含 OAuth 步骤
+            # Source or referenced integration flow contains OAuth step.
             oauth_step_result = self._find_oauth_step(source)
             if oauth_step_result:
                 step, auth_config = oauth_step_result
@@ -148,24 +148,24 @@ class AuthManager:
                     source_id,
                     self.secrets
                 )
-                logger.info(f"[{source_id}] OAuth 鉴权已注册 (from flow)")
+                logger.info("[%s] OAuth auth handler registered (from flow)", source_id)
                 return
 
-            logger.debug(f"[{source_id}] 未配置 OAuth 鉴权流程")
+            logger.debug("[%s] OAuth auth flow not configured", source_id)
 
         except Exception as e:
-            logger.error(f"[{source_id}] 鉴权注册失败: {e}")
+            logger.error("[%s] failed to register auth handler: %s", source_id, e)
             self._source_errors[source_id] = str(e)
 
     def get_oauth_handler(self, source_id: str) -> OAuthAuth | None:
-        """获取 OAuth 鉴权处理程序。"""
+        """Get OAuth auth handler for source."""
         return self._handlers.get(source_id)
 
     def get_source_error(self, source_id: str) -> str | None:
-        """获取数据源的鉴权错误信息。"""
+        """Get auth registration error for source."""
         return self._source_errors.get(source_id)
 
     def clear_error(self, source_id: str):
-        """清除数据源的鉴权错误。"""
+        """Clear auth registration error for source."""
         if source_id in self._source_errors:
             del self._source_errors[source_id]
