@@ -8,10 +8,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel
 from core.models import StoredSource, StoredView, ViewItem
 from core.integration_manager import IntegrationManager
+from core.error_formatter import build_error_envelope
 from core.source_state import SourceStatus, InteractionType, InteractionRequest
 from core.refresh_policy import (
     DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES,
@@ -1541,7 +1543,21 @@ async def reload_config(background_tasks: BackgroundTasks) -> dict:
         new_config = load_config()
     except Exception as exc:
         logger.error("Configuration reload failed: %s", exc, exc_info=True)
-        raise HTTPException(400, f"Configuration reload failed: {exc}") from exc
+        formatted_error = build_error_envelope(
+            code="config.reload_failed",
+            summary="Configuration reload failed",
+            details=str(exc),
+        )
+        legacy_detail = formatted_error["summary"]
+        if formatted_error["details"] != formatted_error["summary"]:
+            legacy_detail = f"{legacy_detail}: {formatted_error['details']}"
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": legacy_detail,
+                "error": formatted_error,
+            },
+        )
 
     stored_sources = _resource_manager.load_sources()
     source_ids_by_integration: dict[str, list[str]] = {}

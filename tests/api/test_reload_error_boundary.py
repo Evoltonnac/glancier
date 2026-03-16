@@ -53,8 +53,14 @@ def test_reload_returns_400_when_config_loader_raises(monkeypatch):
     response = client.post("/api/system/reload")
 
     assert response.status_code == 400
-    assert "Configuration reload failed" in response.json()["detail"]
-    assert "broken config" in response.json()["detail"]
+    payload = response.json()
+    assert "Configuration reload failed" in payload["detail"]
+    assert "broken config" in payload["detail"]
+    assert payload["error"] == {
+        "code": "config.reload_failed",
+        "summary": "Configuration reload failed",
+        "details": "broken config",
+    }
 
 
 def test_reload_updates_templates_from_external_integration_change(tmp_path, monkeypatch):
