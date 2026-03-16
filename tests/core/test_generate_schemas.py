@@ -19,11 +19,12 @@ def test_integration_yaml_schema_is_flow_only() -> None:
     properties = schema.get("properties", {})
 
     assert "flow" in properties
+    assert "default_refresh_interval_minutes" in properties
     assert "auth" not in properties
     assert "request" not in properties
     assert "parser" not in properties
     assert "id" not in properties
-    assert "flow" in schema.get("required", [])
+    assert "flow" not in schema.get("required", [])
 
 
 def test_integration_file_schema_rejects_inline_id() -> None:

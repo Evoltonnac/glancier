@@ -39,7 +39,7 @@ Always update in this strict order:
 ## Deterministic Modes
 
 1. **create mode**
-- Generate a complete integration YAML package (metadata, auth, flow, templates).
+- Generate a complete integration YAML package (top-level config, flow, templates).
 - Return full file content rather than partial snippets.
 - Keep auth -> fetch -> parse -> render flow explicit and traceable.
 
@@ -47,6 +47,19 @@ Always update in this strict order:
 - Edit only the sections requested by the user.
 - Preserve untouched sections exactly unless the user asks for wider changes.
 - Explain what changed and what intentionally remained unchanged.
+
+## Integration File Top-Level Contract
+
+For `config/integrations/*.yaml`, use these top-level fields:
+- optional `name`
+- optional `description`
+- optional `default_refresh_interval_minutes` (integer >= 0; `0` disables auto refresh)
+- optional `flow`
+- optional `templates` (defaults to empty list)
+
+Do not author `id` in integration YAML files. Runtime `id` comes from the filename:
+- `config/integrations/github.yaml` -> `id = github`
+- If inline `id` exists, it is ignored and replaced by filename id
 
 ## Prerequisite Gate
 

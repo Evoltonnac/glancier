@@ -8,6 +8,22 @@ Flow is the integration execution pipeline. It is responsible for:
 - Data fetching and parsing (`http` / `extract` / `script`)
 - Blocking interactions and resume execution (`NeedsInteraction -> user action -> resume`)
 
+## 1.1 Integration YAML Top-Level Contract
+
+`config/integrations/*.yaml` supports these top-level fields:
+
+| Field | Required | Type | Notes |
+| --- | --- | --- | --- |
+| `name` | No | `string \| null` | Display name for the integration. |
+| `description` | No | `string \| null` | Human-readable description. |
+| `default_refresh_interval_minutes` | No | `integer \| null` (>= 0) | Integration-level default auto-refresh interval. `null` means unset, `0` means disabled. |
+| `flow` | No | `Step[] \| null` | Flow definition used by sources inheriting this integration. |
+| `templates` | No | `ViewComponent[]` | SDUI templates. Defaults to an empty list. |
+
+`id` is not a valid top-level YAML field for integration files. Runtime `id` is always injected from filename:
+- `config/integrations/openai.yaml` -> integration id `openai`
+- inline YAML `id` (if present) is ignored and replaced by filename id
+
 ## 2. Step Output Channels
 
 Each `flow` step supports three output channels to map execution results to different storage domains. All variables defined in these channels can be referenced in subsequent steps using `{var}`.

@@ -2252,12 +2252,33 @@
       "default": null,
       "title": "Description"
     },
+    "default_refresh_interval_minutes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default Refresh Interval Minutes"
+    },
     "flow": {
-      "items": {
-        "$ref": "#/$defs/StepConfig"
-      },
-      "title": "Flow",
-      "type": "array"
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/StepConfig"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Flow"
     },
     "templates": {
       "items": {
@@ -2267,9 +2288,6 @@
       "type": "array"
     }
   },
-  "required": [
-    "flow"
-  ],
   "title": "Glanceus Integration Configuration",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema"

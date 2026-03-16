@@ -20,7 +20,7 @@ Use consistent terminology:
 
 ### Create Mode
 
-- Return a complete integration YAML package (metadata, flow, templates).
+- Return a complete integration YAML package (top-level config, flow, templates).
 - Keep the flow explicit and traceable.
 
 ### Edit Mode
@@ -28,6 +28,19 @@ Use consistent terminology:
 - Modify only the sections requested by the user.
 - Preserve all untouched sections unless explicitly requested.
 - Explain changed sections and intentionally unchanged sections.
+
+## Integration File Top-Level Contract
+
+For `config/integrations/*.yaml`, valid top-level fields are:
+- optional `name`
+- optional `description`
+- optional `default_refresh_interval_minutes` (integer >= 0; `0` disables auto refresh)
+- optional `flow`
+- optional `templates` (defaults to empty list)
+
+`id` must not be authored inline for integration files. Runtime `id` is derived from filename:
+- `config/integrations/openai.yaml` -> `id = openai`
+- If inline `id` exists, it is ignored and replaced by filename id
 
 ## Prerequisite Gate
 

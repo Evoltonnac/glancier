@@ -11,7 +11,20 @@ Use these in priority order:
 
 If examples conflict with docs, prefer current code/schema behavior.
 
-## 2. Minimum Step Contract
+## 2. Integration Top-Level Contract
+
+For `config/integrations/*.yaml`, valid top-level fields are:
+- optional `name`
+- optional `description`
+- optional `default_refresh_interval_minutes` (integer >= 0; `0` disables auto refresh)
+- optional `flow`
+- optional `templates` (defaults to empty list)
+
+Do not author `id` inline. Runtime integration id is always derived from filename:
+- `config/integrations/openai.yaml` -> `id = openai`
+- Inline `id` (if present) is ignored and replaced by filename id
+
+## 3. Minimum Step Contract
 
 Each flow step should include:
 - `id` (required)
@@ -29,7 +42,7 @@ Current `use` values:
 - `log`
 - `webview`
 
-## 3. Step Roles
+## 4. Step Roles
 
 | Step | Purpose | Typical Notes |
 | --- | --- | --- |
@@ -43,7 +56,7 @@ Current `use` values:
 | `script` | Lightweight transformation/aggregation | Keep deterministic and bounded |
 | `log` | Emit debugging breadcrumbs | Useful in investigation or migrations |
 
-## 4. Output Channels and Persistence
+## 5. Output Channels and Persistence
 
 Each step may map values into three channels:
 
@@ -58,7 +71,7 @@ Rules:
 - Use `outputs` only for values needed in UI or durable data snapshots.
 - Use `context` for temporary intermediate values.
 
-## 5. Variable Resolution Priority
+## 6. Variable Resolution Priority
 
 When resolving `{var}` in step args:
 1. Flow runtime context
@@ -67,7 +80,7 @@ When resolving `{var}` in step args:
 
 Design expressions so this precedence does not create ambiguous names.
 
-## 6. Canonical Patterns
+## 7. Canonical Patterns
 
 ### Pattern A: API Key -> HTTP -> Extract
 
@@ -194,7 +207,7 @@ flow:
       healthy: "healthy"
 ```
 
-## 7. Interaction and Resume Notes
+## 8. Interaction and Resume Notes
 
 `api_key`, `form`, `oauth`, `curl`, and `webview` can suspend execution with an interaction state.
 
@@ -203,7 +216,7 @@ Design implications:
 - Do not depend on `context` surviving long suspensions.
 - Persist required cross-resume values in `secrets` or `outputs`.
 
-## 8. Common Errors to Avoid
+## 9. Common Errors to Avoid
 
 - Storing tokens in `outputs`.
 - Flat token naming when token bundle exists (`access_token` instead of `oauth_secrets.access_token`).
@@ -212,7 +225,7 @@ Design implications:
 - Using unsupported `use` step names.
 - Mixing template-layer logic into flow (flow fetches/parses; SDUI renders).
 
-## 9. Authoring Checklist
+## 10. Authoring Checklist
 
 - [ ] Step `id` and `use` are present for every step.
 - [ ] Sensitive values map to `secrets` only.

@@ -1,5 +1,6 @@
 name: "GitHub Device Metrics"
 description: "OAuth device flow + GitHub profile, activity, and API quota metrics in a compact dashboard card."
+default_refresh_interval_minutes: 1440
 flow:
     - id: authorize
       use: oauth
