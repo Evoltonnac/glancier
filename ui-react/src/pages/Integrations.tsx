@@ -944,7 +944,7 @@ export default function IntegrationsPage() {
                                 <DialogContent className="max-w-2xl">
                                     {newIntegrationDialogView === "create" ? (
                                         <>
-                                        <DialogHeader>
+                                            <DialogHeader>
                                             <div className="flex items-center justify-between gap-3">
                                                 <DialogTitle>
                                                     New Integration
@@ -972,8 +972,8 @@ export default function IntegrationsPage() {
                                             <DialogDescription>
                                                 Create an integration YAML file and optionally start from a preset.
                                             </DialogDescription>
-                                        </DialogHeader>
-                                        <div className="py-4 space-y-5">
+                                            </DialogHeader>
+                                            <div className="py-4 space-y-5">
                                             {/* ID (Filename) Input */}
                                             <div className="space-y-2">
                                                 <div className="flex items-center justify-between">
@@ -1082,8 +1082,8 @@ export default function IntegrationsPage() {
                                             </div>
 
                                             <InlineError message={newIntegrationError} />
-                                        </div>
-                                        <DialogFooter>
+                                            </div>
+                                            <DialogFooter>
                                             <Button
                                                 variant="outline"
                                                 onClick={() =>
@@ -1103,7 +1103,7 @@ export default function IntegrationsPage() {
                                             >
                                                 Create
                                             </Button>
-                                        </DialogFooter>
+                                            </DialogFooter>
                                         </>
                                     ) : (
                                         <>
