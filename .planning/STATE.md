@@ -4,7 +4,7 @@ milestone: v0.1
 milestone_name: milestone
 status: **Phase 01 Completed** — 2026-03-15
 last_updated: "2026-03-15T16:21:25Z"
-last_activity: "2026-03-16 - Completed quick task 010: Clarify API key step vs generic form step boundaries"
+last_activity: "2026-03-16 - Completed quick task 011: Bundle skills prompt in client and add AI helper modal in integration create dialog"
 progress:
   total_phases: 8
   completed_phases: 8
@@ -29,7 +29,7 @@ Post-v1.0 reliability phase completed. Manual UAT matrix confirmed for hidden, m
 ## Session Continuity
 
 Last session: 2026-03-15T16:21:25Z
-Last activity: 2026-03-16 - Completed quick task 010: Clarify API key step vs generic form step boundaries
+Last activity: 2026-03-16 - Completed quick task 011: Bundle skills prompt in client and add AI helper modal in integration create dialog
 - 2026-03-11: Executed Phase 15 plans 01/02/04/05 (Authlib refactor, device flow backend, client credentials + refresh hardening, integration tests).
 - 2026-03-11: Implemented Phase 15-03 frontend work and created plan summaries (`15-01` ~ `15-05`), with `15-03` remaining `checkpoint_pending`.
 - Pending checkpoint: manually verify device flow modal and callback fragment handling before closing milestone v1.0.
@@ -55,6 +55,7 @@ Last activity: 2026-03-16 - Completed quick task 010: Clarify API key step vs ge
 | 008 | Translate Chinese-written docs/comments to English and optimize redundant content | 2026-03-14 | pending | [8-translate-all-chinese-written-docs-and-c](./quick/8-translate-all-chinese-written-docs-and-c/) |
 | 009 | Commit opener fix and sync CI/build docs for recent release pipeline changes | 2026-03-16 | pending | [9-ci-build](./quick/9-ci-build/) |
 | 010 | Clarify API key step vs generic form step boundaries | 2026-03-16 | pending | [10-api-key-api-key-data-output-api-key-secr](./quick/10-api-key-api-key-data-output-api-key-secr/) |
+| 011 | 将 skills 下的 prompt 打包进项目文件（客户端），并在集成创建弹窗加入 AI 星星按钮与新弹窗（复制 prompt/跳转 GitHub skills） | 2026-03-16 | c0e201f | [11-skills-prompt-ai-prompt-github-skills](./quick/11-skills-prompt-ai-prompt-github-skills/) |
 
 ## Pending Todos
 - [ ] [2026-03-10] global-state-chat-sidebar (Area: architecture, ui)
