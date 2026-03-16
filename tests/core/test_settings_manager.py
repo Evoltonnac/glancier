@@ -11,7 +11,8 @@ def test_load_settings_defaults_include_scraper_timeout(tmp_path):
 
     assert settings.scraper_timeout_seconds == 10
     assert settings.debug_logging_enabled is False
-    assert settings.refresh_interval_minutes == 0
+    assert settings.refresh_interval_minutes == 30
+    assert settings.encryption_enabled is True
     assert settings.language == "en"
 
 
@@ -46,6 +47,21 @@ def test_load_settings_invalid_language_falls_back_to_en(tmp_path):
 
     assert loaded.language == "en"
     assert loaded.proxy == "http://127.0.0.1:7890"
+    assert loaded.refresh_interval_minutes == 0
+    assert loaded.encryption_enabled is False
+
+
+def test_load_settings_invalid_refresh_interval_falls_back_to_default(tmp_path):
+    manager = SettingsManager(settings_dir=tmp_path)
+    manager.settings_file.write_text(
+        '{"refresh_interval_minutes": 7, "encryption_enabled": true}',
+        encoding="utf-8",
+    )
+
+    loaded = manager.load_settings()
+
+    assert loaded.refresh_interval_minutes == 30
+    assert loaded.encryption_enabled is True
 
 
 def test_get_or_create_master_key_prefers_keychain_value(tmp_path, monkeypatch):

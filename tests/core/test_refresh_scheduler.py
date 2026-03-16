@@ -135,7 +135,7 @@ def test_tick_uses_source_then_integration_then_global_priority():
             integration_id="integration-a",
             config={},
         ),
-        # global default: 15m -> due
+        # global default: 30m -> due
         SimpleNamespace(
             id="global-default",
             integration_id="integration-b",
@@ -145,13 +145,13 @@ def test_tick_uses_source_then_integration_then_global_priority():
     latest = [
         {"source_id": "source-override", "status": "active", "last_success_at": now - 10 * 60},
         {"source_id": "integration-default", "status": "active", "last_success_at": now - 10 * 60},
-        {"source_id": "global-default", "status": "active", "last_success_at": now - 20 * 60},
+        {"source_id": "global-default", "status": "active", "last_success_at": now - 40 * 60},
     ]
     scheduler = _build_scheduler(
         latest_records=latest,
         sources=sources,
         integration_defaults={"integration-a": 5, "integration-b": None},
-        global_interval=15,
+        global_interval=30,
     )
 
     asyncio.run(scheduler.run_tick_once())

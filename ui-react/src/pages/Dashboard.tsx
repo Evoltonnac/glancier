@@ -364,10 +364,9 @@ export default function Dashboard() {
     const refreshIntervalOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: t("settings.refresh.option.off") },
         { value: 5, label: t("settings.refresh.option.5m") },
-        { value: 15, label: t("settings.refresh.option.15m") },
         { value: 30, label: t("settings.refresh.option.30m") },
         { value: 60, label: t("settings.refresh.option.1h") },
-        { value: 180, label: t("settings.refresh.option.3h") },
+        { value: 1440, label: t("settings.refresh.option.1d") },
     ];
 
     // Use SWR for data fetching - handles dedup, caching, and StrictMode automatically

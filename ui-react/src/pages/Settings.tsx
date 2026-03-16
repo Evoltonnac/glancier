@@ -52,9 +52,9 @@ import { LogoIcon } from "../components/TopNav";
 const DEFAULT_SETTINGS: SystemSettings = {
     autostart: false,
     proxy: "",
-    encryption_enabled: false,
+    encryption_enabled: true,
     debug_logging_enabled: false,
-    refresh_interval_minutes: 0,
+    refresh_interval_minutes: 30,
     scraper_timeout_seconds: 10,
     master_key: null,
     theme: "system",
@@ -64,6 +64,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
 
 const SCRAPER_TIMEOUT_MIN_SECONDS = 1;
 const SCRAPER_TIMEOUT_MAX_SECONDS = 300;
+const DEFAULT_REFRESH_INTERVAL_MINUTES = 30;
+const REFRESH_INTERVAL_OPTIONS_MINUTES = [0, 5, 30, 60, 1440] as const;
 const BUG_REPORT_URL =
     "https://github.com/Evoltonnac/glanceus/issues/new/choose";
 
@@ -80,6 +82,18 @@ function normalizeScraperTimeoutSeconds(value: number | undefined): number {
         SCRAPER_TIMEOUT_MAX_SECONDS,
         Math.max(SCRAPER_TIMEOUT_MIN_SECONDS, Math.floor(value)),
     );
+}
+
+function normalizeRefreshIntervalMinutes(value: number | undefined): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return DEFAULT_REFRESH_INTERVAL_MINUTES;
+    }
+    const normalized = Math.floor(value);
+    return REFRESH_INTERVAL_OPTIONS_MINUTES.includes(
+        normalized as (typeof REFRESH_INTERVAL_OPTIONS_MINUTES)[number],
+    )
+        ? normalized
+        : DEFAULT_REFRESH_INTERVAL_MINUTES;
 }
 
 function resolvePortFromUrl(rawUrl: string): string | null {
@@ -120,10 +134,9 @@ export default function SettingsPage() {
     const refreshIntervalOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: t("settings.refresh.option.off") },
         { value: 5, label: t("settings.refresh.option.5m") },
-        { value: 15, label: t("settings.refresh.option.15m") },
         { value: 30, label: t("settings.refresh.option.30m") },
         { value: 60, label: t("settings.refresh.option.1h") },
-        { value: 180, label: t("settings.refresh.option.3h") },
+        { value: 1440, label: t("settings.refresh.option.1d") },
     ];
 
     const loadRuntimePortInfo = async (): Promise<RuntimePortInfo | null> => {
@@ -185,8 +198,10 @@ export default function SettingsPage() {
                 debug_logging_enabled: Boolean(swrSettings.debug_logging_enabled),
                 refresh_interval_minutes:
                     typeof swrSettings.refresh_interval_minutes === "number"
-                        ? swrSettings.refresh_interval_minutes
-                        : 0,
+                        ? normalizeRefreshIntervalMinutes(
+                              swrSettings.refresh_interval_minutes,
+                          )
+                        : DEFAULT_REFRESH_INTERVAL_MINUTES,
                 scraper_timeout_seconds: normalizeScraperTimeoutSeconds(
                     swrSettings.scraper_timeout_seconds,
                 ),
@@ -196,6 +211,11 @@ export default function SettingsPage() {
 
     // Loading state combines SWR loading and Tauri loading
     const loading = swrLoading;
+    const encryptionKeyStatus = settings.encryption_enabled
+        ? settings.master_key
+            ? t("settings.encryption.key_status.ready")
+            : t("settings.encryption.key_status.pending")
+        : t("settings.encryption.key_status.disabled");
 
     const handleSave = async () => {
         setSaving(true);
@@ -571,6 +591,9 @@ export default function SettingsPage() {
                                                     <p className="text-xs text-muted-foreground">
                                                         {t("settings.refresh.global.description")}
                                                     </p>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {t("settings.refresh.global.hint")}
+                                                    </p>
                                                 </div>
                                                 <div className="w-full sm:w-[180px]">
                                                     <Select
@@ -834,6 +857,9 @@ export default function SettingsPage() {
                                                     </p>
                                                     <p className="text-xs text-muted-foreground">
                                                         {t("settings.encryption.local.description")}
+                                                    </p>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {encryptionKeyStatus}
                                                     </p>
                                                 </div>
                                                 <Switch

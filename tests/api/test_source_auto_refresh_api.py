@@ -181,15 +181,15 @@ def test_update_source_refresh_interval_endpoint():
 
     response = client.put(
         "/api/sources/source-1/refresh-interval",
-        json={"interval_minutes": 15},
+        json={"interval_minutes": 30},
     )
     assert response.status_code == 200
-    assert response.json()["refresh_interval_minutes"] == 15
+    assert response.json()["refresh_interval_minutes"] == 30
 
     list_payload = client.get("/api/sources")
     listed = next(item for item in list_payload.json() if item["id"] == "source-1")
-    assert listed["refresh_interval_minutes"] == 15
-    assert listed["effective_refresh_interval_minutes"] == 15
+    assert listed["refresh_interval_minutes"] == 30
+    assert listed["effective_refresh_interval_minutes"] == 30
     assert listed["effective_refresh_interval_source"] == "source"
 
     unset_response = client.put(

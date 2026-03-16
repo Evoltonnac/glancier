@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-REFRESH_INTERVAL_OPTIONS_MINUTES: tuple[int, ...] = (0, 5, 15, 30, 60, 180)
-DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES = 0
+REFRESH_INTERVAL_OPTIONS_MINUTES: tuple[int, ...] = (0, 5, 30, 60, 1440)
+DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES = 30
 
 
 def normalize_refresh_interval_minutes(value: Any) -> int | None:

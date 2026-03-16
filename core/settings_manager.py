@@ -3,9 +3,13 @@ import json
 import logging
 from pathlib import Path
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from core.refresh_policy import DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
+from core.refresh_policy import (
+    DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES,
+    REFRESH_INTERVAL_OPTIONS_MINUTES,
+    normalize_refresh_interval_minutes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +17,7 @@ logger = logging.getLogger(__name__)
 class SystemSettings(BaseModel):
     autostart: bool = False
     proxy: str = ""  # e.g. "http://127.0.0.1:7890"
-    encryption_enabled: bool = False
+    encryption_enabled: bool = True
     debug_logging_enabled: bool = False
     # Global auto-refresh interval in minutes. 0 means disabled.
     refresh_interval_minutes: int = Field(
@@ -30,6 +34,15 @@ class SystemSettings(BaseModel):
     density: str = "normal"
     # UI language. English is default.
     language: Literal["en", "zh"] = "en"
+
+    @field_validator("refresh_interval_minutes", mode="before")
+    @classmethod
+    def _validate_refresh_interval_minutes(cls, value):
+        normalized = normalize_refresh_interval_minutes(value)
+        if normalized is None:
+            options = ", ".join(str(option) for option in REFRESH_INTERVAL_OPTIONS_MINUTES)
+            raise ValueError(f"refresh_interval_minutes must be one of: {options}")
+        return normalized
 
 
 _SETTINGS_DIR = Path(os.getenv("GLANCEUS_DATA_DIR", ".")) / "data"
@@ -59,6 +72,18 @@ class SettingsManager:
                 # Backward-compatible normalization for older settings files.
                 if not isinstance(data, dict):
                     return SystemSettings()
+                if "encryption_enabled" not in data:
+                    # Keep legacy installs unchanged when the old field is absent.
+                    data["encryption_enabled"] = False
+                raw_refresh = data.get("refresh_interval_minutes")
+                normalized_refresh = normalize_refresh_interval_minutes(raw_refresh)
+                if "refresh_interval_minutes" not in data:
+                    # Older settings files defaulted to disabled global refresh.
+                    data["refresh_interval_minutes"] = 0
+                elif normalized_refresh is None:
+                    data["refresh_interval_minutes"] = DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
+                else:
+                    data["refresh_interval_minutes"] = normalized_refresh
                 if data.get("language") not in {"en", "zh"}:
                     data["language"] = "en"
                 return SystemSettings.model_validate(data)

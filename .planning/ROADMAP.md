@@ -46,7 +46,7 @@ Plans:
 - [x] 01-02-PLAN.md — Rust daemon claim loop and direct callback
 - [x] 01-03-PLAN.md — Frontend role refactor, reliability validation, and docs
 
-### Phase 2: 易用性优化。
+### Phase 2: 易用性优化。 (Completed: 2026-03-16)
 
 产品即将正式发布，在那之前，先统一所有界面文案及输出的错误信息。
 
@@ -66,9 +66,9 @@ Plans:
 - **P2-REQ-03**: Full i18n support for English and Chinese, default language is English, language switch is available in Settings.
 - **P2-REQ-04**: Global refresh default is 30 minutes with options from 5 minutes to 1 day; encryption is enabled by default and generates a master key once at startup.
 **Depends on:** Phase 1
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 - [x] 02-01-PLAN.md — Standardize runtime error envelope for localization-ready UX
 - [x] 02-02-PLAN.md — Build EN/ZH i18n foundation and migrate core UI copy
-- [ ] 02-03-PLAN.md — Finalize refresh/encryption defaults and settings UX hardening
+- [x] 02-03-PLAN.md — Finalize refresh/encryption defaults and settings UX hardening

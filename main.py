@@ -78,6 +78,31 @@ def resolve_stored_source(stored: "StoredSource", config: AppConfig) -> SourceCo
 
     return SourceConfig.model_validate(base)
 
+
+def ensure_startup_encryption_key(settings_manager: object) -> None:
+    """Provision a master key on startup when encryption is enabled by default."""
+    load_settings = getattr(settings_manager, "load_settings", None)
+    get_or_create_master_key = getattr(settings_manager, "get_or_create_master_key", None)
+    if not callable(load_settings) or not callable(get_or_create_master_key):
+        return
+
+    try:
+        settings = load_settings()
+    except Exception as exc:
+        logger.warning("failed to load settings during startup key provisioning: %s", exc)
+        return
+
+    if not getattr(settings, "encryption_enabled", False):
+        return
+    if getattr(settings, "master_key", None):
+        return
+
+    try:
+        get_or_create_master_key()
+        logger.info("provisioned encryption master key during startup")
+    except Exception as exc:
+        logger.warning("failed to provision startup master key: %s", exc)
+
 # Logging setup.
 logging.basicConfig(
     level=resolve_initial_log_level(),
@@ -180,6 +205,7 @@ def create_app() -> FastAPI:
 
     # System settings manager.
     settings_manager = SettingsManager()
+    ensure_startup_encryption_key(settings_manager)
 
     # Executor.
     scraper_task_store = ScraperTaskStore()

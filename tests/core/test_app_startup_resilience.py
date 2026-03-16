@@ -6,6 +6,36 @@ from core.config_loader import AppConfig
 import main as main_module
 
 
+def test_ensure_startup_encryption_key_provisions_missing_key():
+    calls: list[str] = []
+    settings_manager = SimpleNamespace(
+        load_settings=lambda: SimpleNamespace(
+            encryption_enabled=True,
+            master_key=None,
+        ),
+        get_or_create_master_key=lambda: calls.append("created"),
+    )
+
+    main_module.ensure_startup_encryption_key(settings_manager)
+
+    assert calls == ["created"]
+
+
+def test_ensure_startup_encryption_key_skips_when_disabled():
+    calls: list[str] = []
+    settings_manager = SimpleNamespace(
+        load_settings=lambda: SimpleNamespace(
+            encryption_enabled=False,
+            master_key=None,
+        ),
+        get_or_create_master_key=lambda: calls.append("created"),
+    )
+
+    main_module.ensure_startup_encryption_key(settings_manager)
+
+    assert calls == []
+
+
 def test_create_app_falls_back_to_empty_config_when_load_fails(monkeypatch):
     def _boom():
         raise RuntimeError("invalid config")
@@ -66,42 +96,41 @@ def test_create_app_seeds_first_launch_workspace_when_empty(monkeypatch):
 
     main_module.create_app()
 
-    assert len(created_integrations) == 6
+    assert len(created_integrations) == 5
     created_filenames = {filename for filename, _ in created_integrations}
     assert created_filenames == {
-        "devto_opensource.yaml",
-        "github_device_oauth.yaml",
-        "openrouter_tools.yaml",
-        "twitch_media_oauth.yaml",
-        "icloud_webscraper.yaml",
-        "gold_price_market.yaml",
+        "devto_daily_briefing.yaml",
+        "dribbble_design_picks.yaml",
+        "github_profile_pulse.yaml",
+        "gold_spot_pulse.yaml",
+        "twitch_live_radar.yaml",
     }
 
     assert len(saved_sources) == 5
     assert {source.integration_id for source in saved_sources} == {
-        "devto_opensource",
-        "openrouter_tools",
-        "twitch_media_oauth",
-        "icloud_webscraper",
-        "gold_price_market",
+        "devto_daily_briefing",
+        "dribbble_design_picks",
+        "github_profile_pulse",
+        "gold_spot_pulse",
+        "twitch_live_radar",
     }
     assert {source.id for source in saved_sources} == {
-        "starter_devto_source",
-        "starter_openrouter_source",
-        "starter_twitch_source",
-        "starter_icloud_source",
-        "starter_gold_source",
+        "starter_devto_daily_briefing_source",
+        "starter_dribbble_design_picks_source",
+        "starter_github_profile_pulse_source",
+        "starter_gold_spot_pulse_source",
+        "starter_twitch_live_radar_source",
     }
 
     assert len(saved_views) == 1
     assert saved_views[0].id == "starter_pack_overview"
     assert len(saved_views[0].items) == 5
     assert {item.source_id for item in saved_views[0].items} == {
-        "starter_devto_source",
-        "starter_openrouter_source",
-        "starter_twitch_source",
-        "starter_icloud_source",
-        "starter_gold_source",
+        "starter_devto_daily_briefing_source",
+        "starter_dribbble_design_picks_source",
+        "starter_github_profile_pulse_source",
+        "starter_gold_spot_pulse_source",
+        "starter_twitch_live_radar_source",
     }
     assert all(
         item.props.get("type") in {"source_card", None}
@@ -187,11 +216,11 @@ def test_create_app_bootstrap_sources_use_api_create_flow_for_auto_refresh(monke
 
     assert len(refresh_calls) == 5
     assert {call["source_id"] for call in refresh_calls} == {
-        "starter_devto_source",
-        "starter_openrouter_source",
-        "starter_twitch_source",
-        "starter_icloud_source",
-        "starter_gold_source",
+        "starter_devto_daily_briefing_source",
+        "starter_dribbble_design_picks_source",
+        "starter_github_profile_pulse_source",
+        "starter_gold_spot_pulse_source",
+        "starter_twitch_live_radar_source",
     }
     assert all(call["executor"] is not None for call in refresh_calls)
     assert all(call["config"] is not None for call in refresh_calls)
