@@ -25,13 +25,10 @@ References:
 
 ## 4. Recommended Outputs and Persistence
 
-Recommended fields:
-- `access_token`
-- `refresh_token` (if present)
-- `expires_at` or `expires_in`
-- `token_type`
+Canonical output/persistence field:
+- `oauth_secrets` (dictionary payload, including `access_token` and optional refresh/expiry fields)
 
-Map these fields explicitly under `secrets` so refresh/resume behavior is traceable.
+Flow references should use dotted paths (for example `oauth_secrets.access_token`) instead of flat token fields.
 
 ## 5. Errors and Recovery
 

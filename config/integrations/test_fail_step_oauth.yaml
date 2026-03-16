@@ -5,7 +5,7 @@ description: "Failure test for oauth step: prompts for OAuth fields, then protec
 # - client_id: "test-client-id-invalid"
 # - client_secret: "test-client-secret-invalid"
 # Optional manual seed to force HTTP 401 branch directly:
-# - access_token: "test-token-invalid"
+# - oauth_secrets: {"access_token":"test-token-invalid"}
 flow:
   - id: auth_oauth
     use: oauth
@@ -15,10 +15,8 @@ flow:
       doc_url: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
       scopes: ["read:user"]
       token_request_type: "json"
-    outputs:
-      access_token: "access_token"
     secrets:
-      access_token: "access_token"
+      oauth_secrets: "oauth_secrets"
 
   - id: fetch_unauthorized
     use: http
@@ -26,4 +24,4 @@ flow:
       url: "https://httpbin.org/status/401"
       method: "GET"
       headers:
-        Authorization: "Bearer {access_token}"
+        Authorization: "Bearer {oauth_secrets.access_token}"

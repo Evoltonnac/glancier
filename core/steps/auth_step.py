@@ -57,7 +57,7 @@ async def execute_auth_step(
     Executes an authentication step (API_KEY, CURL, or OAUTH).
     
     Returns:
-        Dict[str, Any]: output dictionary with keys like api_key, access_token, etc.
+        Dict[str, Any]: output dictionary with keys like api_key, oauth_secrets, etc.
     """
     from core.executor import RequiredSecretMissing
     from core.source_state import InteractionType, InteractionField
@@ -126,25 +126,14 @@ async def execute_auth_step(
         oauth_secret_key = _secret_name_for_source(step, "oauth_secrets", "oauth_secrets")
         explicit_payload = token_data.get(oauth_secret_key) if oauth_secret_key else None
         default_payload = token_data.get("oauth_secrets")
-        legacy_payload = token_data.get("access_token")
 
-        normalized_explicit = explicit_payload if isinstance(explicit_payload, dict) else {}
-        if isinstance(explicit_payload, str):
-            normalized_explicit = {"access_token": explicit_payload}
+        token_payload: Dict[str, Any] = {}
+        if isinstance(default_payload, dict):
+            token_payload.update(default_payload)
+        if oauth_secret_key != "oauth_secrets" and isinstance(explicit_payload, dict):
+            token_payload.update(explicit_payload)
 
-        normalized_default = default_payload if isinstance(default_payload, dict) else {}
-        if isinstance(default_payload, str):
-            normalized_default = {"access_token": default_payload}
-
-        normalized_legacy = legacy_payload if isinstance(legacy_payload, dict) else {}
-        if isinstance(legacy_payload, str):
-            normalized_legacy = {"access_token": legacy_payload}
-
-        token_payload = dict(normalized_legacy)
-        token_payload.update(normalized_default)
-        token_payload.update(normalized_explicit)
-
-        token = token_payload.get("access_token") or token_payload.get("key")
+        token = token_payload.get("access_token")
 
         oauth_args = args or {}
         client_id = oauth_args.get("client_id") or token_data.get("client_id")
@@ -192,24 +181,8 @@ async def execute_auth_step(
                 data=interaction_data
             )
             
-        normalized_payload = dict(token_payload) if token_payload else {"access_token": token}
-        if token and "access_token" not in normalized_payload:
-            normalized_payload["access_token"] = token
-        output: Dict[str, Any] = {
-            "access_token": token,
-            "oauth_secrets": normalized_payload,
+        return {
+            "oauth_secrets": dict(token_payload),
         }
-        for key in (
-            "refresh_token",
-            "expires_in",
-            "expires_at",
-            "scope",
-            "token_type",
-            "created_at",
-            "saved_at",
-        ):
-            if normalized_payload.get(key) is not None:
-                output[key] = normalized_payload[key]
-        return output
 
     return {}

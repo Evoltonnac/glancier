@@ -99,7 +99,7 @@ async def test_invalid_credentials_rolls_back_to_nearest_upstream_auth_step(
                 step_id="oauth_reauth",
                 use=StepType.OAUTH,
                 args={"oauth_flow": "code", "doc_url": "https://docs.example.com/oauth"},
-                secrets={"oauth_reauth_token": "access_token"},
+                secrets={"oauth_reauth_token": "oauth_secrets.access_token"},
             ),
             build_step(
                 step_id="fetch_after_oauth",
@@ -144,7 +144,7 @@ async def test_oauth_invalid_credentials_keeps_oauth_secrets_when_refresh_fails(
                 step_id="oauth_auth",
                 use=StepType.OAUTH,
                 args={"oauth_flow": "code"},
-                secrets={"custom_oauth_token": "access_token", "oauth_secrets": "oauth_secrets"},
+                secrets={"custom_oauth_token": "oauth_secrets.access_token", "oauth_secrets": "oauth_secrets"},
             ),
             build_step(
                 step_id="fetch_data",
@@ -154,11 +154,6 @@ async def test_oauth_invalid_credentials_keeps_oauth_secrets_when_refresh_fails(
         ],
     )
 
-    executor._secrets.set_secret(
-        source.id,
-        "access_token",
-        {"access_token": "stale-token", "refresh_token": "stale-refresh"},
-    )
     executor._secrets.set_secret(source.id, "custom_oauth_token", "stale-token")
     executor._secrets.set_secret(
         source.id,
@@ -186,7 +181,6 @@ async def test_oauth_invalid_credentials_keeps_oauth_secrets_when_refresh_fails(
 
     await executor.fetch_source(source)
 
-    assert executor._secrets.get_secret(source.id, "access_token") is not None
     assert executor._secrets.get_secret(source.id, "custom_oauth_token") is not None
     assert executor._secrets.get_secret(source.id, "oauth_secrets") is not None
     assert executor._secrets.get_secret(source.id, "oauth_pkce") is not None

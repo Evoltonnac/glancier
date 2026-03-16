@@ -11,7 +11,7 @@ Architecture background: [01_architecture_and_orchestration.md](./01_architectur
 
 ### `oauth`
 - Purpose: run OAuth and persist tokens.
-- Typical output: `access_token` (optionally refresh/expiry fields)
+- Typical output: `oauth_secrets` (token bundle, for example `oauth_secrets.access_token`)
 - See details: [03_step_oauth.md](./03_step_oauth.md)
 
 ### `curl`

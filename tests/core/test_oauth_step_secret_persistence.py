@@ -54,9 +54,9 @@ async def test_oauth_step_prefers_explicit_oauth_secrets_and_fallbacks_to_defaul
                 use=StepType.OAUTH,
                 secrets={
                     "custom_oauth_bundle": "oauth_secrets",
-                    "saved_access_token": "access_token",
-                    "saved_refresh_token": "refresh_token",
-                    "saved_expires_at": "expires_at",
+                    "saved_access_token": "oauth_secrets.access_token",
+                    "saved_refresh_token": "oauth_secrets.refresh_token",
+                    "saved_expires_at": "oauth_secrets.expires_at",
                 },
             )
         ],

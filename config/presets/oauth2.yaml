@@ -1,47 +1,54 @@
 id: "oauth2"
 label: "OAuth"
-description: "Authorization-code OAuth2 flow with API request."
+description: "Starter template for OAuth2 authorization and authenticated API fetch."
 filename_hint: "oauth2_example"
 content_template: |
   name: {{display_name_single_quoted}}
-  description: "Preset for OAuth2-based integrations."
+  description: "Authenticate with OAuth2 and fetch profile-like data."
   flow:
     - id: authorize
       use: oauth
       args:
+        oauth_flow: "code"
         auth_url: "https://provider.example.com/oauth/authorize"
         token_url: "https://provider.example.com/oauth/token"
         scopes: ["read"]
         doc_url: "https://provider.example.com/docs/oauth"
-      outputs:
-        access_token: "access_token"
+        client_id: "REPLACE_WITH_CLIENT_ID"
+        client_secret: "REPLACE_WITH_CLIENT_SECRET"
       secrets:
-        access_token: "access_token"
+        oauth_secrets: "oauth_secrets"
+
     - id: fetch_profile
       use: http
       args:
         url: "https://provider.example.com/api/profile"
         method: "GET"
         headers:
-          Authorization: "Bearer {access_token}"
+          Authorization: "Bearer {oauth_secrets.access_token}"
+          Accept: "application/json"
       outputs:
         profile_payload: "http_response"
-    - id: parse_username
+
+    - id: parse_profile
       use: extract
       args:
         source: "{profile_payload}"
         type: "jsonpath"
-        expr: "$.name"
       outputs:
-        username: "$.name"
+        profile_name: "$.name"
+        profile_email: "$.email"
+
   templates:
     - id: "oauth_profile"
       type: "source_card"
       ui:
         title: "OAuth Profile"
-        icon: "🔓"
+        icon: "LOCK"
       widgets:
         - type: "FactSet"
           facts:
-            - label: "User"
-              value: "{username}"
+            - label: "Name"
+              value: "{profile_name}"
+            - label: "Email"
+              value: "{profile_email}"

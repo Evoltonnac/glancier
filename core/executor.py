@@ -334,17 +334,6 @@ class Executor:
                     for secret_name, source_path in step.secrets.items():
                         resolved = self._resolve_output_path(output, source_path)
                         if resolved is not _MISSING:
-                            if (
-                                step.use == StepType.OAUTH
-                                and secret_name == "access_token"
-                            ):
-                                existing_token_secret = self._secrets.get_secret(source.id, "access_token")
-                                if isinstance(existing_token_secret, dict):
-                                    logger.debug(
-                                        "[%s] Skip overwriting structured OAuth token payload with scalar value",
-                                        source.id,
-                                    )
-                                    continue
                             self._secrets.set_secret(source.id, secret_name, resolved)
                             logger.info(f"[{source.id}] Stored secret '{secret_name}' from step {step.id}")
 

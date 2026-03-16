@@ -17,7 +17,7 @@ OAuth-specific details: [03_step_oauth.md](./03_step_oauth.md)
 - Goal: validate missing/invalid credential handling for `oauth`
 - Input:
   - initial interaction with invalid `client_id` / `client_secret`
-  - optional direct-failure seed: `access_token: test-token-invalid`
+  - optional direct-failure seed: `oauth_secrets: {"access_token":"test-token-invalid"}`
 - Expected:
   - when token exists, `fetch_unauthorized` returns 401
   - source status becomes `error`
