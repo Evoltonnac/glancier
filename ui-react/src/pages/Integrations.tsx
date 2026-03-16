@@ -941,39 +941,18 @@ export default function IntegrationsPage() {
                                     handleNewIntegrationDialogChange
                                 }
                             >
-                                <DialogContent className="max-w-2xl">
+                                <DialogContent className="max-w-lg">
                                     {newIntegrationDialogView === "create" ? (
                                         <>
                                             <DialogHeader>
-                                            <div className="flex items-center justify-between gap-3">
-                                                <DialogTitle>
-                                                    New Integration
-                                                </DialogTitle>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <button
-                                                            type="button"
-                                                            aria-label="Open AI prompt actions"
-                                                            onClick={() =>
-                                                                setNewIntegrationDialogView(
-                                                                    "ai-prompt",
-                                                                )
-                                                            }
-                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[linear-gradient(140deg,#ff7a18_0%,#ff3d81_45%,#ffbe0b_100%)] text-white shadow-[0_10px_24px_rgba(255,95,58,0.45)] transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2"
-                                                        >
-                                                            <Sparkles className="h-4 w-4" />
-                                                        </button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="left">
-                                                        AI Prompt
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </div>
+                                            <DialogTitle>
+                                                New Integration
+                                            </DialogTitle>
                                             <DialogDescription>
                                                 Create an integration YAML file and optionally start from a preset.
                                             </DialogDescription>
                                             </DialogHeader>
-                                            <div className="py-4 space-y-5">
+                                            <div className="py-3 space-y-4">
                                             {/* ID (Filename) Input */}
                                             <div className="space-y-2">
                                                 <div className="flex items-center justify-between">
@@ -1036,54 +1015,68 @@ export default function IntegrationsPage() {
                                             </div>
 
                                             {/* Presets Section */}
-                                            <div className="space-y-3">
+                                            <div className="space-y-2">
                                                 <Label className="text-sm font-medium">
-                                                    Presets
+                                                    Process
                                                 </Label>
-                                                <div className="relative">
-                                                    <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-                                                        {integrationPresets.map(
-                                                            (preset) => {
-                                                                const selected =
-                                                                    selectedPresetId ===
-                                                                    preset.id;
-                                                                const IconComponent = preset.icon;
-                                                                return (
-                                                                    <Tooltip key={preset.id}>
-                                                                        <TooltipTrigger asChild>
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() =>
-                                                                                    handlePresetSelect(
-                                                                                        preset,
-                                                                                    )
-                                                                                }
-                                                                                className={`flex-shrink-0 w-32 snap-start rounded-lg border transition-all duration-150 ${selected ? "border-brand bg-brand/10 shadow-soft-elevation" : "border-border bg-surface hover:border-brand/50 hover:bg-surface/80"}`}
-                                                                            >
-                                                                                <div className="flex flex-col items-center justify-center p-4 gap-2">
-                                                                                    <div className="w-12 h-12 flex items-center justify-center">
-                                                                                        <IconComponent className={`w-10 h-10 ${selected ? "text-brand" : "text-muted-foreground"}`} />
-                                                                                    </div>
-                                                                                    <p className="text-sm font-medium text-center">
-                                                                                        {preset.label}
-                                                                                    </p>
-                                                                                </div>
-                                                                            </button>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="top" className="max-w-xs">
-                                                                            {preset.description}
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                );
-                                                            },
-                                                        )}
-                                                    </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {integrationPresets.map(
+                                                        (preset) => {
+                                                            const selected =
+                                                                selectedPresetId ===
+                                                                preset.id;
+                                                            const IconComponent = preset.icon;
+                                                            return (
+                                                                <Tooltip key={preset.id}>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                handlePresetSelect(
+                                                                                    preset,
+                                                                                )
+                                                                            }
+                                                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-150 ${selected ? "border-brand bg-brand/10 shadow-soft-elevation" : "border-border bg-surface hover:border-brand/50 hover:bg-surface/80"}`}
+                                                                        >
+                                                                            <IconComponent className={`w-5 h-5 flex-shrink-0 ${selected ? "text-brand" : "text-muted-foreground"}`} />
+                                                                            <p className="text-sm font-medium truncate">
+                                                                                {preset.label}
+                                                                            </p>
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="max-w-xs">
+                                                                        {preset.description}
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            );
+                                                        },
+                                                    )}
                                                 </div>
                                             </div>
 
                                             <InlineError message={newIntegrationError} />
                                             </div>
                                             <DialogFooter>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        onClick={() =>
+                                                            setNewIntegrationDialogView(
+                                                                "ai-prompt",
+                                                            )
+                                                        }
+                                                        className="h-9 w-9 border-amber-500/50 text-amber-600 dark:text-amber-400 hover:border-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
+                                                    >
+                                                        <Sparkles className="h-4 w-4" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    AI Prompt
+                                                </TooltipContent>
+                                            </Tooltip>
+                                            <div className="flex-1" />
                                             <Button
                                                 variant="outline"
                                                 onClick={() =>
