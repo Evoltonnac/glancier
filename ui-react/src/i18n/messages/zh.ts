@@ -58,7 +58,7 @@ const zhMessages = {
   "settings.toast.import_key_failed": "导入失败：{reason}",
   "settings.toast.open_console_failed": "打开网页控制台失败：{reason}",
   "settings.toast.open_log_failed": "打开日志文件夹失败：{reason}",
-  "settings.about.tagline": "个人数据聚合与监控看板",
+  "settings.about.tagline": "统一数据聚合与监控看板",
   "settings.about.up_to_date": "当前已是最新版本",
   "settings.button.check_update": "检查更新",
   "settings.button.open_console": "打开网页控制台",

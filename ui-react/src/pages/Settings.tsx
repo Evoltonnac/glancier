@@ -47,7 +47,7 @@ import { isTauri, openExternalLink } from "../lib/utils";
 import { EmptyState } from "../components/EmptyState";
 import { useStore } from "../store";
 import { useSettings } from "../hooks/useSWR";
-import logoMark from "../assets/logo.svg";
+import { LogoIcon } from "../components/TopNav";
 
 const DEFAULT_SETTINGS: SystemSettings = {
     autostart: false,
@@ -949,14 +949,8 @@ export default function SettingsPage() {
                                     className="animate-in fade-in duration-300 mt-0"
                                 >
                                     <div className="flex flex-col items-center justify-center py-16 space-y-6">
-                                        <div className="w-24 h-24 bg-brand rounded-[2rem] flex items-center justify-center shadow-lg shadow-brand/20">
-                                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 p-[1px]">
-                                                <img
-                                                    src={logoMark}
-                                                    alt="Glanceus"
-                                                    className="h-8 w-8 object-contain brightness-0 invert"
-                                                />
-                                            </div>
+                                        <div className="flex items-center justify-center p-4 bg-background/80 backdrop-blur-md rounded-2xl border border-border/50">
+                                            <LogoIcon className="w-16 h-16" />
                                         </div>
                                         <div className="text-center space-y-2">
                                             <h1 className="text-3xl font-bold tracking-tight">

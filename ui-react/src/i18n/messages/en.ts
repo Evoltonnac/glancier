@@ -58,7 +58,7 @@ const enMessages = {
   "settings.toast.import_key_failed": "Import failed: {reason}",
   "settings.toast.open_console_failed": "Failed to open web console: {reason}",
   "settings.toast.open_log_failed": "Failed to open log folder: {reason}",
-  "settings.about.tagline": "Personal data hub and monitoring dashboard",
+  "settings.about.tagline": "Your unified data aggregation & monitoring dashboard",
   "settings.about.up_to_date": "You are on the latest version.",
   "settings.button.check_update": "Check Updates",
   "settings.button.open_console": "Open Web Console",
