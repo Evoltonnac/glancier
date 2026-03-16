@@ -29,7 +29,7 @@ Always update in this strict order:
 1. Update `SKILL.md`.
 2. Update `references/` files.
 3. Validate skill frontmatter:
-   - `python /Users/xingminghua/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/integration-editor`
+   - `cd skills/integration-editor && python scripts/quick_validate.py .`
 
 ## Canonical Ownership
 
