@@ -4,7 +4,7 @@ milestone: v0.1
 milestone_name: milestone
 status: "**Phase 02 Complete** — All plans completed (2026-03-16)"
 last_updated: "2026-03-16T16:09:05Z"
-last_activity: "2026-03-17 - Phase 02 verified and accepted via gsd:workflow:verify-phase"
+last_activity: "2026-03-16 - Completed quick task 260317-0uf: 开启tauri更新检测，包括创建密钥"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -29,7 +29,8 @@ Phase 2 delivered standardized error envelopes, EN/ZH i18n foundation, and final
 ## Session Continuity
 
 Last session: 2026-03-15T16:21:25Z
-Last activity: 2026-03-17 - Phase 02 verified and accepted via gsd:workflow:verify-phase
+Last activity: 2026-03-16 - Completed quick task 260317-0uf: 开启tauri更新检测，包括创建密钥
+- 2026-03-16: Completed quick task `260317-0uf`; enabled Tauri updater detection, generated local updater signing keys, and wired release signing secrets.
 - 2026-03-17: Completed `gsd:workflow:verify-phase` for Phase 02; validation sign-off updated to approved and all task checks marked green.
 - 2026-03-16: Completed Phase 02 Plan 03; added `02-03-SUMMARY.md` and `02-VERIFICATION.md`, and updated roadmap/status to 3/3 complete.
 - 2026-03-16: Added backend `SystemSettings.language` (`en`/`zh`, default `en`) and compatibility normalization for old settings payloads.
@@ -65,6 +66,7 @@ Last activity: 2026-03-17 - Phase 02 verified and accepted via gsd:workflow:veri
 | 012 | 重新处理设置页的关于页面 UI 展示，将图标替换为 Header SVG 并添加相同背景色，美化介绍 | 2026-03-16 | c9cd0a0 | [12-ui-header-svg](./quick/12-ui-header-svg/) |
 | 010 | Clarify API key step vs generic form step boundaries | 2026-03-16 | pending | [10-api-key-api-key-data-output-api-key-secr](./quick/10-api-key-api-key-data-output-api-key-secr/) |
 | 011 | 将 skills 下的 prompt 打包进项目文件（客户端），并在集成创建弹窗加入 AI 星星按钮与新弹窗（复制 prompt/跳转 GitHub skills） | 2026-03-16 | c0e201f | [11-skills-prompt-ai-prompt-github-skills](./quick/11-skills-prompt-ai-prompt-github-skills/) |
+| 260317-0uf | 开启tauri更新检测，包括创建密钥 | 2026-03-16 | 5e4f61e | [260317-0uf-tauri](./quick/260317-0uf-tauri/) |
 
 ## Pending Todos
 - [ ] [2026-03-10] global-state-chat-sidebar (Area: architecture, ui)
