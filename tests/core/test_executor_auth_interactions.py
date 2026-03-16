@@ -145,3 +145,43 @@ async def test_api_key_whitespace_is_treated_as_missing(executor, secrets_contro
     assert state.interaction is not None
     assert state.interaction.step_id == "api_key"
     assert [field.key for field in state.interaction.fields] == ["api_key"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("oauth_args", "expected_interaction_type"),
+    [
+        ({"oauth_flow": "device", "client_id": "client-id"}, InteractionType.OAUTH_DEVICE_FLOW),
+        ({"oauth_flow": "code", "client_id": "client-id", "supports_pkce": True}, InteractionType.OAUTH_START),
+        ({"oauth_flow": "code", "client_id": "client-id", "supports_pkce": "false"}, InteractionType.OAUTH_START),
+        ({"oauth_flow": "client_credentials", "client_id": "client-id"}, InteractionType.OAUTH_START),
+        ({"response_type": "token", "client_id": "client-id", "supports_pkce": False}, InteractionType.OAUTH_START),
+    ],
+)
+async def test_oauth_client_secret_is_optional_across_oauth_flows(
+    executor,
+    oauth_args,
+    expected_interaction_type,
+):
+    flow_slug = str(oauth_args.get("oauth_flow") or oauth_args.get("response_type") or "default")
+    source = build_source_config(
+        source_id=f"oauth-secret-optional-{flow_slug}",
+        name="OAuth Secret Requirement",
+        flow=[
+            build_step(
+                step_id="oauth",
+                use=StepType.OAUTH,
+                args=oauth_args,
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.type == expected_interaction_type
+    fields_by_key = {field.key: field for field in state.interaction.fields}
+    assert "client_secret" in fields_by_key
+    assert fields_by_key["client_secret"].required is False

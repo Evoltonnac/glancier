@@ -241,6 +241,18 @@ async def execute_auth_step(
         token = token_payload.get("access_token")
 
         oauth_args = args or {}
+        flow_type = (
+            oauth_args.get("oauth_flow")
+            or oauth_args.get("flow_type")
+            or oauth_args.get("grant_type")
+            or "code"
+        ).strip().lower()
+        normalized_flow = flow_type
+        if flow_type in {"device_code", "urn:ietf:params:oauth:grant-type:device_code"}:
+            normalized_flow = "device"
+        elif flow_type in {"client-credentials"}:
+            normalized_flow = "client_credentials"
+
         client_id = oauth_args.get("client_id") or token_data.get("client_id")
         client_secret = oauth_args.get("client_secret") or token_data.get("client_secret")
 
@@ -257,27 +269,32 @@ async def execute_auth_step(
                 key="client_secret",
                 label="Client Secret",
                 type="password",
-                description="OAuth Client Secret"
+                description="OAuth Client Secret",
+                required=False,
             ))
 
         if not token:
-            flow_type = (
-                oauth_args.get("oauth_flow")
-                or oauth_args.get("flow_type")
-                or oauth_args.get("grant_type")
-                or "code"
-            ).strip().lower()
             interaction_type = (
                 InteractionType.OAUTH_DEVICE_FLOW
-                if flow_type in {"device", "device_code"}
+                if normalized_flow == "device"
                 else InteractionType.OAUTH_START
             )
             interaction_data = {
                 "oauth_args": oauth_args,
                 "doc_url": oauth_args.get("doc_url"),
-                "oauth_flow": flow_type,
+                "oauth_flow": normalized_flow,
             }
-            msg = f"Authorization required for step {step.id}. " + ("Please provide client credentials." if interaction_fields else "Click to authorize.")
+            required_fields = [field for field in interaction_fields if field.required]
+            guidance = (
+                "Please provide required OAuth credentials."
+                if required_fields
+                else (
+                    "Optional OAuth credentials can be provided before authorization."
+                    if interaction_fields
+                    else "Click to authorize."
+                )
+            )
+            msg = f"Authorization required for step {step.id}. {guidance}"
             raise RequiredSecretMissing(
                 source_id=source.id,
                 step_id=step.id,
