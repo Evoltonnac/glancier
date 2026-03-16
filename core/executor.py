@@ -31,6 +31,7 @@ from core.config_loader import (
     TokenEndpointAuthMethod,
 )
 from core.auth.oauth_auth import OAuthAuth
+from core.error_formatter import format_runtime_error
 from jsonpath_ng import parse
 
 logger = logging.getLogger(__name__)
@@ -252,12 +253,17 @@ class Executor:
                 )
                 return
 
-            error_summary, error_details = self._format_fetch_error(normalized_error)
+            formatted_error = format_runtime_error(
+                normalized_error,
+                default_code="runtime.fetch_failed",
+                default_summary="Fetch failed",
+                include_traceback=not isinstance(normalized_error, FlowExecutionError),
+            )
             self._update_state(
                 source.id,
                 SourceStatus.ERROR,
-                error_details,
-                error=error_summary,
+                formatted_error["details"],
+                error=formatted_error["summary"],
             )
 
     async def _run_flow(self, source: SourceConfig) -> Dict[str, Any]:
@@ -512,18 +518,12 @@ class Executor:
         if trace_text:
             parts.append("Raw traceback:\n" + trace_text)
 
-        return FlowExecutionError(summary=summary, details="\n\n".join(parts))
-
-    def _format_fetch_error(self, error: Exception) -> tuple[str, str]:
-        if isinstance(error, FlowExecutionError):
-            return error.summary, error.details
-
-        summary = str(error) or "Fetch failed"
-        parts = [summary]
-        trace_text = traceback.format_exc().strip()
-        if trace_text:
-            parts.append("Raw traceback:\n" + trace_text)
-        return summary, "\n\n".join(parts)
+        return FlowExecutionError(
+            code="runtime.flow_step_failed",
+            summary=summary,
+            details="\n\n".join(parts),
+            step_id=step_id,
+        )
 
     def _normalize_interaction_error(
         self,
@@ -1017,9 +1017,18 @@ class WebScraperBlockedError(Exception):
 class FlowExecutionError(Exception):
     """Structured exception for flow execution failure."""
 
-    def __init__(self, summary: str, details: str):
+    def __init__(
+        self,
+        *,
+        code: str = "runtime.flow_step_failed",
+        summary: str,
+        details: str,
+        step_id: str | None = None,
+    ):
+        self.code = code
         self.summary = summary
         self.details = details
+        self.step_id = step_id
         super().__init__(summary)
 
 
