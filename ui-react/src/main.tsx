@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { ThemeProvider } from "./components/theme-provider.tsx";
+import { I18nProvider } from "./i18n";
 import { isTauri, openExternalLink } from "./lib/utils.ts";
 
 // Global override for window.open in Tauri to ensure links open in system browser
@@ -39,7 +40,9 @@ if (isTauri()) {
 ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
         <ThemeProvider>
-            <App />
+            <I18nProvider>
+                <App />
+            </I18nProvider>
         </ThemeProvider>
     </React.StrictMode>,
 );

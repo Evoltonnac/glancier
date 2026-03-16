@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from core.refresh_policy import DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
@@ -28,6 +28,8 @@ class SystemSettings(BaseModel):
     theme: str = "system" # can be 'light', 'dark', or 'system'
     # UI density: 'compact', 'normal', or 'relaxed'
     density: str = "normal"
+    # UI language. English is default.
+    language: Literal["en", "zh"] = "en"
 
 
 _SETTINGS_DIR = Path(os.getenv("GLANCEUS_DATA_DIR", ".")) / "data"
@@ -54,6 +56,11 @@ class SettingsManager:
         try:
             with open(self.settings_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                # Backward-compatible normalization for older settings files.
+                if not isinstance(data, dict):
+                    return SystemSettings()
+                if data.get("language") not in {"en", "zh"}:
+                    data["language"] = "en"
                 return SystemSettings.model_validate(data)
         except Exception as e:
             logger.error(f"Failed to load settings from {self.settings_file}: {e}")

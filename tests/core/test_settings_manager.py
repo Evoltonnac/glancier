@@ -12,6 +12,7 @@ def test_load_settings_defaults_include_scraper_timeout(tmp_path):
     assert settings.scraper_timeout_seconds == 10
     assert settings.debug_logging_enabled is False
     assert settings.refresh_interval_minutes == 0
+    assert settings.language == "en"
 
 
 def test_save_and_reload_scraper_timeout(tmp_path):
@@ -21,6 +22,7 @@ def test_save_and_reload_scraper_timeout(tmp_path):
         proxy="http://127.0.0.1:7890",
         debug_logging_enabled=True,
         refresh_interval_minutes=30,
+        language="zh",
     )
 
     manager.save_settings(expected)
@@ -30,6 +32,20 @@ def test_save_and_reload_scraper_timeout(tmp_path):
     assert loaded.proxy == "http://127.0.0.1:7890"
     assert loaded.debug_logging_enabled is True
     assert loaded.refresh_interval_minutes == 30
+    assert loaded.language == "zh"
+
+
+def test_load_settings_invalid_language_falls_back_to_en(tmp_path):
+    manager = SettingsManager(settings_dir=tmp_path)
+    manager.settings_file.write_text(
+        '{"language":"jp","proxy":"http://127.0.0.1:7890"}',
+        encoding="utf-8",
+    )
+
+    loaded = manager.load_settings()
+
+    assert loaded.language == "en"
+    assert loaded.proxy == "http://127.0.0.1:7890"
 
 
 def test_get_or_create_master_key_prefers_keychain_value(tmp_path, monkeypatch):

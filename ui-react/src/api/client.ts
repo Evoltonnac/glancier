@@ -658,6 +658,7 @@ export interface SystemSettings {
   master_key?: string | null;
   theme?: string;
   density?: string;
+  language?: "en" | "zh";
 }
 
 export const api = new ApiClient();
