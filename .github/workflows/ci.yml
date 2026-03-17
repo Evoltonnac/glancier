@@ -173,7 +173,12 @@ jobs:
             - name: Codesign App (Ad-Hoc, No Notarization)
               if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
               run: |
-                  APP_PATH=$(find "ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" -name "*.app" -type d | head -1)
+                  APP_BUNDLE_DIR="ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos"
+                  if [[ ! -d "$APP_BUNDLE_DIR" ]]; then
+                    echo "Missing macOS app bundle directory: $APP_BUNDLE_DIR"
+                    exit 1
+                  fi
+                  APP_PATH=$(find "$APP_BUNDLE_DIR" -name "*.app" -type d -print -quit)
                   if [[ -z "$APP_PATH" ]]; then
                     echo "Missing macOS app bundle."
                     exit 1
@@ -188,9 +193,19 @@ jobs:
             - name: Create DMG from signed app
               if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
               run: |
-                  APP_PATH=$(find "ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" -name "*.app" -type d | head -1)
+                  APP_BUNDLE_DIR="ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos"
+                  if [[ ! -d "$APP_BUNDLE_DIR" ]]; then
+                    echo "Missing macOS app bundle directory: $APP_BUNDLE_DIR"
+                    exit 1
+                  fi
+                  APP_PATH=$(find "$APP_BUNDLE_DIR" -name "*.app" -type d -print -quit)
+                  if [[ -z "$APP_PATH" ]]; then
+                    echo "Missing macOS app bundle for DMG creation."
+                    exit 1
+                  fi
                   DMG_NAME="${{ matrix.app_name }}-${{ matrix.rust_target }}.dmg"
                   DMG_PATH="ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/$DMG_NAME"
+                  mkdir -p "$(dirname "$DMG_PATH")"
 
                   hdiutil create -volname "${{ matrix.app_name }}" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
                   codesign --force -s - "$DMG_PATH"
@@ -203,7 +218,12 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
               run: |
-                  DMG_PATH=$(find ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg -name "*-${{ matrix.rust_target }}.dmg" | head -1)
+                  DMG_DIR="ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg"
+                  if [[ ! -d "$DMG_DIR" ]]; then
+                    echo "Missing DMG output directory: $DMG_DIR"
+                    exit 1
+                  fi
+                  DMG_PATH=$(find "$DMG_DIR" -name "*-${{ matrix.rust_target }}.dmg" -type f -print -quit)
                   if [[ -z "$DMG_PATH" ]]; then
                     echo "Missing DMG artifact."
                     exit 1
@@ -217,7 +237,12 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
               run: |
-                  NSIS_PATH=$(find ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/nsis -name "*.exe" | head -1)
+                  NSIS_DIR="ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/nsis"
+                  if [[ ! -d "$NSIS_DIR" ]]; then
+                    echo "Missing Windows NSIS output directory: $NSIS_DIR"
+                    exit 1
+                  fi
+                  NSIS_PATH=$(find "$NSIS_DIR" -name "*.exe" -type f -print -quit)
                   if [[ -z "$NSIS_PATH" ]]; then
                     echo "Missing Windows NSIS artifact."
                     exit 1
