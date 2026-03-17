@@ -41,6 +41,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "startMenuFolder": "Glanceus",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
+      }
+    },
     "macOS": {
       "bundleVersion": "1.0.0",
       "minimumSystemVersion": "11.0",
@@ -68,7 +75,8 @@
       "endpoints": [
         "https://github.com/Evoltonnac/glanceus/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzMzE4N0QyMzQzQkIwOEMKUldTTXNEczAwb2N4MHgvOTVCUXRsZ3MyaTM2cXpKK0lNbG5HMzJXWDRFbXhpMmptL2grRUVIUXoK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzMzE4N0QyMzQzQkIwOEMKUldTTXNEczAwb2N4MHgvOTVCUXRsZ3MyaTM2cXpKK0lNbG5HMzJXWDRFbXhpMmptL2grRUVIUXoK",
+      "key": "gen/updater/tauri-update.key"
     },
     "shell": {
       "open": "^https?://"

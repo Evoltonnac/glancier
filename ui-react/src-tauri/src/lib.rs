@@ -38,7 +38,12 @@ const MENU_SHOW_WINDOW: &str = "tray.show_window";
 const MENU_OPEN_INTEGRATIONS: &str = "tray.open_integrations";
 const MENU_OPEN_SETTINGS: &str = "tray.open_settings";
 const MENU_QUIT: &str = "tray.quit";
-const TRAY_ICON_WHITE_BYTES: &[u8] = include_bytes!("../icons/tray-icon-white.png");
+#[cfg(target_os = "macos")]
+const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon-white.png");
+#[cfg(target_os = "windows")]
+const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/icon-win.png");
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/icon.png");
 const DEBUG_API_PORT: u16 = 8400;
 #[cfg(not(debug_assertions))]
 const RELEASE_API_PREFERRED_PORT: u16 = 18640;
@@ -1050,7 +1055,7 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         tray_builder = tray_builder.icon_as_template(true);
     }
 
-    if let Ok(icon) = tauri::image::Image::from_bytes(TRAY_ICON_WHITE_BYTES) {
+    if let Ok(icon) = tauri::image::Image::from_bytes(TRAY_ICON_BYTES) {
         tray_builder = tray_builder.icon(icon);
     } else if let Some(icon) = app.default_window_icon().cloned() {
         tray_builder = tray_builder.icon(icon);
@@ -1083,6 +1088,9 @@ pub fn run() {
         ])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            let _ = show_main_window(app, None);
+        }))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,

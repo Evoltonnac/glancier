@@ -171,6 +171,18 @@ cd "$PROJECT_ROOT/ui-react"
 
 source "$HOME/.cargo/env" 2>/dev/null || true
 
+# Load signing env from project .env when not provided by shell/CI.
+if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]; then
+    ENV_FILE="$PROJECT_ROOT/.env"
+    if [ -f "$ENV_FILE" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        . "$ENV_FILE"
+        set +a
+        echo "ℹ️ Loaded Tauri signing variables from .env"
+    fi
+fi
+
 # Execute build.
 npx tauri build --bundles "$TAURI_BUNDLES" --target "$TAURI_TARGET"
 
