@@ -49,8 +49,54 @@ jobs:
               working-directory: ui-react
               run: npm run typecheck
 
+    create-release:
+        if: github.event_name == 'workflow_dispatch'
+        needs:
+            - backend-core
+            - frontend-core
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        outputs:
+            version: ${{ steps.get_version.outputs.VERSION }}
+            tag: ${{ steps.release_meta.outputs.TAG }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Get version
+              id: get_version
+              run: |
+                  VERSION=$(node -p "require('./ui-react/package.json').version")
+                  echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+            - name: Ensure GitHub Release
+              id: release_meta
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  TAG="v${{ steps.get_version.outputs.VERSION }}"
+                  echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+
+                  if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+                    echo "Release $TAG already exists."
+                  else
+                    gh release create "$TAG" \
+                      --title "Glanceus v${{ steps.get_version.outputs.VERSION }}" \
+                      --notes "Automated release for Glanceus v${{ steps.get_version.outputs.VERSION }}." \
+                      --draft \
+                      --repo "${{ github.repository }}"
+                  fi
+
     release-tauri:
         if: github.event_name == 'workflow_dispatch'
+        needs:
+            - create-release
         permissions:
             contents: write
         strategy:
@@ -69,6 +115,9 @@ jobs:
                       rust_target: x86_64-pc-windows-msvc
                       tauri_args: --bundles nsis --target x86_64-pc-windows-msvc
         runs-on: ${{ matrix.platform }}
+        defaults:
+            run:
+                shell: bash
         steps:
             - name: Checkout
               uses: actions/checkout@v4
@@ -97,27 +146,7 @@ jobs:
               working-directory: ui-react
               run: npm ci
 
-            - name: Get version
-              id: get_version
-              shell: bash
-              run: |
-                  VERSION=$(node -p "require('./ui-react/package.json').version")
-                  echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-                  echo "VERSION=$VERSION"
-
-            - name: Create GitHub Release
-              if: matrix.platform == 'macos-15'
-              env:
-                  GH_TOKEN: ${{ github.token }}
-              run: |
-                  gh release create "v${{ steps.get_version.outputs.VERSION }}" \
-                      --title "Glanceus v${{ steps.get_version.outputs.VERSION }}" \
-                      --notes "Automated release for Glanceus v${{ steps.get_version.outputs.VERSION }}." \
-                      --draft true \
-                      --repo ${{ github.repository }}
-
             - name: Run release prebuild script
-              shell: bash
               env:
                   SKIP_TAURI_BUILD: "1"
               run: bash scripts/build.sh --prepare-only
@@ -127,18 +156,18 @@ jobs:
               run: |
                   npm run tauri build -- ${{ matrix.tauri_args }}
 
-            - name: Codesign and Staple (Ad-Hoc)
+            - name: Codesign App (Ad-Hoc, No Notarization)
               if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
               run: |
-                  # Find the .app bundle in the bundle directory
                   APP_PATH=$(find "ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" -name "*.app" -type d | head -1)
+                  if [[ -z "$APP_PATH" ]]; then
+                    echo "Missing macOS app bundle."
+                    exit 1
+                  fi
                   echo "Signing app at: $APP_PATH"
 
-                  # Ad-Hoc sign
                   codesign --force --deep -s - "$APP_PATH"
-
-                  # Staple the signature
-                  xcrun stapler staple "$APP_PATH"
+                  codesign --verify --deep --strict "$APP_PATH"
 
                   echo "Code signing complete"
 
@@ -146,28 +175,39 @@ jobs:
               if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
               run: |
                   APP_PATH=$(find "ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" -name "*.app" -type d | head -1)
-                  DMG_NAME="${{ matrix.app_name }}.dmg"
+                  DMG_NAME="${{ matrix.app_name }}-${{ matrix.rust_target }}.dmg"
                   DMG_PATH="ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/$DMG_NAME"
 
-                  # Create DMG from signed app
                   hdiutil create -volname "${{ matrix.app_name }}" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
+                  codesign --force -s - "$DMG_PATH"
+                  codesign --verify --strict "$DMG_PATH"
 
                   echo "DMG created at: $DMG_PATH"
 
             - name: Upload Release Asset
               if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
-                  DMG_PATH=$(find ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg -name "*.dmg" | head -1)
+                  DMG_PATH=$(find ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg -name "*-${{ matrix.rust_target }}.dmg" | head -1)
+                  if [[ -z "$DMG_PATH" ]]; then
+                    echo "Missing DMG artifact."
+                    exit 1
+                  fi
                   echo "DMG path: $DMG_PATH"
 
-                  # Upload using GitHub CLI
-                  gh release upload "v${{ steps.get_version.outputs.VERSION }}" "$DMG_PATH" --repo ${{ github.repository }}
+                  gh release upload "${{ needs.create-release.outputs.tag }}" "$DMG_PATH" --clobber --repo "${{ github.repository }}"
 
             - name: Upload Windows Release Asset
               if: matrix.platform == 'windows-latest'
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
                   NSIS_PATH=$(find ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/nsis -name "*.exe" | head -1)
+                  if [[ -z "$NSIS_PATH" ]]; then
+                    echo "Missing Windows NSIS artifact."
+                    exit 1
+                  fi
                   echo "NSIS path: $NSIS_PATH"
 
-                  # Upload using GitHub CLI
-                  gh release upload "v${{ steps.get_version.outputs.VERSION }}" "$NSIS_PATH" --repo ${{ github.repository }}
+                  gh release upload "${{ needs.create-release.outputs.tag }}" "$NSIS_PATH" --clobber --repo "${{ github.repository }}"
