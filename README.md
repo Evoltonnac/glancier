@@ -1,27 +1,28 @@
-# Glanceus
-
 <p align="center">
   <img src="ui-react/src/assets/logo.svg" alt="Glanceus Logo" width="120" />
 </p>
 
-<p align="center"><strong>Config-first personal data hub for metrics, signals, and automation workflows.</strong></p>
+<h1 align="center">Glanceus</h1>
 
-<!-- <p align="center">
-  <img src="docs/assets/demo-placeholder.svg" alt="Glanceus Demo (Placeholder)" width="900" />
+<p align="center"><strong>AI-friendly, config-first personal data hub for Metrics, Signals, Integration Data, and Bento Cards.</strong></p>
+<p align="center">Define integrations in YAML and run <code>auth -&gt; fetch -&gt; parse -&gt; render</code> without hardcoding new platform logic in Python.</p>
+
+<p align="center">
+  <img src="docs/assets/cover.png" alt="Glanceus Demo (Placeholder)" width="900" />
 </p>
-<p align="center"><sub>Demo image placeholder. Replace with a real screenshot later.</sub></p> -->
+<p align="center"><a href="#quick-start">Quick Start</a> · <a href="#product-highlights">Highlights</a> · <a href="#documentation-map">Docs</a></p>
 
-## Features
+## Product Highlights
 
-- **AI-friendly**: Integration authoring and maintenance are optimized for AI-assisted workflows and structured docs.
-- **Declarative UI**: SDUI templates define cards and widgets without hardcoding frontend business logic.
-- **Bilingual i18n**: English (`en`) and Chinese (`zh`) UI support with English as default and Settings-based language switching.
-- **OAuth-first authentication**: Supports OAuth flows (Code + PKCE, Device Flow, Client Credentials), with API Key compatibility when needed.
-- **Local-first**: Data, source configs, and secrets stay on your machine by default.
-- **WebView Scraper**: Handles sites without stable APIs through interactive desktop scraping flow.
-- **Free-layout dashboard**: Bento-style dashboard with flexible layout and widget composition.
+- **Built for AI-assisted workflows**: Integration authoring and maintenance follow structured, machine-friendly YAML and docs.
+- **Config-first execution model**: Move from auth to render through declarative steps instead of custom platform code.
+- **Declarative UI with SDUI**: Templates define cards and widgets, while backend owns workflow/auth/state boundaries.
+- **OAuth-first + API key compatible**: Supports Code + PKCE, Device Flow, and Client Credentials with pragmatic fallback options.
+- **Local-first runtime**: Integration data, source configs, and secrets stay on your machine by default.
+- **Desktop scraping fallback**: WebView Scraper handles platforms without stable public APIs.
+- **Bento dashboard layout**: Flexible composition for Signals and Metrics in one glance.
 
-## Usage
+## Quick Start
 
 ### 1. Install dependencies
 
@@ -43,7 +44,7 @@ make dev-tauri  # backend + Tauri desktop shell
 - Create or edit YAML files under `config/integrations/`.
 - Reload integration definitions via API/UI when needed.
 
-### 4. AI-assisted YAML authoring (canonical path)
+### 4. Use the canonical AI authoring path
 
 - Use `skills/integration-editor` as the canonical integration YAML authoring path.
 - `skills/PROMPT.md` is the single-file convenience prompt aggregated from the integration-editor skill sources.
