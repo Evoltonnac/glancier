@@ -412,7 +412,7 @@ export default function Dashboard() {
     const { sidebarCollapsed, toggleSidebar } = useSidebar();
     const {
         activeScraper,
-        webviewQueue,
+        queueLength,
         scraperLogs,
         handleSkipScraper,
         handleClearScraperQueue,
@@ -1594,7 +1594,7 @@ export default function Dashboard() {
                         sources.find((s) => s.id === activeScraper)?.name ||
                         null
                     }
-                    queueLength={webviewQueue.length}
+                    queueLength={queueLength}
                     scraperLogs={scraperLogs}
                     onShowWindow={handleShowScraperWindow}
                     onSkip={handleSkipScraper}

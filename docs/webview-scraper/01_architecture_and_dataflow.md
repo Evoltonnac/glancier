@@ -23,7 +23,24 @@ to run low-overhead background capture.
 - Resource interception: block non-essential static assets to reduce network/load overhead.
 - Event bridging: frontend is observer/manual fallback, not automatic trigger owner.
 
-## 4. Interface Boundary with Flow
+## 4. Interaction Contract (Do Not Regress)
+
+These rules are mandatory and must stay true after refactors:
+
+1. Queue UI source of truth is Rust queue snapshot only.
+   - Frontend queue length/items must come from `get_scraper_queue_snapshot`.
+   - Frontend must not infer queue from `sources[].status === "suspended"` or similar heuristics.
+2. Flow handle "open in foreground" is manual mode, not queue mode.
+   - Manual foreground open must not enqueue a backend scraper task.
+   - Manual foreground open must not trigger backend refresh APIs that create queue tasks.
+3. Promoting an active queue task to foreground detaches it from queue execution.
+   - The current backend-managed task must be removed from queue path (fail/clear from queue storage).
+   - Queue daemon should be able to continue with next pending task immediately.
+4. Manual foreground scraper must not drive queue-state UI.
+   - Foreground/manual run is intentionally not reflected as queue-running status.
+   - Queue popup should only represent backend-managed queue tasks.
+
+## 5. Interface Boundary with Flow
 
 - Flow owns step input/output, durable task creation, and resume semantics.
 - Rust scraper runtime owns task claiming, browser-state execution, and completion callbacks.

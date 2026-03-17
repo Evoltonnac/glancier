@@ -310,3 +310,46 @@ class ScraperTaskStore:
         with self._lock:
             payload = self._load_payload_locked()
             return [dict(task) for task in payload["tasks_by_id"].values()]
+
+    def list_active_tasks(self) -> list[dict[str, Any]]:
+        with self._lock:
+            payload = self._load_payload_locked()
+            self._release_expired_leases_locked(payload)
+            active = [
+                dict(task)
+                for task in payload["tasks_by_id"].values()
+                if task.get("status") in _ACTIVE_STATUSES
+            ]
+            active.sort(key=lambda task: float(task.get("created_at") or 0))
+            return active
+
+    def clear_active_tasks(
+        self,
+        *,
+        source_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Remove active scraper tasks from queue storage.
+
+        Active tasks include pending/claimed/running tasks that have not reached
+        a terminal state yet. When source_id is provided, only tasks for that
+        source are removed.
+        """
+        with self._lock:
+            payload = self._load_payload_locked()
+            removed: list[dict[str, Any]] = []
+            task_ids_to_remove: list[str] = []
+            for task_id, task in payload["tasks_by_id"].items():
+                if task.get("status") not in _ACTIVE_STATUSES:
+                    continue
+                if source_id and task.get("source_id") != source_id:
+                    continue
+                removed.append(dict(task))
+                task_ids_to_remove.append(task_id)
+
+            for task_id in task_ids_to_remove:
+                payload["tasks_by_id"].pop(task_id, None)
+
+            if task_ids_to_remove:
+                self._save_payload_locked(payload)
+            return removed

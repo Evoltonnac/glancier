@@ -8,7 +8,8 @@ import { useI18n } from "../i18n";
 import type { SourceSummary } from "../types/config";
 
 const SCRAPER_LOG_LIMIT = 300;
-const ACTIVE_STAGES = new Set(["task_claimed", "task_start", "window_ready"]);
+const DEFAULT_SCRAPER_TIMEOUT_SECONDS = 10;
+const ACTIVE_STAGES = new Set(["task_claimed"]);
 const TERMINAL_STAGES = new Set([
     "task_complete",
     "task_cancelled",
@@ -23,6 +24,11 @@ export interface ScraperLifecycleLog {
     message: string;
     timestamp: number;
     details?: Record<string, any>;
+}
+
+interface ScraperQueueSnapshot {
+    active_source_id?: string | null;
+    queue_source_ids?: string[];
 }
 
 function scraperLogKey(log: ScraperLifecycleLog): string {
@@ -74,13 +80,44 @@ export function useScraper() {
     const setSkippedScrapers = useStore((state) => state.setSkippedScrapers);
     const showToast = useStore((state) => state.showToast);
     const [scraperLogs, setScraperLogs] = useState<ScraperLifecycleLog[]>([]);
+    const [activeTaskToken, setActiveTaskToken] = useState<string | null>(null);
+    const [queueSourceIds, setQueueSourceIds] = useState<string[]>([]);
 
     const activeScraperRef = useRef<string | null>(null);
     const activeTaskIdRef = useRef<string | null>(null);
+    const activeTaskSourceIdRef = useRef<string | null>(null);
+    const taskTimeoutSecondsRef = useRef<number>(DEFAULT_SCRAPER_TIMEOUT_SECONDS);
 
     useEffect(() => {
         activeScraperRef.current = activeScraper;
     }, [activeScraper]);
+
+    useEffect(() => {
+        if (!scraperEnabled) {
+            return;
+        }
+        let cancelled = false;
+        void api
+            .getSettings()
+            .then((settings) => {
+                if (cancelled) {
+                    return;
+                }
+                const configured = Number(settings?.scraper_timeout_seconds);
+                if (Number.isFinite(configured) && configured >= 1) {
+                    taskTimeoutSecondsRef.current = Math.floor(configured);
+                } else {
+                    taskTimeoutSecondsRef.current = DEFAULT_SCRAPER_TIMEOUT_SECONDS;
+                }
+            })
+            .catch((error) => {
+                console.error("Failed to load scraper timeout settings:", error);
+                taskTimeoutSecondsRef.current = DEFAULT_SCRAPER_TIMEOUT_SECONDS;
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [scraperEnabled]);
 
     const syncErrorLogsFromMemory = useCallback(
         async (sourceId?: string | null) => {
@@ -111,13 +148,52 @@ export function useScraper() {
         [scraperEnabled],
     );
 
-    const webviewQueue = sources.filter(
-        (source) =>
-            scraperEnabled &&
-            source.status === "suspended" &&
-            source.interaction?.type === "webview_scrape" &&
-            !skippedScrapers.has(source.id),
-    );
+    const webviewQueue = queueSourceIds
+        .map((sourceId) => sources.find((source) => source.id === sourceId))
+        .filter((source): source is SourceSummary => Boolean(source));
+
+    const syncQueueSnapshotFromRust = useCallback(async () => {
+        if (!scraperEnabled) {
+            return;
+        }
+        try {
+            const snapshot = await invoke<ScraperQueueSnapshot>(
+                "get_scraper_queue_snapshot",
+            );
+            if (
+                !snapshot ||
+                !Array.isArray(snapshot.queue_source_ids)
+            ) {
+                return;
+            }
+            const normalizedIds = snapshot.queue_source_ids
+                .filter((value): value is string => typeof value === "string")
+                .filter((value, index, arr) => arr.indexOf(value) === index);
+            setQueueSourceIds(normalizedIds);
+
+            const activeSource =
+                typeof snapshot.active_source_id === "string" &&
+                snapshot.active_source_id.trim()
+                    ? snapshot.active_source_id
+                    : null;
+            useStore.getState().setActiveScraper(activeSource);
+        } catch (error) {
+            console.error("Failed to sync scraper queue snapshot:", error);
+        }
+    }, [scraperEnabled]);
+
+    useEffect(() => {
+        if (!scraperEnabled) {
+            return;
+        }
+        void syncQueueSnapshotFromRust();
+        const interval = window.setInterval(() => {
+            void syncQueueSnapshotFromRust();
+        }, 1500);
+        return () => {
+            window.clearInterval(interval);
+        };
+    }, [scraperEnabled, syncQueueSnapshotFromRust]);
 
     const handleSkipScraper = useCallback(async () => {
         if (!scraperEnabled || !activeScraper) {
@@ -133,6 +209,8 @@ export function useScraper() {
 
         addSkippedScraper(activeScraper);
         activeTaskIdRef.current = null;
+        activeTaskSourceIdRef.current = null;
+        setActiveTaskToken(null);
         setActiveScraper(null);
     }, [
         activeScraper,
@@ -154,14 +232,22 @@ export function useScraper() {
                 console.error("Failed to cancel active scraper task:", error);
             }
         }
+        try {
+            await invoke("clear_scraper_queue");
+        } catch (error) {
+            console.error("Failed to clear backend scraper queue:", error);
+        }
 
         const newSkipped = new Set(skippedScrapers);
         if (activeScraper) {
             newSkipped.add(activeScraper);
         }
-        webviewQueue.forEach((source) => newSkipped.add(source.id));
+        queueSourceIds.forEach((sourceId) => newSkipped.add(sourceId));
         setSkippedScrapers(newSkipped);
         activeTaskIdRef.current = null;
+        activeTaskSourceIdRef.current = null;
+        setActiveTaskToken(null);
+        setQueueSourceIds([]);
         setActiveScraper(null);
 
         // Keep recent error logs for troubleshooting; drop noisy non-error logs.
@@ -174,7 +260,7 @@ export function useScraper() {
         setActiveScraper,
         setSkippedScrapers,
         skippedScrapers,
-        webviewQueue,
+        queueSourceIds,
     ]);
 
     const handlePushToQueue = useCallback(
@@ -193,17 +279,54 @@ export function useScraper() {
                 Boolean(source.interaction?.data?.force_foreground);
 
             if (forceForeground) {
-                const currentActive = useStore.getState().activeScraper;
-                if (currentActive === source.id) {
-                    void invoke("show_scraper_window").catch((error) => {
-                        console.error("Failed to show scraper window:", error);
-                    });
-                    return true;
+                const data = source.interaction?.data ?? {};
+                const url = typeof data.url === "string" ? data.url.trim() : "";
+                if (!url) {
+                    showToast(t("scraper.toast.retryFailed"), "error");
+                    return false;
                 }
-                showToast(
-                    t("scraper.toast.retryQueued"),
-                    "info",
-                );
+                const injectScript =
+                    typeof data.script === "string" ? data.script : "";
+                const interceptApi =
+                    typeof data.intercept_api === "string"
+                        ? data.intercept_api
+                        : "";
+                const secretKey =
+                    typeof data.secret_key === "string" && data.secret_key.trim()
+                        ? data.secret_key.trim()
+                        : "webview_data";
+
+                void (async () => {
+                    try {
+                        const promoted = await invoke<boolean>(
+                            "promote_active_scraper_to_foreground",
+                            { sourceId: source.id },
+                        );
+                        if (promoted) {
+                            useStore.getState().addSkippedScraper(source.id);
+                            return;
+                        }
+                        useStore.getState().addSkippedScraper(source.id);
+                        await invoke("clear_scraper_queue", {
+                            sourceId: source.id,
+                        });
+                        await invoke("push_scraper_task", {
+                            sourceId: source.id,
+                            url,
+                            injectScript,
+                            interceptApi,
+                            secretKey,
+                            foreground: true,
+                        });
+                    } catch (error) {
+                        console.error(
+                            `Failed to start foreground scraper for ${source.id}:`,
+                            error,
+                        );
+                        showToast(t("scraper.toast.retryFailed"), "error");
+                    }
+                })();
+                return true;
             }
 
             void api.refreshSource(source.id).catch((error) => {
@@ -212,7 +335,7 @@ export function useScraper() {
             });
             return true;
         },
-        [scraperEnabled, setSkippedScrapers, showToast],
+        [scraperEnabled, setSkippedScrapers, showToast, t],
     );
 
     const handleShowScraperWindow = useCallback(async () => {
@@ -220,11 +343,25 @@ export function useScraper() {
             return;
         }
         try {
+            const promoted = await invoke<boolean>(
+                "promote_active_scraper_to_foreground",
+            );
+            if (promoted) {
+                const current = activeScraperRef.current;
+                if (current) {
+                    useStore.getState().addSkippedScraper(current);
+                }
+                activeTaskIdRef.current = null;
+                activeTaskSourceIdRef.current = null;
+                setActiveTaskToken(null);
+                setActiveScraper(null);
+                return;
+            }
             await invoke("show_scraper_window");
         } catch (error) {
             console.error("Failed to show scraper window:", error);
         }
-    }, [scraperEnabled]);
+    }, [scraperEnabled, setActiveScraper]);
 
     // Frontend observer mode: keep status/log visibility,
     // while Rust daemon owns automatic claim + execution.
@@ -247,6 +384,8 @@ export function useScraper() {
                     if (ACTIVE_STAGES.has(log.stage)) {
                         if (log.task_id) {
                             activeTaskIdRef.current = log.task_id;
+                            activeTaskSourceIdRef.current = log.source_id;
+                            setActiveTaskToken(`${log.source_id}:${log.task_id}`);
                         }
                         if (log.source_id && activeScraperRef.current !== log.source_id) {
                             useStore.getState().setActiveScraper(log.source_id);
@@ -259,6 +398,8 @@ export function useScraper() {
                             return;
                         }
                         activeTaskIdRef.current = null;
+                        activeTaskSourceIdRef.current = null;
+                        setActiveTaskToken(null);
                         if (activeScraperRef.current) {
                             useStore.getState().setActiveScraper(null);
                         }
@@ -268,7 +409,19 @@ export function useScraper() {
                         log.stage === "task_cancelled" ||
                         log.stage === "task_killed_log_burst"
                     ) {
+                        if (log.source_id) {
+                            useStore.getState().addSkippedScraper(log.source_id);
+                        }
                         void syncErrorLogsFromMemory(log.source_id);
+                    }
+
+                    if (
+                        ACTIVE_STAGES.has(log.stage) ||
+                        TERMINAL_STAGES.has(log.stage) ||
+                        log.stage === "task_cancelled" ||
+                        log.stage === "task_killed_log_burst"
+                    ) {
+                        void syncQueueSnapshotFromRust();
                     }
                 },
             );
@@ -294,10 +447,13 @@ export function useScraper() {
                 }
                 if (taskId) {
                     activeTaskIdRef.current = taskId;
+                    activeTaskSourceIdRef.current = sourceId;
                 }
 
                 useStore.getState().setActiveScraper(null);
                 activeTaskIdRef.current = null;
+                activeTaskSourceIdRef.current = null;
+                setActiveTaskToken(null);
 
                 if (error) {
                     console.error(`Scraper error for ${sourceId}:`, error);
@@ -380,10 +536,52 @@ export function useScraper() {
                 unlistenLifecycleLog();
             }
         };
-    }, [scraperEnabled, setSources, syncErrorLogsFromMemory]);
+    }, [scraperEnabled, setSources, syncErrorLogsFromMemory, syncQueueSnapshotFromRust]);
+
+    useEffect(() => {
+        if (!scraperEnabled || !activeTaskToken) {
+            return;
+        }
+
+        const sourceId = activeTaskSourceIdRef.current ?? activeScraperRef.current;
+        const taskId = activeTaskIdRef.current;
+        if (!sourceId || !taskId) {
+            return;
+        }
+
+        const timeoutMs = Math.max(
+            taskTimeoutSecondsRef.current,
+            1,
+        ) * 1000;
+        const timer = window.setTimeout(() => {
+            if (activeTaskIdRef.current !== taskId) {
+                return;
+            }
+            void invoke("cancel_scraper_task")
+                .then(() => syncErrorLogsFromMemory(sourceId))
+                .catch((error) => {
+                    console.error("Failed to cancel timed-out scraper task:", error);
+                })
+                .finally(() => {
+                    if (activeTaskIdRef.current !== taskId) {
+                        return;
+                    }
+                    useStore.getState().addSkippedScraper(sourceId);
+                    activeTaskIdRef.current = null;
+                    activeTaskSourceIdRef.current = null;
+                    setActiveTaskToken(null);
+                    useStore.getState().setActiveScraper(null);
+                });
+        }, timeoutMs);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [activeTaskToken, scraperEnabled, syncErrorLogsFromMemory]);
 
     return {
         activeScraper,
+        queueLength: queueSourceIds.length,
         webviewQueue,
         scraperLogs,
         handleSkipScraper,

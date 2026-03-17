@@ -10,6 +10,7 @@ const { apiMock } = vi.hoisted(() => ({
         getSources: vi.fn(),
         interact: vi.fn(),
         refreshSource: vi.fn(),
+        getSettings: vi.fn(),
     },
 }));
 
@@ -53,6 +54,9 @@ describe("useScraper observer mode", () => {
     beforeEach(() => {
         useStore.setState(initialState, true);
         mockInvoke.mockReset();
+        mockInvoke.mockImplementation((_command: string) => {
+            return Promise.resolve(undefined);
+        });
         mockListen.mockReset();
         mockUnlisten.mockReset();
         mockListen.mockResolvedValue(mockUnlisten);
@@ -60,12 +64,14 @@ describe("useScraper observer mode", () => {
         apiMock.getSources.mockReset();
         apiMock.interact.mockReset();
         apiMock.refreshSource.mockReset();
+        apiMock.getSettings.mockReset();
         apiMock.getSources.mockResolvedValue([]);
         apiMock.interact.mockResolvedValue(undefined);
         apiMock.refreshSource.mockResolvedValue(undefined);
+        apiMock.getSettings.mockResolvedValue({ scraper_timeout_seconds: 10 });
     });
 
-    it("manual foreground action delegates to backend refresh and never pushes task from frontend", () => {
+    it("manual foreground action starts scraper immediately and skips backend refresh queueing", async () => {
         const source = buildWebviewSource("manual-fg", "Manual FG");
         useStore.setState({
             sources: [source],
@@ -78,30 +84,122 @@ describe("useScraper observer mode", () => {
         act(() => {
             started = result.current.handlePushToQueue(source, { foreground: true });
         });
+        await act(async () => {
+            await Promise.resolve();
+        });
 
         expect(started).toBe(true);
-        expect(apiMock.refreshSource).toHaveBeenCalledWith(source.id);
+        expect(apiMock.refreshSource).not.toHaveBeenCalled();
+        expect(mockInvoke).toHaveBeenCalledWith(
+            "promote_active_scraper_to_foreground",
+            { sourceId: source.id },
+        );
+        expect(mockInvoke).toHaveBeenCalledWith("clear_scraper_queue", {
+            sourceId: source.id,
+        });
+        expect(mockInvoke).toHaveBeenCalledWith("push_scraper_task", {
+            sourceId: source.id,
+            url: "https://example.com/dashboard",
+            injectScript: "console.log('scrape')",
+            interceptApi: "/api/dashboard",
+            secretKey: "webview_data",
+            foreground: true,
+        });
+        expect(useStore.getState().skippedScrapers.has(source.id)).toBe(true);
+    });
+
+    it("manual foreground action promotes existing backend task for same source without re-pushing", async () => {
+        const source = buildWebviewSource("manual-promote", "Manual Promote");
+        useStore.setState({
+            sources: [source],
+            activeScraper: source.id,
+            skippedScrapers: new Set(),
+        });
+        mockInvoke.mockImplementation((command: string, payload?: any) => {
+            if (
+                command === "promote_active_scraper_to_foreground" &&
+                payload?.sourceId === source.id
+            ) {
+                return Promise.resolve(true);
+            }
+            return Promise.resolve(undefined);
+        });
+
+        const { result } = renderHook(() => useScraper());
+        let started = false;
+        act(() => {
+            started = result.current.handlePushToQueue(source, { foreground: true });
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(started).toBe(true);
+        expect(mockInvoke).toHaveBeenCalledWith(
+            "promote_active_scraper_to_foreground",
+            { sourceId: source.id },
+        );
+        expect(
+            mockInvoke.mock.calls.some(([cmd]) => cmd === "clear_scraper_queue"),
+        ).toBe(false);
         expect(
             mockInvoke.mock.calls.some(([cmd]) => cmd === "push_scraper_task"),
         ).toBe(false);
     });
 
-    it("show_scraper_window keeps active task state for status banner", async () => {
+    it("show window first tries promotion, then falls back to showing worker window", async () => {
         const source = buildWebviewSource("active-bg", "Active BG");
         useStore.setState({
             sources: [source],
             activeScraper: source.id,
             skippedScrapers: new Set(),
         });
-        mockInvoke.mockResolvedValue(undefined);
+        mockInvoke.mockImplementation((command: string) => {
+            if (command === "promote_active_scraper_to_foreground") {
+                return Promise.resolve(false);
+            }
+            return Promise.resolve(undefined);
+        });
 
         const { result } = renderHook(() => useScraper());
         await act(async () => {
             await result.current.handleShowScraperWindow();
         });
 
+        expect(mockInvoke).toHaveBeenCalledWith(
+            "promote_active_scraper_to_foreground",
+        );
         expect(mockInvoke).toHaveBeenCalledWith("show_scraper_window");
         expect(useStore.getState().activeScraper).toBe(source.id);
+    });
+
+    it("show window promotion success clears active state and does not call show_scraper_window", async () => {
+        const source = buildWebviewSource("active-promote", "Active Promote");
+        useStore.setState({
+            sources: [source],
+            activeScraper: source.id,
+            skippedScrapers: new Set(),
+        });
+        mockInvoke.mockImplementation((command: string) => {
+            if (command === "promote_active_scraper_to_foreground") {
+                return Promise.resolve(true);
+            }
+            return Promise.resolve(undefined);
+        });
+
+        const { result } = renderHook(() => useScraper());
+        await act(async () => {
+            await result.current.handleShowScraperWindow();
+        });
+
+        expect(mockInvoke).toHaveBeenCalledWith(
+            "promote_active_scraper_to_foreground",
+        );
+        expect(
+            mockInvoke.mock.calls.some(([cmd]) => cmd === "show_scraper_window"),
+        ).toBe(false);
+        expect(useStore.getState().activeScraper).toBeNull();
+        expect(useStore.getState().skippedScrapers.has(source.id)).toBe(true);
     });
 
     it("lifecycle logs drive active scraper status updates", async () => {
@@ -206,5 +304,176 @@ describe("useScraper observer mode", () => {
         expect(mockInvoke).toHaveBeenCalledWith("get_scraper_error_logs", {
             sourceId: source.id,
         });
+    });
+
+    it("clear queue clears backend pending tasks in addition to cancelling active one", async () => {
+        const source = buildWebviewSource("source-clear", "Source Clear");
+        useStore.setState({
+            sources: [source],
+            activeScraper: source.id,
+            skippedScrapers: new Set(),
+        });
+        mockInvoke.mockResolvedValue(undefined);
+
+        const { result } = renderHook(() => useScraper());
+        await act(async () => {
+            await result.current.handleClearScraperQueue();
+        });
+
+        expect(mockInvoke).toHaveBeenCalledWith("cancel_scraper_task");
+        expect(mockInvoke).toHaveBeenCalledWith("clear_scraper_queue");
+    });
+
+    it("auto-cancels active scraper task after configured timeout", async () => {
+        vi.useFakeTimers();
+        const source = buildWebviewSource("source-timeout", "Source Timeout");
+        useStore.setState({
+            sources: [source],
+            activeScraper: null,
+            skippedScrapers: new Set(),
+        });
+
+        let lifecycleListener:
+            | ((event: { payload: any }) => void | Promise<void>)
+            | undefined;
+        mockListen.mockImplementation((eventName: string, callback: any) => {
+            if (eventName === "scraper_lifecycle_log") {
+                lifecycleListener = callback;
+            }
+            return Promise.resolve(mockUnlisten);
+        });
+        mockInvoke.mockResolvedValue(undefined);
+
+        renderHook(() => useScraper());
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(lifecycleListener).toBeDefined();
+
+        act(() => {
+            lifecycleListener?.({
+                payload: {
+                    source_id: source.id,
+                    task_id: "task-timeout-1",
+                    stage: "task_claimed",
+                    level: "info",
+                    message: "Claimed backend scraper task",
+                    timestamp: 1,
+                },
+            });
+        });
+
+        await act(async () => {
+            vi.advanceTimersByTime(10_000);
+            await Promise.resolve();
+        });
+
+        expect(mockInvoke).toHaveBeenCalledWith("cancel_scraper_task");
+        expect(useStore.getState().skippedScrapers.has(source.id)).toBe(true);
+        vi.useRealTimers();
+    });
+
+    it("foreground task logs are skipped from timeout tracking", async () => {
+        vi.useFakeTimers();
+        const source = buildWebviewSource("source-foreground", "Source Foreground");
+        useStore.setState({
+            sources: [source],
+            activeScraper: null,
+            skippedScrapers: new Set(),
+        });
+
+        let lifecycleListener:
+            | ((event: { payload: any }) => void | Promise<void>)
+            | undefined;
+        mockListen.mockImplementation((eventName: string, callback: any) => {
+            if (eventName === "scraper_lifecycle_log") {
+                lifecycleListener = callback;
+            }
+            return Promise.resolve(mockUnlisten);
+        });
+        mockInvoke.mockResolvedValue(undefined);
+
+        renderHook(() => useScraper());
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(lifecycleListener).toBeDefined();
+
+        act(() => {
+            lifecycleListener?.({
+                payload: {
+                    source_id: source.id,
+                    task_id: "task-foreground-1",
+                    stage: "task_start",
+                    level: "info",
+                    message: "Starting scraper task (foreground=true)",
+                    timestamp: 1,
+                    details: {
+                        foreground: true,
+                    },
+                },
+            });
+        });
+
+        await act(async () => {
+            vi.advanceTimersByTime(30_000);
+            await Promise.resolve();
+        });
+
+        expect(mockInvoke).not.toHaveBeenCalledWith("cancel_scraper_task");
+        vi.useRealTimers();
+    });
+
+    it("timeout cancel uses lifecycle source id even if activeScraper store lags", async () => {
+        vi.useFakeTimers();
+        const source = buildWebviewSource("source-lag", "Source Lag");
+        useStore.setState({
+            sources: [source],
+            activeScraper: null,
+            skippedScrapers: new Set(),
+        });
+
+        let lifecycleListener:
+            | ((event: { payload: any }) => void | Promise<void>)
+            | undefined;
+        mockListen.mockImplementation((eventName: string, callback: any) => {
+            if (eventName === "scraper_lifecycle_log") {
+                lifecycleListener = callback;
+            }
+            return Promise.resolve(mockUnlisten);
+        });
+        mockInvoke.mockResolvedValue(undefined);
+
+        renderHook(() => useScraper());
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        act(() => {
+            lifecycleListener?.({
+                payload: {
+                    source_id: source.id,
+                    task_id: "task-lag-1",
+                    stage: "task_claimed",
+                    level: "info",
+                    message: "Claimed backend scraper task",
+                    timestamp: 1,
+                },
+            });
+        });
+
+        // Simulate store lag/reset that would make activeScraper unavailable.
+        act(() => {
+            useStore.getState().setActiveScraper(null);
+        });
+
+        await act(async () => {
+            vi.advanceTimersByTime(10_000);
+            await Promise.resolve();
+        });
+
+        expect(mockInvoke).toHaveBeenCalledWith("cancel_scraper_task");
+        expect(useStore.getState().skippedScrapers.has(source.id)).toBe(true);
+        vi.useRealTimers();
     });
 });

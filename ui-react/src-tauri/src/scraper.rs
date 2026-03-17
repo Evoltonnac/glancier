@@ -17,6 +17,7 @@ const MAX_ERROR_LOGS_PER_SOURCE: usize = 80;
 const MAX_ERROR_LOG_QUERY: usize = 200;
 const WINDOW_MAIN: &str = "main";
 const WINDOW_SCRAPER_WORKER: &str = "scraper_worker";
+const WINDOW_SCRAPER_FOREGROUND: &str = "scraper_foreground";
 const SCRAPER_DAEMON_INTERVAL: Duration = Duration::from_secs(2);
 const SCRAPER_DAEMON_LEASE_SECONDS: u64 = 20;
 
@@ -340,6 +341,10 @@ pub struct ActiveScraperTask {
     pub task_id: String,
     pub attempt: Option<u32>,
     pub backend_managed: bool,
+    pub url: String,
+    pub inject_script: String,
+    pub intercept_api: String,
+    pub secret_key: String,
 }
 
 pub struct ScraperState {
@@ -420,6 +425,35 @@ struct InternalBooleanResponse {
     accepted: Option<bool>,
     ok: Option<bool>,
     reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct InternalClearRequest<'a> {
+    source_id: Option<&'a str>,
+}
+
+#[derive(Debug, Deserialize)]
+struct InternalClearResponse {
+    cleared_count: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Default)]
+struct InternalListRequest {}
+
+#[derive(Debug, Deserialize)]
+struct InternalListedTask {
+    source_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct InternalListResponse {
+    tasks: Option<Vec<InternalListedTask>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ScraperQueueSnapshot {
+    active_source_id: Option<String>,
+    queue_source_ids: Vec<String>,
 }
 
 fn backend_post_json<TReq: Serialize, TResp: DeserializeOwned>(
@@ -550,6 +584,27 @@ fn fail_scraper_task(
     Ok(())
 }
 
+fn clear_scraper_tasks(
+    app: &AppHandle,
+    source_id: Option<&str>,
+) -> Result<usize, String> {
+    let response: InternalClearResponse = backend_post_json(
+        app,
+        "/api/internal/scraper/clear",
+        &InternalClearRequest { source_id },
+    )?;
+    Ok(response.cleared_count.unwrap_or(0))
+}
+
+fn list_active_scraper_tasks(app: &AppHandle) -> Result<Vec<InternalListedTask>, String> {
+    let response: InternalListResponse = backend_post_json(
+        app,
+        "/api/internal/scraper/list",
+        &InternalListRequest::default(),
+    )?;
+    Ok(response.tasks.unwrap_or_default())
+}
+
 fn now_ms() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -567,6 +622,10 @@ fn set_active_task(
     task_id: String,
     attempt: Option<u32>,
     backend_managed: bool,
+    url: String,
+    inject_script: String,
+    intercept_api: String,
+    secret_key: String,
 ) {
     let state = app.state::<ScraperState>();
     let mut active = state.active_task.lock().unwrap();
@@ -576,6 +635,10 @@ fn set_active_task(
         task_id,
         attempt,
         backend_managed,
+        url,
+        inject_script,
+        intercept_api,
+        secret_key,
     });
     drop(active);
     if let Some(task_id) = previous_task_id {
@@ -615,8 +678,9 @@ async fn close_existing_scraper_window(
     app: &AppHandle,
     source_id: &str,
     task_id: &str,
+    window_label: &str,
 ) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("scraper_worker") {
+    if let Some(win) = app.get_webview_window(window_label) {
         emit_lifecycle_log(
             app,
             ScraperLifecycleLog::new(
@@ -624,7 +688,7 @@ async fn close_existing_scraper_window(
                 task_id.to_string(),
                 "window_cleanup",
                 "debug",
-                "Closing existing scraper window".to_string(),
+                format!("Closing existing scraper window ({window_label})"),
             ),
         );
         let _ = win.close();
@@ -633,7 +697,7 @@ async fn close_existing_scraper_window(
     }
 
     for _ in 0..20 {
-        if app.get_webview_window("scraper_worker").is_none() {
+        if app.get_webview_window(window_label).is_none() {
             return Ok(());
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
@@ -644,7 +708,11 @@ async fn close_existing_scraper_window(
 
 #[tauri::command]
 pub async fn scraper_log(window: Window, app: AppHandle, message: String) -> Result<(), String> {
-    ensure_invoker_window(&window, &[WINDOW_SCRAPER_WORKER], "scraper_log")?;
+    ensure_invoker_window(
+        &window,
+        &[WINDOW_SCRAPER_WORKER, WINDOW_SCRAPER_FOREGROUND],
+        "scraper_log",
+    )?;
     let (source_id, task_id) = get_active_task(&app);
     emit_lifecycle_log(
         &app,
@@ -696,7 +764,24 @@ pub async fn push_scraper_task(
     ensure_invoker_window(&window, &[WINDOW_MAIN], "push_scraper_task")?;
     let foreground = foreground.unwrap_or(false);
     let task_id = make_task_id(&source_id);
-    set_active_task(&app, source_id.clone(), task_id.clone(), None, false);
+    let window_label = if foreground {
+        WINDOW_SCRAPER_FOREGROUND
+    } else {
+        WINDOW_SCRAPER_WORKER
+    };
+    if !foreground {
+        set_active_task(
+            &app,
+            source_id.clone(),
+            task_id.clone(),
+            None,
+            false,
+            url.clone(),
+            inject_script.clone(),
+            intercept_api.clone(),
+            secret_key.clone(),
+        );
+    }
 
     // Log: task_start
     emit_lifecycle_log(
@@ -886,10 +971,12 @@ pub async fn push_scraper_task(
     );
 
     // If a scraper window already exists, close it and wait until it is removed.
-    close_existing_scraper_window(&app, &source_id, &task_id)
+    close_existing_scraper_window(&app, &source_id, &task_id, window_label)
         .await
         .map_err(|e| {
-            clear_active_task(&app);
+            if !foreground {
+                clear_active_task(&app);
+            }
             emit_lifecycle_log(
                 &app,
                 ScraperLifecycleLog::new(
@@ -916,7 +1003,7 @@ pub async fn push_scraper_task(
 
     let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
-        "scraper_worker",
+        window_label,
         tauri::WebviewUrl::External(url.parse().unwrap()),
     )
     .title(if foreground {
@@ -984,7 +1071,9 @@ pub async fn push_scraper_task(
     }
 
     let _webview = builder.build().map_err(|e| {
-        clear_active_task(&app);
+        if !foreground {
+            clear_active_task(&app);
+        }
         emit_lifecycle_log(
             &app,
             ScraperLifecycleLog::new(
@@ -1059,6 +1148,10 @@ async fn start_claimed_scraper_task(
         task_id.clone(),
         Some(claimed.attempt),
         true,
+        url.clone(),
+        inject_script.clone(),
+        intercept_api.clone(),
+        secret_key.clone(),
     );
 
     emit_lifecycle_log(
@@ -1233,7 +1326,7 @@ async fn start_claimed_scraper_task(
         inject_script
     );
 
-    close_existing_scraper_window(app, &source_id, &task_id)
+    close_existing_scraper_window(app, &source_id, &task_id, WINDOW_SCRAPER_WORKER)
         .await
         .map_err(|e| {
             clear_active_task(app);
@@ -1336,7 +1429,11 @@ pub async fn handle_scraped_data(
     secret_key: String,
     data: serde_json::Value,
 ) -> Result<(), String> {
-    ensure_invoker_window(&window, &[WINDOW_SCRAPER_WORKER], "handle_scraped_data")?;
+    ensure_invoker_window(
+        &window,
+        &[WINDOW_SCRAPER_WORKER, WINDOW_SCRAPER_FOREGROUND],
+        "handle_scraped_data",
+    )?;
     let resolved_task_id = task_id.unwrap_or_else(|| {
         let (_, active_task_id) = get_active_task(&app);
         if active_task_id == "unknown" {
@@ -1400,26 +1497,31 @@ pub async fn handle_scraped_data(
         ),
     );
 
+    let mut release_backend_guard = false;
     if let Some(active) = get_active_task_record(&app) {
-        if active.task_id == resolved_task_id && active.source_id == source_id && active.backend_managed {
-            if let Err(err) = complete_scraper_task(
-                &app,
-                &source_id,
-                &resolved_task_id,
-                active.attempt,
-                &data,
-            ) {
-                emit_lifecycle_log(
+        if active.task_id == resolved_task_id && active.source_id == source_id {
+            if active.backend_managed {
+                release_backend_guard = true;
+                if let Err(err) = complete_scraper_task(
                     &app,
-                    ScraperLifecycleLog::new(
-                        source_id.clone(),
-                        resolved_task_id.clone(),
-                        "backend_complete_error",
-                        "error",
-                        format!("Failed to callback complete endpoint: {}", err),
-                    ),
-                );
+                    &source_id,
+                    &resolved_task_id,
+                    active.attempt,
+                    &data,
+                ) {
+                    emit_lifecycle_log(
+                        &app,
+                        ScraperLifecycleLog::new(
+                            source_id.clone(),
+                            resolved_task_id.clone(),
+                            "backend_complete_error",
+                            "error",
+                            format!("Failed to callback complete endpoint: {}", err),
+                        ),
+                    );
+                }
             }
+            clear_active_task(&app);
         }
     }
 
@@ -1434,18 +1536,15 @@ pub async fn handle_scraped_data(
     )
     .map_err(|e| e.to_string())?;
 
-    // Close the scraper window since task is done
-    if let Some(win) = app.get_webview_window("scraper_worker") {
-        let _ = win.close();
-    }
-    clear_active_task(&app);
+    // Close the invoking scraper window since task is done.
+    let _ = window.close();
 
-    // Re-enable App Nap on macOS after scraping completes
+    // Re-enable App Nap on macOS only when a backend-managed task completed.
     #[cfg(target_os = "macos")]
-    {
+    if release_backend_guard {
         let state = app.state::<ScraperState>();
         let mut guard = state.app_nap_guard.lock().unwrap();
-        *guard = None; // Drop the guard, which calls endActivity
+        *guard = None;
     }
 
     Ok(())
@@ -1459,7 +1558,11 @@ pub async fn handle_scraper_auth(
     task_id: Option<String>,
     target_url: String,
 ) -> Result<(), String> {
-    ensure_invoker_window(&window, &[WINDOW_SCRAPER_WORKER], "handle_scraper_auth")?;
+    ensure_invoker_window(
+        &window,
+        &[WINDOW_SCRAPER_WORKER, WINDOW_SCRAPER_FOREGROUND],
+        "handle_scraper_auth",
+    )?;
     let resolved_task_id = task_id.unwrap_or_else(|| {
         let (_, active_task_id) = get_active_task(&app);
         active_task_id
@@ -1516,24 +1619,21 @@ pub async fn handle_scraper_auth(
     )
     .map_err(|e| e.to_string())?;
 
-    // Show the window to allow user to log in
-    if let Some(win) = app.get_webview_window("scraper_worker") {
-        emit_lifecycle_log(
-            &app,
-            ScraperLifecycleLog::new(
-                source_id.clone(),
-                resolved_task_id.clone(),
-                "window_shown",
-                "info",
-                "Showing window for manual authentication".to_string(),
-            ),
-        );
-        let _ = win.set_decorations(true);
-        let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize::new(800.0, 600.0)));
-        let _ = win.center();
-        let _ = win.show();
-        let _ = win.set_focus();
-    }
+    emit_lifecycle_log(
+        &app,
+        ScraperLifecycleLog::new(
+            source_id.clone(),
+            resolved_task_id.clone(),
+            "window_shown",
+            "info",
+            "Showing window for manual authentication".to_string(),
+        ),
+    );
+    let _ = window.set_decorations(true);
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(800.0, 600.0)));
+    let _ = window.center();
+    let _ = window.show();
+    let _ = window.set_focus();
     Ok(())
 }
 
@@ -1542,7 +1642,10 @@ pub async fn show_scraper_window(window: Window, app: AppHandle) -> Result<(), S
     ensure_invoker_window(&window, &[WINDOW_MAIN], "show_scraper_window")?;
     let (source_id, task_id) = get_active_task(&app);
     println!("[Scraper Debug] show_scraper_window called");
-    if let Some(win) = app.get_webview_window("scraper_worker") {
+    if let Some(win) = app
+        .get_webview_window(WINDOW_SCRAPER_WORKER)
+        .or_else(|| app.get_webview_window(WINDOW_SCRAPER_FOREGROUND))
+    {
         emit_lifecycle_log(
             &app,
             ScraperLifecycleLog::new(
@@ -1560,6 +1663,96 @@ pub async fn show_scraper_window(window: Window, app: AppHandle) -> Result<(), S
         let _ = win.set_focus();
     }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn promote_active_scraper_to_foreground(
+    window: Window,
+    app: AppHandle,
+    source_id: Option<String>,
+) -> Result<bool, String> {
+    ensure_invoker_window(
+        &window,
+        &[WINDOW_MAIN],
+        "promote_active_scraper_to_foreground",
+    )?;
+
+    let Some(active) = get_active_task_record(&app) else {
+        return Ok(false);
+    };
+    if !active.backend_managed {
+        return Ok(false);
+    }
+    if let Some(expected_source_id) = source_id.as_ref() {
+        if active.source_id != *expected_source_id {
+            return Ok(false);
+        }
+    }
+
+    let source_id = active.source_id.clone();
+    let task_id = active.task_id.clone();
+    let attempt = active.attempt;
+    let url = active.url.clone();
+    let inject_script = active.inject_script.clone();
+    let intercept_api = active.intercept_api.clone();
+    let secret_key = active.secret_key.clone();
+
+    emit_lifecycle_log(
+        &app,
+        ScraperLifecycleLog::new(
+            source_id.clone(),
+            task_id.clone(),
+            "promote_to_foreground",
+            "info",
+            "Promoting active queue task to foreground manual mode".to_string(),
+        ),
+    );
+
+    if let Err(err) = fail_scraper_task(
+        &app,
+        &source_id,
+        &task_id,
+        attempt,
+        "Moved to manual foreground mode by user",
+    ) {
+        emit_lifecycle_log(
+            &app,
+            ScraperLifecycleLog::new(
+                source_id.clone(),
+                task_id.clone(),
+                "promote_fail_callback_error",
+                "warn",
+                format!("Failed to mark backend task as failed: {err}"),
+            ),
+        );
+        let _ = clear_scraper_tasks(&app, Some(&source_id));
+    }
+
+    if let Some(win) = app.get_webview_window(WINDOW_SCRAPER_WORKER) {
+        let _ = win.close();
+    }
+    clear_active_task(&app);
+
+    #[cfg(target_os = "macos")]
+    {
+        let state = app.state::<ScraperState>();
+        let mut guard = state.app_nap_guard.lock().unwrap();
+        *guard = None;
+    }
+
+    push_scraper_task(
+        window,
+        app,
+        source_id,
+        url,
+        inject_script,
+        intercept_api,
+        secret_key,
+        Some(true),
+    )
+    .await?;
+
+    Ok(true)
 }
 
 #[tauri::command]
@@ -1608,6 +1801,48 @@ pub async fn cancel_scraper_task(window: Window, app: AppHandle) -> Result<(), S
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn clear_scraper_queue(
+    window: Window,
+    app: AppHandle,
+    source_id: Option<String>,
+) -> Result<usize, String> {
+    ensure_invoker_window(&window, &[WINDOW_MAIN], "clear_scraper_queue")?;
+    clear_scraper_tasks(&app, source_id.as_deref())
+}
+
+#[tauri::command]
+pub async fn get_scraper_queue_snapshot(
+    window: Window,
+    app: AppHandle,
+) -> Result<ScraperQueueSnapshot, String> {
+    ensure_invoker_window(&window, &[WINDOW_MAIN], "get_scraper_queue_snapshot")?;
+    let listed_tasks = list_active_scraper_tasks(&app)?;
+    let mut queue_source_ids: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for task in listed_tasks {
+        let source_id = task.source_id;
+        if source_id.is_empty() || seen.contains(&source_id) {
+            continue;
+        }
+        seen.insert(source_id.clone());
+        queue_source_ids.push(source_id);
+    }
+
+    let active_source_id = get_active_task_record(&app).and_then(|active| {
+        if active.backend_managed {
+            Some(active.source_id)
+        } else {
+            None
+        }
+    });
+
+    Ok(ScraperQueueSnapshot {
+        active_source_id,
+        queue_source_ids,
+    })
 }
 
 #[cfg(test)]

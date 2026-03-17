@@ -63,6 +63,14 @@ class ScraperTaskFailRequest(BaseModel):
     attempt: int | None = None
     error: str
 
+
+class ScraperTaskClearRequest(BaseModel):
+    source_id: str | None = None
+
+
+class ScraperTaskListRequest(BaseModel):
+    pass
+
 logger = logging.getLogger(__name__)
 DEFAULT_PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
 
@@ -823,6 +831,34 @@ async def internal_fail_scraper_task(
         "idempotent": False,
         "task": _serialize_scraper_task(updated),
     }
+
+
+@router.post("/internal/scraper/clear")
+async def internal_clear_scraper_tasks(
+    payload: ScraperTaskClearRequest,
+    request: Request,
+) -> dict[str, Any]:
+    _require_local_request(request)
+    if _scraper_task_store is None:
+        raise HTTPException(503, "Scraper task store unavailable")
+
+    removed_tasks = _scraper_task_store.clear_active_tasks(source_id=payload.source_id)
+    return {
+        "cleared_count": len(removed_tasks),
+        "tasks": [_serialize_scraper_task(task) for task in removed_tasks],
+    }
+
+
+@router.post("/internal/scraper/list")
+async def internal_list_scraper_tasks(
+    payload: ScraperTaskListRequest,
+    request: Request,
+) -> dict[str, Any]:
+    _require_local_request(request)
+    if _scraper_task_store is None:
+        raise HTTPException(503, "Scraper task store unavailable")
+    tasks = _scraper_task_store.list_active_tasks()
+    return {"tasks": [_serialize_scraper_task(task) for task in tasks]}
 
 
 # ── Config Query ──────────────────────────────────────

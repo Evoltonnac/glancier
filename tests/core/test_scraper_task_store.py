@@ -136,3 +136,108 @@ def test_complete_and_fail_are_idempotent(tmp_path):
     assert failed_again_changed is False
     assert failed_again is not None
     assert failed_again["status"] == "failed"
+
+
+def test_clear_active_tasks_removes_pending_and_claimed_only(tmp_path):
+    store = ScraperTaskStore(tmp_path / "scraper_tasks.json")
+
+    done = store.upsert_pending_task(
+        source_id="source-c",
+        step_id="webview",
+        url="https://example.com/completed",
+        script="",
+        intercept_api="",
+        secret_key="webview_data",
+    )
+    claimed_done = store.claim_next_task(worker_id="worker-a", lease_seconds=20)
+    assert claimed_done is not None
+    assert claimed_done["task_id"] == done["task_id"]
+    store.complete_task(task_id=done["task_id"], worker_id="worker-a", attempt=1)
+
+    claimed = store.upsert_pending_task(
+        source_id="source-b",
+        step_id="webview",
+        url="https://example.com/claimed",
+        script="",
+        intercept_api="",
+        secret_key="webview_data",
+    )
+    store.claim_next_task(worker_id="worker-a", lease_seconds=20)
+    pending = store.upsert_pending_task(
+        source_id="source-a",
+        step_id="webview",
+        url="https://example.com/pending",
+        script="",
+        intercept_api="",
+        secret_key="webview_data",
+    )
+
+    removed = store.clear_active_tasks()
+    removed_ids = {task["task_id"] for task in removed}
+    assert pending["task_id"] in removed_ids
+    assert claimed["task_id"] in removed_ids
+    assert done["task_id"] not in removed_ids
+
+    remaining_ids = {task["task_id"] for task in store.list_tasks()}
+    assert done["task_id"] in remaining_ids
+    assert pending["task_id"] not in remaining_ids
+    assert claimed["task_id"] not in remaining_ids
+
+
+def test_clear_active_tasks_can_filter_by_source(tmp_path):
+    store = ScraperTaskStore(tmp_path / "scraper_tasks.json")
+    source_a = store.upsert_pending_task(
+        source_id="source-a",
+        step_id="webview",
+        url="https://example.com/a",
+        script="",
+        intercept_api="",
+        secret_key="webview_data",
+    )
+    source_b = store.upsert_pending_task(
+        source_id="source-b",
+        step_id="webview",
+        url="https://example.com/b",
+        script="",
+        intercept_api="",
+        secret_key="webview_data",
+    )
+
+    removed = store.clear_active_tasks(source_id="source-a")
+    assert [task["task_id"] for task in removed] == [source_a["task_id"]]
+
+    remaining_ids = {task["task_id"] for task in store.list_tasks()}
+    assert source_b["task_id"] in remaining_ids
+    assert source_a["task_id"] not in remaining_ids
+
+
+def test_list_active_tasks_only_returns_active_statuses_in_created_order(tmp_path):
+    now = {"value": 5000.0}
+    store = ScraperTaskStore(
+        tmp_path / "scraper_tasks.json",
+        now_fn=lambda: now["value"],
+    )
+
+    now["value"] = 5000.0
+    first = store.upsert_pending_task(
+        source_id="source-1",
+        step_id="webview",
+        url="https://example.com/1",
+        script="",
+        intercept_api="",
+        secret_key="webview_data",
+    )
+    now["value"] = 5001.0
+    second = store.upsert_pending_task(
+        source_id="source-2",
+        step_id="webview",
+        url="https://example.com/2",
+        script="",
+        intercept_api="",
+        secret_key="webview_data",
+    )
+    store.claim_next_task(worker_id="worker-a", lease_seconds=20)
+    store.complete_task(task_id=first["task_id"], worker_id="worker-a", attempt=1)
+
+    active = store.list_active_tasks()
+    assert [task["task_id"] for task in active] == [second["task_id"]]
