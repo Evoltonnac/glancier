@@ -59,10 +59,12 @@ jobs:
                 include:
                     - platform: macos-15
                       rust_target: aarch64-apple-darwin
-                      tauri_args: --bundles dmg --target aarch64-apple-darwin
+                      tauri_args: --bundles app --target aarch64-apple-darwin
+                      app_name: Glanceus
                     - platform: macos-15-intel
                       rust_target: x86_64-apple-darwin
-                      tauri_args: --bundles dmg --target x86_64-apple-darwin
+                      tauri_args: --bundles app --target x86_64-apple-darwin
+                      app_name: Glanceus
                     - platform: windows-latest
                       rust_target: x86_64-pc-windows-msvc
                       tauri_args: --bundles nsis --target x86_64-pc-windows-msvc
@@ -101,6 +103,16 @@ jobs:
               run: |
                   VERSION=$(node -p "require('./ui-react/package.json').version")
                   echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+                  echo "VERSION=$VERSION"
+
+            - name: Create GitHub Release
+              if: matrix.platform == 'macos-15'
+              run: |
+                  gh release create "v${{ steps.get_version.outputs.VERSION }}" \
+                      --title "Glanceus v${{ steps.get_version.outputs.VERSION }}" \
+                      --notes "Automated release for Glanceus v${{ steps.get_version.outputs.VERSION }}." \
+                      --draft true \
+                      --repo ${{ github.repository }}
 
             - name: Run release prebuild script
               shell: bash
@@ -108,17 +120,52 @@ jobs:
                   SKIP_TAURI_BUILD: "1"
               run: bash scripts/build.sh --prepare-only
 
-            - name: Build and publish Tauri release artifacts
-              uses: tauri-apps/tauri-action@v0
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-              with:
-                  projectPath: ui-react
-                  args: ${{ matrix.tauri_args }}
-                  tagName: v${{ steps.get_version.outputs.VERSION }}
-                  releaseName: "Glanceus v${{ steps.get_version.outputs.VERSION }}"
-                  releaseBody: "Automated release for Glanceus v${{ steps.get_version.outputs.VERSION }}."
-                  releaseDraft: true
-                  prerelease: false
+            - name: Build Tauri app
+              working-directory: ui-react
+              run: |
+                  npm run tauri build -- ${{ matrix.tauri_args }}
+
+            - name: Codesign and Staple (Ad-Hoc)
+              if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
+              run: |
+                  # Find the .app bundle in the bundle directory
+                  APP_PATH=$(find "ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" -name "*.app" -type d | head -1)
+                  echo "Signing app at: $APP_PATH"
+
+                  # Ad-Hoc sign
+                  codesign --force --deep -s - "$APP_PATH"
+
+                  # Staple the signature
+                  xcrun stapler staple "$APP_PATH"
+
+                  echo "Code signing complete"
+
+            - name: Create DMG from signed app
+              if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
+              run: |
+                  APP_PATH=$(find "ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" -name "*.app" -type d | head -1)
+                  DMG_NAME="${{ matrix.app_name }}.dmg"
+                  DMG_PATH="ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/$DMG_NAME"
+
+                  # Create DMG from signed app
+                  hdiutil create -volname "${{ matrix.app_name }}" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_PATH"
+
+                  echo "DMG created at: $DMG_PATH"
+
+            - name: Upload Release Asset
+              if: matrix.platform == 'macos-15' || matrix.platform == 'macos-15-intel'
+              run: |
+                  DMG_PATH=$(find ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg -name "*.dmg" | head -1)
+                  echo "DMG path: $DMG_PATH"
+
+                  # Upload using GitHub CLI
+                  gh release upload "v${{ steps.get_version.outputs.VERSION }}" "$DMG_PATH" --repo ${{ github.repository }}
+
+            - name: Upload Windows Release Asset
+              if: matrix.platform == 'windows-latest'
+              run: |
+                  NSIS_PATH=$(find ui-react/src-tauri/target/${{ matrix.rust_target }}/release/bundle/nsis -name "*.exe" | head -1)
+                  echo "NSIS path: $NSIS_PATH"
+
+                  # Upload using GitHub CLI
+                  gh release upload "v${{ steps.get_version.outputs.VERSION }}" "$NSIS_PATH" --repo ${{ github.repository }}
