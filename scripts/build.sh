@@ -149,7 +149,7 @@ case "$TARGET_PLATFORM" in
             echo "❌ build target 'mac' requires Apple Silicon host (arm64)"
             exit 1
         fi
-        TAURI_BUNDLES="dmg"
+        TAURI_BUNDLES="dmg updater"
         TAURI_TARGET="aarch64-apple-darwin"
         ;;
     win)
