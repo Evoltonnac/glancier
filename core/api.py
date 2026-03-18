@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from core.models import StoredSource, StoredView, ViewItem
 from core.integration_manager import IntegrationManager
 from core.error_formatter import build_error_envelope
+from core.master_key_provider import MasterKeyUnavailableError
 from core.source_state import SourceStatus, InteractionType, InteractionRequest
 from core.refresh_policy import (
     DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES,
@@ -86,6 +87,7 @@ _secrets = None
 _resource_manager = None
 _integration_manager = None
 _settings_manager = None
+_master_key_provider = None
 _scraper_task_store = None
 
 
@@ -98,10 +100,11 @@ def init_api(
     resource_manager,
     integration_manager,
     settings_manager=None,
+    master_key_provider=None,
     scraper_task_store=None,
 ):
     """Inject global dependencies (called by main.py)."""
-    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _scraper_task_store
+    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _master_key_provider, _scraper_task_store
     _executor = executor
     _data_controller = data_controller
     _config = config
@@ -110,6 +113,7 @@ def init_api(
     _resource_manager = resource_manager
     _integration_manager = integration_manager
     _settings_manager = settings_manager
+    _master_key_provider = master_key_provider
     _scraper_task_store = scraper_task_store
 
 
@@ -1738,69 +1742,67 @@ async def get_integration_sources(filename: str) -> list[dict]:
 
 from core.settings_manager import SystemSettings
 
+
+class SystemSettingsResponse(SystemSettings):
+    encryption_available: bool = False
+
+
+def _resolve_encryption_available() -> bool:
+    if _master_key_provider is None:
+        return False
+    checker = getattr(_master_key_provider, "is_encryption_available", None)
+    if not callable(checker):
+        return False
+    try:
+        return bool(checker())
+    except Exception:
+        return False
+
+
+def _to_settings_response(settings: SystemSettings) -> SystemSettingsResponse:
+    payload = settings.model_dump()
+    payload["encryption_available"] = _resolve_encryption_available()
+    return SystemSettingsResponse.model_validate(payload)
+
+
 @router.get("/settings")
-async def get_system_settings() -> SystemSettings:
+async def get_system_settings() -> SystemSettingsResponse:
     """Get all system settings."""
     if _settings_manager is None:
-        return SystemSettings()
-    return _settings_manager.load_settings()
+        return _to_settings_response(SystemSettings())
+    return _to_settings_response(_settings_manager.load_settings())
 
 @router.put("/settings")
-async def update_system_settings(settings: SystemSettings) -> SystemSettings:
+async def update_system_settings(settings: SystemSettings) -> SystemSettingsResponse:
     """Update all system settings and trigger migration on encryption-toggle change."""
     if _settings_manager is None:
         _apply_runtime_log_level(settings.debug_logging_enabled)
-        return settings
+        return _to_settings_response(settings)
 
     old = _settings_manager.load_settings()
     old_enc = old.encryption_enabled
     new_enc = settings.encryption_enabled
 
-    # Save new settings (ensure master key exists before writing).
-    if new_enc and not settings.master_key:
-        # If encryption is newly enabled and key is missing, generate it first.
-        settings.master_key = _settings_manager.get_or_create_master_key()
+    if old_enc != new_enc and _secrets:
+        if new_enc:
+            # Enabling encryption requires a keyring-backed master key first.
+            if _master_key_provider is None:
+                raise HTTPException(500, "Master key provider not initialized")
+            try:
+                _master_key_provider.get_or_create_master_key()
+                logger.info("Encryption toggled on. Starting full secrets encryption migration.")
+                _secrets.migrate_encrypt_all()
+            except MasterKeyUnavailableError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        else:
+            # Disabling encryption decrypts all existing ciphertext.
+            try:
+                logger.info("Encryption toggled off. Starting full secrets decryption migration.")
+                _secrets.migrate_decrypt_all()
+            except MasterKeyUnavailableError as exc:
+                raise HTTPException(400, str(exc)) from exc
 
     _settings_manager.save_settings(settings)
     _apply_runtime_log_level(settings.debug_logging_enabled)
 
-    # Inject new master key context into secrets controller after toggle.
-    # secrets_controller re-reads settings.json in _master_key(), but this also triggers migration.
-    if old_enc != new_enc and _secrets:
-        if new_enc:
-            # Enabling encryption: encrypt all existing plaintext.
-            logger.info("加密开关开启，开始全量加密 secrets...")
-            _secrets.inject_settings_manager(_settings_manager)
-            _secrets.migrate_encrypt_all()
-        else:
-            # Disabling encryption: decrypt all existing ciphertext.
-            logger.info("加密开关关闭，开始全量解密 secrets...")
-            _secrets.inject_settings_manager(_settings_manager)
-            _secrets.migrate_decrypt_all()
-
-    return settings
-
-
-# ── Key Sync Passcode (Plan A) ────────────────────────
-
-class MasterKeyImportRequest(BaseModel):
-    master_key: str
-
-@router.get("/settings/master-key/export")
-async def export_master_key() -> dict:
-    """Export current base64 master key for cross-device sync."""
-    if _settings_manager is None:
-        raise HTTPException(500, "Settings manager not initialized")
-    key = _settings_manager.get_or_create_master_key()
-    return {"master_key": key, "hint": "请妥善保管，将此通行码输入到目标设备以同步解密能力"}
-
-
-@router.post("/settings/master-key/import")
-async def import_master_key(req: MasterKeyImportRequest) -> dict:
-    """Import master key for cross-device decryption sync. No migration is triggered."""
-    if _settings_manager is None:
-        raise HTTPException(500, "Settings manager not initialized")
-    settings = _settings_manager.load_settings()
-    settings.master_key = req.master_key
-    _settings_manager.save_settings(settings)
-    return {"message": "主密钥已导入，后续读写将使用新主密钥"}
+    return _to_settings_response(settings)

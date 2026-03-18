@@ -8,8 +8,10 @@ from core.encryption import (
     decrypt_value,
     encrypt_dict,
     encrypt_value,
+    get_keyring_unavailable_reason,
     generate_master_key,
     get_keychain_master_key,
+    is_keyring_backend_available,
     is_encrypted,
     set_keychain_master_key,
 )
@@ -110,3 +112,32 @@ def test_set_keychain_master_key_strips_whitespace_before_store(monkeypatch):
         is True
     )
     assert calls == [("test-service", "test-account", key)]
+
+
+def test_is_keyring_backend_available_false_when_keyring_missing(monkeypatch):
+    import core.encryption as encryption_module
+
+    monkeypatch.setattr(encryption_module, "keyring", None)
+
+    assert is_keyring_backend_available() is False
+    assert (
+        get_keyring_unavailable_reason()
+        == "Python package 'keyring' is not installed in the runtime environment."
+    )
+
+
+def test_is_keyring_backend_available_false_for_fail_backend(monkeypatch):
+    import core.encryption as encryption_module
+
+    class _FailBackend:
+        priority = 0
+
+    class _FakeKeyring:
+        @staticmethod
+        def get_keyring():
+            return _FailBackend()
+
+    monkeypatch.setattr(encryption_module, "keyring", _FakeKeyring())
+
+    assert is_keyring_backend_available() is False
+    assert "No supported keyring backend is active" in get_keyring_unavailable_reason()

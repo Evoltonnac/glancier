@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from core.settings_manager import SettingsManager, SystemSettings
-from core.encryption import generate_master_key
 
 
 def test_load_settings_defaults_include_scraper_timeout(tmp_path):
@@ -64,37 +63,15 @@ def test_load_settings_invalid_refresh_interval_falls_back_to_default(tmp_path):
     assert loaded.encryption_enabled is True
 
 
-def test_get_or_create_master_key_prefers_keychain_value(tmp_path, monkeypatch):
+def test_save_settings_drops_legacy_master_key_field(tmp_path):
     manager = SettingsManager(settings_dir=tmp_path)
-    file_key = generate_master_key()
-    keychain_key = generate_master_key()
+    manager.settings_file.write_text(
+        '{"master_key":"legacy","encryption_enabled":true}',
+        encoding="utf-8",
+    )
 
-    monkeypatch.setattr("core.encryption.set_keychain_master_key", lambda *args, **kwargs: True)
-    manager.save_settings(SystemSettings(master_key=file_key))
-    monkeypatch.setattr("core.encryption.get_keychain_master_key", lambda *args, **kwargs: keychain_key)
+    settings = manager.load_settings()
+    manager.save_settings(settings)
+    saved_payload = manager.settings_file.read_text(encoding="utf-8")
 
-    resolved = manager.get_or_create_master_key()
-
-    assert resolved == keychain_key
-    assert manager.load_settings().master_key == keychain_key
-
-
-def test_get_or_create_master_key_backfills_keychain_from_settings(tmp_path, monkeypatch):
-    manager = SettingsManager(settings_dir=tmp_path)
-    file_key = generate_master_key()
-    set_calls: list[str] = []
-
-    monkeypatch.setattr("core.encryption.get_keychain_master_key", lambda *args, **kwargs: None)
-
-    def fake_set_keychain(master_key_b64: str, *args, **kwargs) -> bool:
-        set_calls.append(master_key_b64)
-        return True
-
-    monkeypatch.setattr("core.encryption.set_keychain_master_key", fake_set_keychain)
-    manager.save_settings(SystemSettings(master_key=file_key))
-    set_calls.clear()
-
-    resolved = manager.get_or_create_master_key()
-
-    assert resolved == file_key
-    assert set_calls == [file_key]
+    assert "master_key" not in saved_payload

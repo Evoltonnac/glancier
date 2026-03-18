@@ -89,6 +89,12 @@ pyinstaller \
     --onedir \
     --name "glanceus-server" \
     --add-data "config:config" \
+    --hidden-import keyring \
+    --hidden-import keyring.backends \
+    --hidden-import keyring.backends.macOS \
+    --hidden-import keyring.backends.Windows \
+    --hidden-import keyring.backends.SecretService \
+    --hidden-import keyring.backends.kwallet \
     --hidden-import uvicorn.logging \
     --hidden-import uvicorn.loops.auto \
     --hidden-import uvicorn.protocols.http.auto \

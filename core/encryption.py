@@ -4,8 +4,7 @@ Encryption module: AES-GCM symmetric encryption for sensitive secrets.json data.
 Design:
 - Every encrypted value uses `ENC:` prefix and remains backward-compatible with plaintext.
 - Uses AES-256-GCM (authenticated encryption).
-- Master key is stored in system keychain first; settings.json is fallback only.
-- For multi-device sync, users can manually export/import the sync passcode.
+- Master key is stored in the system keyring only.
 """
 
 import base64
@@ -26,6 +25,29 @@ try:
     import keyring
 except Exception:  # pragma: no cover - import failure depends on runtime env
     keyring = None
+
+
+def get_keyring_unavailable_reason() -> str | None:
+    """Return detailed reason when keyring backend is unavailable."""
+    if keyring is None:
+        return "Python package 'keyring' is not installed in the runtime environment."
+    try:
+        backend = keyring.get_keyring()
+    except Exception as e:
+        logger.warning("failed to resolve keyring backend: %s", e)
+        return f"Failed to resolve keyring backend: {e}"
+
+    # keyring.backends.fail.Keyring reports priority 0 and cannot store secrets.
+    priority = getattr(backend, "priority", 0)
+    if isinstance(priority, (int, float)) and priority <= 0:
+        backend_name = backend.__class__.__module__ + "." + backend.__class__.__name__
+        return f"No supported keyring backend is active (resolved backend: {backend_name})."
+    return None
+
+
+def is_keyring_backend_available() -> bool:
+    """Return whether a usable keyring backend is available at runtime."""
+    return get_keyring_unavailable_reason() is None
 
 
 def generate_master_key() -> str:

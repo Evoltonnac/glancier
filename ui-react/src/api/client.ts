@@ -621,7 +621,9 @@ class ApiClient {
     return res.json();
   }
 
-  async updateSettings(settings: SystemSettings): Promise<SystemSettings> {
+  async updateSettings(
+    settings: SystemSettingsUpdateRequest
+  ): Promise<SystemSettings> {
     const res = await this.request(`/settings`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -630,35 +632,24 @@ class ApiClient {
     if (!res.ok) throw new Error("Failed to update settings");
     return res.json();
   }
-
-  async exportMasterKey(): Promise<{ master_key: string; hint: string }> {
-    const res = await this.request(`/settings/master-key/export`);
-    if (!res.ok) throw new Error("Failed to export master key");
-    return res.json();
-  }
-
-  async importMasterKey(masterKey: string): Promise<{ message: string }> {
-    const res = await this.request(`/settings/master-key/import`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ master_key: masterKey }),
-    });
-    if (!res.ok) throw new Error("Failed to import master key");
-    return res.json();
-  }
 }
 
 export interface SystemSettings {
   autostart: boolean;
   proxy: string;
   encryption_enabled: boolean;
+  encryption_available?: boolean;
   debug_logging_enabled: boolean;
   refresh_interval_minutes: number;
   scraper_timeout_seconds: number;
-  master_key?: string | null;
   theme?: string;
   density?: string;
   language?: "en" | "zh";
 }
+
+export type SystemSettingsUpdateRequest = Omit<
+  SystemSettings,
+  "encryption_available"
+>;
 
 export const api = new ApiClient();

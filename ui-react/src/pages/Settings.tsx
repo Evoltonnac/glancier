@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { api, getApiBaseUrl } from "../api/client";
 import type { SystemSettings } from "../api/client";
+import type { SystemSettingsUpdateRequest } from "../api/client";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -25,8 +26,6 @@ import {
     Shield,
     MonitorPlay,
     Network,
-    Copy,
-    Check,
     ChevronLeft,
     Info,
     Download,
@@ -56,7 +55,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
     debug_logging_enabled: false,
     refresh_interval_minutes: 30,
     scraper_timeout_seconds: 10,
-    master_key: null,
+    encryption_available: true,
     theme: "system",
     density: "normal",
     language: "en",
@@ -114,6 +113,14 @@ function resolvePortFromUrl(rawUrl: string): string | null {
     }
 }
 
+function toUpdatePayload(
+    settings: SystemSettings,
+): SystemSettingsUpdateRequest {
+    const { encryption_available, ...payload } = settings;
+    void encryption_available;
+    return payload;
+}
+
 export default function SettingsPage() {
     const tauriRuntime = isTauri();
     const navigate = useNavigate();
@@ -125,12 +132,6 @@ export default function SettingsPage() {
     const [openingLogFolder, setOpeningLogFolder] = useState(false);
     const [runtimePortInfo, setRuntimePortInfo] =
         useState<RuntimePortInfo | null>(null);
-    const [masterKeyDisplay, setMasterKeyDisplay] = useState<string | null>(
-        null,
-    );
-    const [importKeyValue, setImportKeyValue] = useState("");
-    const [showImport, setShowImport] = useState(false);
-    const [copied, setCopied] = useState(false);
     const { theme, setTheme } = useTheme();
     const { t, setLocale } = useI18n();
     const refreshIntervalOptions: Array<{ value: number; label: string }> = [
@@ -170,7 +171,11 @@ export default function SettingsPage() {
     };
 
     // Use SWR to fetch settings - handles dedup and StrictMode automatically
-    const { settings: swrSettings, isLoading: swrLoading } = useSettings();
+    const {
+        settings: swrSettings,
+        isLoading: swrLoading,
+        mutateSettings,
+    } = useSettings();
 
     // Load autostart and port info from Tauri (not using SWR as these are Tauri commands)
     const [autostartEnabled, setAutostartEnabled] = useState(false);
@@ -213,11 +218,12 @@ export default function SettingsPage() {
 
     // Loading state combines SWR loading and Tauri loading
     const loading = swrLoading;
-    const encryptionKeyStatus = settings.encryption_enabled
-        ? settings.master_key
-            ? t("settings.encryption.key_status.ready")
-            : t("settings.encryption.key_status.pending")
-        : t("settings.encryption.key_status.disabled");
+    const encryptionAvailable = settings.encryption_available !== false;
+    const encryptionStatus = encryptionAvailable
+        ? settings.encryption_enabled
+            ? t("settings.encryption.key_status.enabled")
+            : t("settings.encryption.key_status.disabled")
+        : t("settings.encryption.key_status.unavailable");
 
     const handleSave = async () => {
         setSaving(true);
@@ -235,7 +241,12 @@ export default function SettingsPage() {
             }
 
             // Persist backend-owned settings even if autostart command fails.
-            await api.updateSettings(settings);
+            const saved = await api.updateSettings(toUpdatePayload(settings));
+            setSettings((current) => ({
+                ...saved,
+                autostart: current.autostart,
+            }));
+            await mutateSettings(saved, { revalidate: false });
             if (autostartError) {
                 showToast(
                     t("settings.toast.autostart_failed", {
@@ -255,38 +266,6 @@ export default function SettingsPage() {
         } finally {
             setSaving(false);
         }
-    };
-
-    const handleExportKey = async () => {
-        try {
-            const { master_key } = await api.exportMasterKey();
-            setMasterKeyDisplay(master_key);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const handleImportKey = async () => {
-        if (!importKeyValue.trim()) return;
-        try {
-            await api.importMasterKey(importKeyValue.trim());
-            setImportKeyValue("");
-            setShowImport(false);
-            showToast(t("settings.toast.import_key_success"));
-        } catch (err) {
-            console.error(err);
-            showToast(
-                t("settings.toast.import_key_failed", { reason: String(err) }),
-                "error",
-            );
-        }
-    };
-
-    const handleCopy = async () => {
-        if (!masterKeyDisplay) return;
-        await navigator.clipboard.writeText(masterKeyDisplay);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
     };
 
     const handleReportBug = () => {
@@ -898,7 +877,7 @@ export default function SettingsPage() {
                                                         {t("settings.encryption.local.description")}
                                                     </p>
                                                     <p className="text-[11px] text-muted-foreground">
-                                                        {encryptionKeyStatus}
+                                                        {encryptionStatus}
                                                     </p>
                                                 </div>
                                                 <Switch
@@ -906,102 +885,27 @@ export default function SettingsPage() {
                                                         settings.encryption_enabled
                                                     }
                                                     className="data-[state=checked]:bg-brand focus-visible:ring-2 focus-visible:ring-brand/50"
-                                                    onCheckedChange={(v) =>
+                                                    onCheckedChange={(v) => {
+                                                        if (v && !encryptionAvailable) {
+                                                            showToast(
+                                                                t(
+                                                                    "settings.encryption.retry_hint",
+                                                                ),
+                                                                "info",
+                                                            );
+                                                        }
                                                         setSettings((s) => ({
                                                             ...s,
                                                             encryption_enabled:
                                                                 v,
-                                                        }))
-                                                    }
+                                                        }));
+                                                    }}
                                                 />
                                             </div>
-
-                                            {settings.encryption_enabled && (
-                                                <div className="rounded-xl border border-brand/20 px-5 py-5 space-y-4 bg-brand/5 animate-in slide-in-from-top-2 duration-300">
-                                                    <div className="flex items-start gap-3">
-                                                        <Info className="w-4 h-4 text-brand shrink-0 mt-0.5" />
-                                                        <p className="text-xs text-foreground/80 leading-relaxed">
-                                                            {t("settings.encryption.sync_note")}
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={
-                                                                handleExportKey
-                                                            }
-                                                            className="bg-background text-xs h-8 rounded-lg"
-                                                        >
-                                                            {t("settings.button.export_passcode")}
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                setShowImport(
-                                                                    (v) => !v,
-                                                                )
-                                                            }
-                                                            className="bg-background text-xs h-8 rounded-lg"
-                                                        >
-                                                            {t("settings.button.import_passcode")}
-                                                        </Button>
-                                                    </div>
-
-                                                    {masterKeyDisplay && (
-                                                        <div className="flex items-center gap-2 bg-background rounded-lg border border-border/50 p-2.5 mt-2">
-                                                            <code className="text-[11px] flex-1 break-all font-mono text-brand font-medium">
-                                                                {
-                                                                    masterKeyDisplay
-                                                                }
-                                                            </code>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-7 w-7 shrink-0 hover:bg-secondary rounded-md"
-                                                                onClick={
-                                                                    handleCopy
-                                                                }
-                                                            >
-                                                                {copied ? (
-                                                                    <Check className="w-3.5 h-3.5 text-green-500" />
-                                                                ) : (
-                                                                    <Copy className="w-3.5 h-3.5" />
-                                                                )}
-                                                            </Button>
-                                                        </div>
-                                                    )}
-
-                                                    {showImport && (
-                                                        <div className="flex gap-2 mt-2 pt-4 border-t border-brand/10">
-                                                            <Input
-                                                                placeholder={t("settings.input.passcode_placeholder")}
-                                                                value={
-                                                                    importKeyValue
-                                                                }
-                                                                onChange={(e) =>
-                                                                    setImportKeyValue(
-                                                                        e.target
-                                                                            .value,
-                                                                    )
-                                                                }
-                                                                className="h-9 text-sm bg-background"
-                                                            />
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={
-                                                                    handleImportKey
-                                                                }
-                                                                disabled={
-                                                                    !importKeyValue.trim()
-                                                                }
-                                                                className="h-9 px-4 rounded-lg"
-                                                            >
-                                                                {t("settings.button.confirm_import")}
-                                                            </Button>
-                                                        </div>
-                                                    )}
+                                            {!encryptionAvailable && (
+                                                <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
+                                                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                                    <p>{t("settings.encryption.retry_hint")}</p>
                                                 </div>
                                             )}
                                         </div>

@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from core.refresh_policy import (
@@ -27,8 +27,6 @@ class SystemSettings(BaseModel):
     # Timeout for a single webview scraper task in seconds.
     # Timed-out tasks are skipped so queue can continue.
     scraper_timeout_seconds: int = Field(default=10, ge=1, le=300)
-    # base64 encoded AES-256 master key; stored locally, never synced
-    master_key: Optional[str] = None
     theme: str = "system" # can be 'light', 'dark', or 'system'
     # UI density: 'compact', 'normal', or 'relaxed'
     density: str = "normal"
@@ -72,6 +70,7 @@ class SettingsManager:
                 # Backward-compatible normalization for older settings files.
                 if not isinstance(data, dict):
                     return SystemSettings()
+                had_legacy_master_key = "master_key" in data
                 if "encryption_enabled" not in data:
                     # Keep legacy installs unchanged when the old field is absent.
                     data["encryption_enabled"] = False
@@ -86,7 +85,11 @@ class SettingsManager:
                     data["refresh_interval_minutes"] = normalized_refresh
                 if data.get("language") not in {"en", "zh"}:
                     data["language"] = "en"
-                return SystemSettings.model_validate(data)
+                settings = SystemSettings.model_validate(data)
+                if had_legacy_master_key:
+                    # Strip deprecated plaintext master key from settings.json.
+                    self.save_settings(settings)
+                return settings
         except Exception as e:
             logger.error(f"Failed to load settings from {self.settings_file}: {e}")
             return SystemSettings()
@@ -96,47 +99,5 @@ class SettingsManager:
             with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump(settings.model_dump(), f, indent=2, ensure_ascii=False)
             logger.info("System settings saved successfully.")
-            if settings.master_key:
-                from core.encryption import set_keychain_master_key
-
-                if not set_keychain_master_key(
-                    settings.master_key,
-                    account=str(self.settings_file.resolve()),
-                ):
-                    logger.warning(
-                        "Master key could not be persisted to keychain; fallback remains settings.json."
-                    )
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
-
-    def get_or_create_master_key(self) -> str:
-        """
-        Get or create the local master key.
-        On first call, generate and persist to keychain and settings.json.
-        Returns the base64-encoded key bytes.
-        """
-        from core.encryption import (
-            generate_master_key,
-            get_keychain_master_key,
-            set_keychain_master_key,
-        )
-        settings = self.load_settings()
-        keychain_key = get_keychain_master_key(account=str(self.settings_file.resolve()))
-        if keychain_key:
-            if settings.master_key != keychain_key:
-                settings.master_key = keychain_key
-                self.save_settings(settings)
-            return keychain_key
-
-        if settings.master_key:
-            set_keychain_master_key(
-                settings.master_key,
-                account=str(self.settings_file.resolve()),
-            )
-            return settings.master_key
-        # First-time setup: generate and persist.
-        new_key = generate_master_key()
-        settings.master_key = new_key
-        self.save_settings(settings)
-        logger.info("Generated new master key for local encryption.")
-        return new_key

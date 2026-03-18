@@ -11,12 +11,13 @@ def test_ensure_startup_encryption_key_provisions_missing_key():
     settings_manager = SimpleNamespace(
         load_settings=lambda: SimpleNamespace(
             encryption_enabled=True,
-            master_key=None,
-        ),
-        get_or_create_master_key=lambda: calls.append("created"),
+        )
+    )
+    master_key_provider = SimpleNamespace(
+        get_or_create_master_key=lambda: calls.append("created")
     )
 
-    main_module.ensure_startup_encryption_key(settings_manager)
+    main_module.ensure_startup_encryption_key(settings_manager, master_key_provider)
 
     assert calls == ["created"]
 
@@ -26,23 +27,44 @@ def test_ensure_startup_encryption_key_skips_when_disabled():
     settings_manager = SimpleNamespace(
         load_settings=lambda: SimpleNamespace(
             encryption_enabled=False,
-            master_key=None,
-        ),
-        get_or_create_master_key=lambda: calls.append("created"),
+        )
+    )
+    master_key_provider = SimpleNamespace(
+        get_or_create_master_key=lambda: calls.append("created")
     )
 
-    main_module.ensure_startup_encryption_key(settings_manager)
+    main_module.ensure_startup_encryption_key(settings_manager, master_key_provider)
 
     assert calls == []
+
+
+def test_ensure_startup_encryption_key_provisions_when_enabled():
+    calls: list[str] = []
+    settings_manager = SimpleNamespace(
+        load_settings=lambda: SimpleNamespace(
+            encryption_enabled=True,
+        )
+    )
+    master_key_provider = SimpleNamespace(
+        get_or_create_master_key=lambda: calls.append("created")
+    )
+
+    main_module.ensure_startup_encryption_key(settings_manager, master_key_provider)
+
+    assert calls == ["created"]
 
 
 def test_create_app_falls_back_to_empty_config_when_load_fails(monkeypatch):
     def _boom():
         raise RuntimeError("invalid config")
 
+    fake_secrets = SimpleNamespace(
+        inject_settings_manager=lambda _settings: None,
+        inject_master_key_provider=lambda _provider: None,
+    )
     monkeypatch.setattr(main_module, "load_config", _boom)
     monkeypatch.setattr(main_module, "DataController", lambda: SimpleNamespace(close=lambda: None))
-    monkeypatch.setattr(main_module, "SecretsController", lambda: SimpleNamespace(inject_settings_manager=lambda _settings: None))
+    monkeypatch.setattr(main_module, "SecretsController", lambda: fake_secrets)
     monkeypatch.setattr(main_module, "AuthManager", lambda _secrets, app_config: SimpleNamespace())
     monkeypatch.setattr(main_module, "SettingsManager", lambda: SimpleNamespace())
     monkeypatch.setattr(main_module, "Executor", lambda _dc, _sc, _sm, **_kwargs: SimpleNamespace())
@@ -86,7 +108,14 @@ def test_create_app_seeds_first_launch_workspace_when_empty(monkeypatch):
 
     monkeypatch.setattr(main_module, "load_config", lambda: AppConfig())
     monkeypatch.setattr(main_module, "DataController", lambda: SimpleNamespace(close=lambda: None))
-    monkeypatch.setattr(main_module, "SecretsController", lambda: SimpleNamespace(inject_settings_manager=lambda _settings: None))
+    monkeypatch.setattr(
+        main_module,
+        "SecretsController",
+        lambda: SimpleNamespace(
+            inject_settings_manager=lambda _settings: None,
+            inject_master_key_provider=lambda _provider: None,
+        ),
+    )
     monkeypatch.setattr(main_module, "AuthManager", lambda _secrets, app_config: SimpleNamespace())
     monkeypatch.setattr(main_module, "SettingsManager", lambda: SimpleNamespace())
     monkeypatch.setattr(main_module, "Executor", lambda _dc, _sc, _sm, **_kwargs: SimpleNamespace())
@@ -199,7 +228,14 @@ def test_create_app_bootstrap_sources_use_api_create_flow_for_auto_refresh(monke
 
     monkeypatch.setattr(main_module, "load_config", lambda: AppConfig())
     monkeypatch.setattr(main_module, "DataController", lambda: SimpleNamespace(close=lambda: None))
-    monkeypatch.setattr(main_module, "SecretsController", lambda: SimpleNamespace(inject_settings_manager=lambda _settings: None))
+    monkeypatch.setattr(
+        main_module,
+        "SecretsController",
+        lambda: SimpleNamespace(
+            inject_settings_manager=lambda _settings: None,
+            inject_master_key_provider=lambda _provider: None,
+        ),
+    )
     monkeypatch.setattr(main_module, "AuthManager", lambda _secrets, app_config: SimpleNamespace())
     monkeypatch.setattr(main_module, "SettingsManager", lambda: SimpleNamespace())
     monkeypatch.setattr(

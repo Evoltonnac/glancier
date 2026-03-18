@@ -24,6 +24,7 @@ from core.executor import Executor
 from core.auth.manager import AuthManager
 from core.resource_manager import ResourceManager
 from core.integration_manager import IntegrationManager
+from core.master_key_provider import MasterKeyProvider
 from core.settings_manager import SettingsManager
 from core.refresh_scheduler import RefreshScheduler
 from core.scraper_task_store import ScraperTaskStore
@@ -79,10 +80,10 @@ def resolve_stored_source(stored: "StoredSource", config: AppConfig) -> SourceCo
     return SourceConfig.model_validate(base)
 
 
-def ensure_startup_encryption_key(settings_manager: object) -> None:
+def ensure_startup_encryption_key(settings_manager: object, master_key_provider: object) -> None:
     """Provision a master key on startup when encryption is enabled by default."""
     load_settings = getattr(settings_manager, "load_settings", None)
-    get_or_create_master_key = getattr(settings_manager, "get_or_create_master_key", None)
+    get_or_create_master_key = getattr(master_key_provider, "get_or_create_master_key", None)
     if not callable(load_settings) or not callable(get_or_create_master_key):
         return
 
@@ -93,8 +94,6 @@ def ensure_startup_encryption_key(settings_manager: object) -> None:
         return
 
     if not getattr(settings, "encryption_enabled", False):
-        return
-    if getattr(settings, "master_key", None):
         return
 
     try:
@@ -205,7 +204,13 @@ def create_app() -> FastAPI:
 
     # System settings manager.
     settings_manager = SettingsManager()
-    ensure_startup_encryption_key(settings_manager)
+    settings_file = getattr(
+        settings_manager,
+        "settings_file",
+        Path(os.getenv("GLANCEUS_DATA_DIR", ".")) / "data" / "settings.json",
+    )
+    master_key_provider = MasterKeyProvider.from_settings_file(settings_file)
+    ensure_startup_encryption_key(settings_manager, master_key_provider)
 
     # Executor.
     scraper_task_store = ScraperTaskStore()
@@ -216,8 +221,9 @@ def create_app() -> FastAPI:
         scraper_task_store=scraper_task_store,
     )
 
-    # Inject SettingsManager into SecretsController for adaptive encryption/decryption.
+    # Inject SettingsManager and MasterKeyProvider into SecretsController.
     secrets_controller.inject_settings_manager(settings_manager)
+    secrets_controller.inject_master_key_provider(master_key_provider)
 
     # Reuse the same core flow as API source creation and trigger refresh for seeded sources.
     startup_background_tasks = StartupBackgroundTasks()
@@ -243,6 +249,7 @@ def create_app() -> FastAPI:
         resource_manager=resource_manager,
         integration_manager=integration_manager,
         settings_manager=settings_manager,
+        master_key_provider=master_key_provider,
         scraper_task_store=scraper_task_store,
     )
 

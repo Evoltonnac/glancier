@@ -1,7 +1,7 @@
 """
 Secrets controller for securely storing API keys, OAuth tokens, and other sensitive data.
 All secrets are stored in secrets.json with secret_id as top-level key.
-Supports AES-256-GCM encryption using master key from SettingsManager.
+Supports AES-256-GCM encryption using master key from MasterKeyProvider.
 """
 
 import os
@@ -9,6 +9,8 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+
+from core.master_key_provider import MasterKeyProvider, MasterKeyUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -20,21 +22,32 @@ class SecretsController:
     """
     File-based secure storage.
     All secrets live in secrets.json keyed by secret_id.
-    When settings_manager is injected, encryption/decryption follows current settings.
+    Encryption toggle is read from SettingsManager.
+    Master key is resolved from MasterKeyProvider.
     """
 
-    def __init__(self, secrets_dir: str | Path | None = None, settings_manager=None):
+    def __init__(
+        self,
+        secrets_dir: str | Path | None = None,
+        settings_manager=None,
+        master_key_provider: MasterKeyProvider | None = None,
+    ):
         if secrets_dir is None:
             secrets_dir = _SECRETS_DIR
         self.secrets_dir = Path(secrets_dir)
         self.secrets_dir.mkdir(parents=True, exist_ok=True)
         self.secrets_file = self.secrets_dir / _SECRETS_FILE
         self._settings_manager = settings_manager
+        self._master_key_provider = master_key_provider
         logger.info("Secrets storage file: %s", self.secrets_file)
 
     def inject_settings_manager(self, settings_manager):
-        """Inject SettingsManager lazily (supports circular dependency setup)."""
+        """Inject SettingsManager lazily."""
         self._settings_manager = settings_manager
+
+    def inject_master_key_provider(self, master_key_provider: MasterKeyProvider):
+        """Inject MasterKeyProvider lazily."""
+        self._master_key_provider = master_key_provider
 
     # ── Internal helpers ───────────────────────────────
 
@@ -46,12 +59,16 @@ class SecretsController:
         except Exception:
             return False
 
-    def _master_key(self) -> str | None:
-        if self._settings_manager is None:
+    def _master_key(self, *, required: bool = False) -> str | None:
+        if self._master_key_provider is None:
+            if required:
+                raise MasterKeyUnavailableError("Master key provider is not initialized.")
             return None
         try:
-            return self._settings_manager.get_or_create_master_key()
+            return self._master_key_provider.get_or_create_master_key()
         except Exception:
+            if required:
+                raise
             return None
 
     def _load_all(self) -> dict[str, Any]:
@@ -86,8 +103,8 @@ class SecretsController:
         if not raw:
             return raw
         # Try decrypting when encrypted values are present.
-        master_key = self._master_key()
-        if master_key and any(is_encrypted(v) for v in raw.values()):
+        if any(is_encrypted(v) for v in raw.values()):
+            master_key = self._master_key(required=True)
             try:
                 return decrypt_dict(raw, master_key)
             except Exception as e:
@@ -109,9 +126,8 @@ class SecretsController:
         all_secrets = self._load_all()
 
         if self._encryption_enabled():
-            master_key = self._master_key()
-            if master_key:
-                data = encrypt_dict(data, master_key)
+            master_key = self._master_key(required=True)
+            data = encrypt_dict(data, master_key)
 
         if secret_id in all_secrets:
             all_secrets[secret_id].update(data)
@@ -146,10 +162,7 @@ class SecretsController:
     def migrate_encrypt_all(self):
         """Encrypt all existing plaintext secrets (called when enabling encryption)."""
         from core.encryption import apply_encryption
-        master_key = self._master_key()
-        if not master_key:
-            logger.error("encryption migration failed: master key not found")
-            return
+        master_key = self._master_key(required=True)
         all_secrets = self._load_all()
         migrated = {k: apply_encryption(v, master_key) for k, v in all_secrets.items()}
         self._save_all(migrated)
@@ -158,10 +171,7 @@ class SecretsController:
     def migrate_decrypt_all(self):
         """Decrypt all existing ciphertext secrets (called when disabling encryption)."""
         from core.encryption import strip_encryption
-        master_key = self._master_key()
-        if not master_key:
-            logger.error("decryption migration failed: master key not found")
-            return
+        master_key = self._master_key(required=True)
         all_secrets = self._load_all()
         migrated = {k: strip_encryption(v, master_key) for k, v in all_secrets.items()}
         self._save_all(migrated)
