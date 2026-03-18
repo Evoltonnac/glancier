@@ -45,7 +45,8 @@
       "nsis": {
         "startMenuFolder": "Glanceus",
         "installerIcon": "icons/icon.ico",
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "shortcuts": ["startMenu", "desktop"]
       }
     },
     "macOS": {
