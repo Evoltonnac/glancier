@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Security Audit Remediation
 status: executing
-last_updated: "2026-03-19T12:55:47.377Z"
-last_activity: 2026-03-19 — Completed 03-04 regression/security gate finalization with passing callback, refresh, impacted, backend, frontend, and typecheck gates
+last_updated: "2026-03-19T14:17:15.886Z"
+last_activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeout controls with full regression/typecheck gates passing
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -18,13 +18,13 @@ progress:
 See: .planning/PROJECT.md (Updated for v1.1)
 
 **Core value:** In a config-first workflow, users can still finish auth -> fetch -> parse -> render without backend hardcoding.
-**Current focus:** Execute remaining Phase 3 security-hardening plan with deterministic validation and regression coverage.
+**Current focus:** Phase 3 completion recorded; milestone is ready for closeout verification and archival workflow.
 
 ## Current Position
 Phase: 3
-Plan: 05 next (`03-05-PLAN.md`)
-Status: Phase 3 in progress; 03-01 through 03-04 completed
-Last activity: 2026-03-19 — Completed 03-04 regression/security gate finalization with passing callback, refresh, impacted, backend, frontend, and typecheck gates
+Plan: 05 completed (`03-05-PLAN.md`)
+Status: Phase 3 complete; 03-01 through 03-05 completed
+Last activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeout controls with passing targeted regressions, impacted, backend, frontend, and typecheck gates
 
 ## Session Continuity
 - v1.0 has shipped and Phase 1/2 follow-up work is completed and retained in historical context.
@@ -32,6 +32,7 @@ Last activity: 2026-03-19 — Completed 03-04 regression/security gate finalizat
 - 2026-03-19T11:57:10Z: Session resumed via `$gsd-resume-work`; reviewed Script Step sandbox tradeoffs and mapped compatibility impact before proceeding to Plan 03-03.
 - 2026-03-19T12:18:25Z: Added `03-05-PLAN.md` to phase roadmap for opt-in lightweight sandbox (Beta) plus default script timeout controls.
 - 2026-03-19T12:54:33Z: Completed Plan 03-04 with atomic task commits, release-gate checklist finalization, and passing auth/fetch/refresh regression gates.
+- 2026-03-19T14:15:55Z: Completed Plan 03-05 with atomic task commits, script timeout+sandbox controls, and passing regression/typecheck/backend/frontend gates.
 
 ## Accumulated Context
 
@@ -46,6 +47,7 @@ Last activity: 2026-03-19 — Completed 03-04 regression/security gate finalizat
 - 2026-03-19: Added Plan 03-05 for optional script-sandbox controls and timeout defaults.
 - 2026-03-19: Completed Plan 03-03 with centralized log redaction, authenticated internal scraper endpoints, and logical integration file response hardening.
 - 2026-03-19: Completed Plan 03-04 with OAuth callback hardening, documented security release gate evidence, and passing regression gates.
+- 2026-03-19: Completed Plan 03-05 with backend-owned script sandbox/timeout settings, Beta advanced UI controls, deterministic runtime error codes, and concurrent regression coverage.
 
 ### Decisions
 - 2026-03-19: OAuth code exchange now requires single-use server state bound to `source_id` and `redirect_uri`.
@@ -59,6 +61,9 @@ Last activity: 2026-03-19 — Completed 03-04 regression/security gate finalizat
 - [Phase 03]: OAuth callback UI now rejects malformed code-exchange payloads before API submission and depends on backend-returned source_id for completion.
 - [Phase 03]: Phase 03 security gate now records deterministic PASS/FAIL command evidence mapped to GATE-01/GATE-02 requirements.
 - [Phase 03]: TypeScript callback path changes require make test-typecheck as a mandatory release-gate command for this plan.
+- [Phase 03-remediate-critical-security-audit-findings-in-core-modules]: Keep script sandbox disabled by default and mark UI control as Beta to preserve existing integration behavior.
+- [Phase 03-remediate-critical-security-audit-findings-in-core-modules]: Bind script runtime controls to /api/settings so backend remains owner of persisted security preferences.
+- [Phase 03-remediate-critical-security-audit-findings-in-core-modules]: Use deterministic runtime error codes script_timeout_exceeded/script_sandbox_blocked for stable regression handling.
 
 ### Pending Todos
 

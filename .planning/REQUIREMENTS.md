@@ -9,7 +9,7 @@
 
 - [x] **SEC-01**: User can run integrations without plaintext secrets appearing in logs, API responses, or persisted runtime state snapshots.
 - [x] **SEC-02**: User can rely on strict validation for security-sensitive API inputs (settings, secrets, auth callbacks) with deterministic rejection on malformed payloads.
-- [ ] **SEC-03**: User can execute integration flows without dangerous step input expansion (for example, unsafe URL/protocol or command-like payload injection paths).
+- [x] **SEC-03**: User can execute integration flows without dangerous step input expansion (for example, unsafe URL/protocol or command-like payload injection paths).
 
 ### Runtime Integrity
 
@@ -42,7 +42,7 @@
 |-------------|-------|--------|
 | SEC-01 | Phase 3 | Complete |
 | SEC-02 | Phase 3 | Complete |
-| SEC-03 | Phase 3 | Pending |
+| SEC-03 | Phase 3 | Complete |
 | INT-01 | Phase 3 | Complete |
 | INT-02 | Phase 3 | Complete |
 | GATE-01 | Phase 3 | Complete |
