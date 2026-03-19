@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: security-audit-remediation
-status: "Milestone v1.1 initialized; Phase 3 pending planning"
-last_updated: "2026-03-19T00:00:00Z"
-last_activity: "2026-03-19 - Created v1.1 roadmap with Phase 3 scope"
+milestone_name: Security Audit Remediation
+status: planning
+last_updated: "2026-03-19T08:09:05Z"
+last_activity: 2026-03-19 — Completed 03-01 security hardening plan (OAuth state binding + interaction source isolation)
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
 ---
 
 # Project State
@@ -18,13 +18,13 @@ progress:
 See: .planning/PROJECT.md (Updated for v1.1)
 
 **Core value:** In a config-first workflow, users can still finish auth -> fetch -> parse -> render without backend hardcoding.
-**Current focus:** Define v1.1 security-hardening requirements and prepare Phase 3 planning.
+**Current focus:** Execute Phase 3 security-hardening plans with deterministic validation and regression coverage.
 
 ## Current Position
 Phase: 3
-Plan: Not started (run `$gsd-plan-phase 3`)
-Status: Milestone initialized; Phase 3 planning pending
-Last activity: 2026-03-19 — Created v1.1 roadmap and mapped all v1.1 requirements
+Plan: 02 next (`03-02-PLAN.md`)
+Status: Phase 3 in progress; 03-01 completed
+Last activity: 2026-03-19 — Completed 03-01 OAuth/interact hardening plan with passing impacted tests
 
 ## Session Continuity
 - v1.0 has shipped and Phase 1/2 follow-up work is completed and retained in historical context.
@@ -38,6 +38,11 @@ Last activity: 2026-03-19 — Created v1.1 roadmap and mapped all v1.1 requireme
 - 2026-03-16: Phase 2 added - 易用性优化（统一界面文案与错误格式化、支持中英 i18n、刷新间隔和默认加密体验优化）。
 - 2026-03-17: Phase 3 added - Remediate critical security audit findings in core modules.
 - 2026-03-19: Started milestone v1.1 and consolidated completed Phase 1/2 history into v1.0 context.
+- 2026-03-19: Completed Plan 03-01 with atomic task commits and summary documentation.
+
+### Decisions
+- 2026-03-19: OAuth code exchange now requires single-use server state bound to `source_id` and `redirect_uri`.
+- 2026-03-19: `/api/sources/{source_id}/interact` now enforces route-bound source ownership and payload key allowlists.
 
 ### Pending Todos
 
