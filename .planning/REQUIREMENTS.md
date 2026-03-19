@@ -18,8 +18,8 @@
 
 ### Security Regression Gates
 
-- [ ] **GATE-01**: User can verify that critical auth/fetch/refresh paths still pass targeted regression tests after remediation.
-- [ ] **GATE-02**: User can verify milestone readiness through a documented security check gate with repeatable pass/fail criteria.
+- [x] **GATE-01**: User can verify that critical auth/fetch/refresh paths still pass targeted regression tests after remediation.
+- [x] **GATE-02**: User can verify milestone readiness through a documented security check gate with repeatable pass/fail criteria.
 
 ## v2 Requirements
 
@@ -45,8 +45,8 @@
 | SEC-03 | Phase 3 | Pending |
 | INT-01 | Phase 3 | Complete |
 | INT-02 | Phase 3 | Complete |
-| GATE-01 | Phase 3 | Pending |
-| GATE-02 | Phase 3 | Pending |
+| GATE-01 | Phase 3 | Complete |
+| GATE-02 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 7 total

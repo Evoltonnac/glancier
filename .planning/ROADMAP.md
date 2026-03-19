@@ -24,7 +24,7 @@ This roadmap manages milestone delivery for Glanceus. Completed milestones are a
 **Goal:** Eliminate critical audit risks in secret handling, validation boundaries, and runtime safety while keeping existing auth/fetch/refresh behavior stable.
 **Requirements**: SEC-01, SEC-02, SEC-03, INT-01, INT-02, GATE-01, GATE-02
 **Depends on:** v1.0 archived baseline
-**Plans:** 5 planned (3 completed)
+**Plans:** 5 planned (4 completed)
 
 Success criteria:
 1. Security-sensitive data is no longer exposed in runtime logs, API responses, or persisted snapshots.
@@ -36,5 +36,5 @@ Plans:
 - [x] 03-01-PLAN.md — OAuth state binding hardening and interact source isolation ([[Summary](.planning/phases/03-remediate-critical-security-audit-findings-in-core-modules/03-01-SUMMARY.md)])
 - [x] 03-02-PLAN.md — HTTP/script/parser boundary hardening for SSRF/RCE risk reduction ([[Summary](.planning/phases/03-remediate-critical-security-audit-findings-in-core-modules/03-02-SUMMARY.md)])
 - [x] 03-03-PLAN.md — Central redaction plus internal scraper/file API confidentiality hardening ([[Summary](.planning/phases/03-remediate-critical-security-audit-findings-in-core-modules/03-03-SUMMARY.md)])
-- [ ] 03-04-PLAN.md — Regression and security release gate finalization
+- [x] 03-04-PLAN.md — Regression and security release gate finalization ([[Summary](.planning/phases/03-remediate-critical-security-audit-findings-in-core-modules/03-04-SUMMARY.md)])
 - [ ] 03-05-PLAN.md — Optional lightweight Script sandbox (Advanced Beta) and default script-timeout guard

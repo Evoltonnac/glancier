@@ -54,7 +54,7 @@ created: 2026-03-19
 | 03-01-01 | 01 | 1 | SEC-01, SEC-02 | unit/integration | `make test-backend` | ✅ completed |
 | 03-02-01 | 02 | 1 | SEC-03, INT-02 | unit/integration | `make test-backend` | ✅ completed |
 | 03-03-01 | 03 | 2 | SEC-01, INT-01 | unit/integration | `make test-backend` | ✅ completed |
-| 03-04-01 | 04 | 3 | GATE-01, GATE-02, INT-02 | regression | `npm --prefix ui-react run test -- OAuthCallback.test.tsx` + `pytest tests/api/test_refresh_api.py` + `make test-impacted` + release gate commands | 🔄 in progress |
+| 03-04-01 | 04 | 3 | GATE-01, GATE-02, INT-02 | regression | `npm --prefix ui-react run test -- OAuthCallback.test.tsx` + `pytest tests/api/test_refresh_api.py` + `make test-impacted` + release gate commands | ✅ completed |
 | 03-05-01 | 05 | 4 | SEC-03, INT-02 | unit/integration + typecheck | `make test-impacted && make test-backend && make test-frontend && make test-typecheck` | ⬜ pending |
 
 ---
@@ -77,4 +77,4 @@ created: 2026-03-19
 - [ ] Feedback latency < 300s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending final command execution for plan 03-04 and security gate sign-off
+**Approval:** ready (all 03-04 gate commands completed and documented in `03-SECURITY-GATE.md`)

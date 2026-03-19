@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Security Audit Remediation
 status: executing
-last_updated: "2026-03-19T12:42:59.280Z"
-last_activity: 2026-03-19 — Completed 03-03 confidentiality and internal endpoint hardening with passing impacted and backend tests
+last_updated: "2026-03-19T12:55:47.377Z"
+last_activity: 2026-03-19 — Completed 03-04 regression/security gate finalization with passing callback, refresh, impacted, backend, frontend, and typecheck gates
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,19 +18,20 @@ progress:
 See: .planning/PROJECT.md (Updated for v1.1)
 
 **Core value:** In a config-first workflow, users can still finish auth -> fetch -> parse -> render without backend hardcoding.
-**Current focus:** Execute Phase 3 security-hardening plans with deterministic validation and regression coverage.
+**Current focus:** Execute remaining Phase 3 security-hardening plan with deterministic validation and regression coverage.
 
 ## Current Position
 Phase: 3
-Plan: 04 next (`03-04-PLAN.md`)
-Status: Phase 3 in progress; 03-01 through 03-03 completed
-Last activity: 2026-03-19 — Completed 03-03 confidentiality and internal endpoint hardening with passing impacted and backend tests
+Plan: 05 next (`03-05-PLAN.md`)
+Status: Phase 3 in progress; 03-01 through 03-04 completed
+Last activity: 2026-03-19 — Completed 03-04 regression/security gate finalization with passing callback, refresh, impacted, backend, frontend, and typecheck gates
 
 ## Session Continuity
 - v1.0 has shipped and Phase 1/2 follow-up work is completed and retained in historical context.
 - This milestone starts from Phase 3, scoped to critical security-audit remediation in core modules.
 - 2026-03-19T11:57:10Z: Session resumed via `$gsd-resume-work`; reviewed Script Step sandbox tradeoffs and mapped compatibility impact before proceeding to Plan 03-03.
 - 2026-03-19T12:18:25Z: Added `03-05-PLAN.md` to phase roadmap for opt-in lightweight sandbox (Beta) plus default script timeout controls.
+- 2026-03-19T12:54:33Z: Completed Plan 03-04 with atomic task commits, release-gate checklist finalization, and passing auth/fetch/refresh regression gates.
 
 ## Accumulated Context
 
@@ -44,6 +45,7 @@ Last activity: 2026-03-19 — Completed 03-03 confidentiality and internal endpo
 - 2026-03-19: Completed Plan 03-02 with deterministic HTTP URL policy guards and script-step hardening; removed unused parser module from runtime codebase.
 - 2026-03-19: Added Plan 03-05 for optional script-sandbox controls and timeout defaults.
 - 2026-03-19: Completed Plan 03-03 with centralized log redaction, authenticated internal scraper endpoints, and logical integration file response hardening.
+- 2026-03-19: Completed Plan 03-04 with OAuth callback hardening, documented security release gate evidence, and passing regression gates.
 
 ### Decisions
 - 2026-03-19: OAuth code exchange now requires single-use server state bound to `source_id` and `redirect_uri`.
@@ -54,6 +56,9 @@ Last activity: 2026-03-19 — Completed 03-03 confidentiality and internal endpo
 - [Phase 03]: Internal scraper APIs now require X-Glanceus-Internal-Token via constant-time validation and still enforce localhost as a secondary gate.
 - [Phase 03]: Integration file API responses now serialize logical identifiers (filename/integration_id) and no longer expose absolute paths.
 - [Phase 03]: Sensitive token/secret/code/device fields are centrally redacted with deterministic [REDACTED] across API, OAuth, and script-step logging.
+- [Phase 03]: OAuth callback UI now rejects malformed code-exchange payloads before API submission and depends on backend-returned source_id for completion.
+- [Phase 03]: Phase 03 security gate now records deterministic PASS/FAIL command evidence mapped to GATE-01/GATE-02 requirements.
+- [Phase 03]: TypeScript callback path changes require make test-typecheck as a mandatory release-gate command for this plan.
 
 ### Pending Todos
 
