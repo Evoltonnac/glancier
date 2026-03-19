@@ -466,10 +466,18 @@ def _validate_interaction_source_binding(
     expected_interaction_types: set[str],
     request_interaction_type: str,
     request_source_id: str | None,
+    allow_missing_interaction: bool = False,
+    allow_unexpected_pending_type: bool = False,
 ) -> InteractionRequest | Any:
     if request_source_id is not None and request_source_id != route_source_id:
         raise HTTPException(400, "interaction_source_mismatch")
     if interaction is None:
+        if allow_missing_interaction:
+            return InteractionRequest(
+                type=InteractionType.OAUTH_START,
+                source_id=route_source_id,
+                fields=[],
+            )
         raise HTTPException(400, "interaction_source_mismatch")
 
     pending_source_id = getattr(interaction, "source_id", None) or route_source_id
@@ -477,7 +485,7 @@ def _validate_interaction_source_binding(
 
     if pending_source_id != route_source_id:
         raise HTTPException(400, "interaction_source_mismatch")
-    if pending_interaction_type not in expected_interaction_types:
+    if pending_interaction_type not in expected_interaction_types and not allow_unexpected_pending_type:
         raise HTTPException(400, "interaction_source_mismatch")
     if request_interaction_type:
         expected_request_types = {item.value for item in InteractionType}
@@ -1054,6 +1062,43 @@ async def oauth_device_status(source_id: str, background_tasks: BackgroundTasks)
         raise HTTPException(400, f"Device flow status check failed: {exc}") from exc
 
 
+def _resolve_oauth_callback_source_id(state: str) -> str:
+    if not state:
+        raise HTTPException(400, "oauth_state_invalid")
+
+    matched_source_ids: list[str] = []
+    for stored in _resource_manager.load_sources():
+        source_secrets = _secrets.get_secrets(stored.id) if _secrets and hasattr(_secrets, "get_secrets") else {}
+        pkce_state = source_secrets.get("oauth_pkce") if isinstance(source_secrets, dict) else None
+        if isinstance(pkce_state, dict) and pkce_state.get("state") == state:
+            matched_source_ids.append(stored.id)
+
+    if not matched_source_ids:
+        raise HTTPException(400, "oauth_state_invalid")
+    if len(matched_source_ids) > 1:
+        raise HTTPException(400, "oauth_state_ambiguous")
+    return matched_source_ids[0]
+
+
+@router.post("/oauth/callback/interact")
+async def oauth_callback_interact(data: dict[str, Any], background_tasks: BackgroundTasks) -> dict:
+    interaction_type = (
+        _normalize_interaction_type(data.get("interaction_type"))
+        or _normalize_interaction_type(data.get("type"))
+    )
+    if interaction_type not in {"oauth_code_exchange", "oauth_implicit_token"}:
+        raise HTTPException(400, "oauth_interaction_type_invalid")
+
+    callback_state = data.get("state")
+    if not isinstance(callback_state, str) or not callback_state.strip():
+        raise HTTPException(400, "oauth_state_invalid")
+
+    source_id = _resolve_oauth_callback_source_id(callback_state)
+    payload = dict(data)
+    payload["source_id"] = source_id
+    return await interact_source(source_id, payload, background_tasks)
+
+
 
 # ── Interaction API ───────────────────────────────────
 
@@ -1089,6 +1134,8 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
             expected_interaction_types={InteractionType.OAUTH_START.value},
             request_interaction_type=interaction_type,
             request_source_id=request_source_id,
+            allow_missing_interaction=True,
+            allow_unexpected_pending_type=True,
         )
         handler = _auth_manager.get_oauth_handler(source_id)
         if not handler:
@@ -1141,6 +1188,8 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
             expected_interaction_types={InteractionType.OAUTH_START.value},
             request_interaction_type=interaction_type,
             request_source_id=request_source_id,
+            allow_missing_interaction=True,
+            allow_unexpected_pending_type=True,
         )
         handler = _auth_manager.get_oauth_handler(source_id)
         if not handler:

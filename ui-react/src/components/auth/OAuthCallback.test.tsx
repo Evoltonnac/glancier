@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { apiMock } = vi.hoisted(() => ({
     apiMock: {
-        interact: vi.fn(),
+        oauthCallbackInteract: vi.fn(),
     },
 }));
 
@@ -35,8 +35,11 @@ function createLocalStorageMock() {
 
 describe("OAuthCallback", () => {
     beforeEach(() => {
-        apiMock.interact.mockReset();
-        apiMock.interact.mockResolvedValue(undefined);
+        apiMock.oauthCallbackInteract.mockReset();
+        apiMock.oauthCallbackInteract.mockResolvedValue({
+            message: "ok",
+            source_id: "source-from-backend",
+        });
         Object.defineProperty(window, "localStorage", {
             writable: true,
             value: createLocalStorageMock(),
@@ -56,14 +59,14 @@ describe("OAuthCallback", () => {
         window.history.pushState(
             {},
             "",
-            "/oauth/callback?code=code-123&state=source-a",
+            "/oauth/callback?code=code-123&state=opaque-state-token",
         );
         render(<OAuthCallback />);
 
         await waitFor(() => {
-            expect(apiMock.interact).toHaveBeenCalledWith("source-a", {
+            expect(apiMock.oauthCallbackInteract).toHaveBeenCalledWith({
                 type: "oauth_code_exchange",
-                state: "source-a",
+                state: "opaque-state-token",
                 code: "code-123",
                 redirect_uri: `${window.location.origin}/oauth/callback`,
             });
@@ -78,25 +81,25 @@ describe("OAuthCallback", () => {
         window.history.pushState(
             {},
             "",
-            "/oauth/callback#access_token=tok-xyz&token_type=Bearer&expires_in=3600&scope=read&state=source-b",
+            "/oauth/callback#access_token=tok-xyz&token_type=Bearer&expires_in=3600&scope=read&state=opaque-state-token",
         );
         render(<OAuthCallback />);
 
         await waitFor(() => {
-            expect(apiMock.interact).toHaveBeenCalledWith("source-b", {
+            expect(apiMock.oauthCallbackInteract).toHaveBeenCalledWith({
                 type: "oauth_implicit_token",
                 oauth_payload: {
                     access_token: "tok-xyz",
                     token_type: "Bearer",
                     expires_in: "3600",
                     scope: "read",
-                    state: "source-b",
+                    state: "opaque-state-token",
                 },
                 access_token: "tok-xyz",
                 token_type: "Bearer",
                 expires_in: 3600,
                 scope: "read",
-                state: "source-b",
+                state: "opaque-state-token",
             });
         });
     });
@@ -105,34 +108,40 @@ describe("OAuthCallback", () => {
         window.history.pushState(
             {},
             "",
-            "/oauth/callback?auth_code=code-999&state=source-c",
+            "/oauth/callback?auth_code=code-999&state=opaque-state-token",
         );
         render(<OAuthCallback />);
 
         await waitFor(() => {
-            expect(apiMock.interact).toHaveBeenCalledWith("source-c", {
+            expect(apiMock.oauthCallbackInteract).toHaveBeenCalledWith({
                 type: "oauth_code_exchange",
                 auth_code: "code-999",
-                state: "source-c",
+                state: "opaque-state-token",
                 code: undefined,
                 redirect_uri: `${window.location.origin}/oauth/callback`,
             });
         });
     });
 
-    it("falls back to pending source id from localStorage when state is missing", async () => {
+    it("clears pending source id cache after successful callback", async () => {
         window.localStorage.setItem("oauth_pending_source_id", "source-d");
-        window.history.pushState({}, "", "/oauth/callback?code=code-456");
+        window.history.pushState({}, "", "/oauth/callback?code=code-456&state=opaque-state-token");
         render(<OAuthCallback />);
 
         await waitFor(() => {
-            expect(apiMock.interact).toHaveBeenCalledWith("source-d", {
-                type: "oauth_code_exchange",
-                code: "code-456",
-                redirect_uri: `${window.location.origin}/oauth/callback`,
-            });
+            expect(apiMock.oauthCallbackInteract).toHaveBeenCalled();
         });
 
         expect(window.localStorage.getItem("oauth_pending_source_id")).toBeNull();
+    });
+
+    it("shows backend callback error details", async () => {
+        apiMock.oauthCallbackInteract.mockRejectedValue(
+            new Error("oauth_state_invalid"),
+        );
+        window.history.pushState({}, "", "/oauth/callback?code=code-456&state=bad-state");
+        render(<OAuthCallback />);
+
+        expect(await screen.findByText("oauth_state_invalid")).toBeInTheDocument();
     });
 });

@@ -25,7 +25,6 @@ export function OAuthCallback() {
       const queryPayload = Object.fromEntries(params.entries());
       const hashPayload = Object.fromEntries(hash.entries());
       const code = params.get("code");
-      const state = params.get("state");
       const error = params.get("error");
       const accessToken = hash.get("access_token");
       const tokenType = hash.get("token_type");
@@ -56,44 +55,38 @@ export function OAuthCallback() {
         return;
       }
 
-      // state is optional for some providers, fallback to pending source id cache.
-      const sourceId = state || hashState || pendingSourceId;
-
-      if (!sourceId) {
-        setStatus("error");
-        setMessage("Missing source ID. Cannot complete authorization.");
-        return;
-      }
-
-      if (pendingSourceId && pendingSourceId === sourceId) {
-        try {
-          window.localStorage.removeItem(OAUTH_PENDING_SOURCE_ID_KEY);
-        } catch (_e) {
-          // Ignore localStorage errors.
-        }
-      }
-
       try {
         // Determine redirect_uri (current URL without query)
         const redirectUri = window.location.origin + window.location.pathname;
+        const payload =
+          code || Object.keys(queryPayload).length > 0
+            ? {
+                type: "oauth_code_exchange",
+                ...queryPayload,
+                code: code ?? undefined,
+                redirect_uri: redirectUri,
+              }
+            : {
+                type: "oauth_implicit_token",
+                oauth_payload: hashPayload,
+                access_token: accessToken ?? undefined,
+                token_type: tokenType ?? "Bearer",
+                expires_in: expiresIn ? Number(expiresIn) : undefined,
+                scope: scope ?? undefined,
+                state: hashState ?? undefined,
+              };
 
-        if (code || Object.keys(queryPayload).length > 0) {
-          await api.interact(sourceId, {
-            type: "oauth_code_exchange",
-            ...queryPayload,
-            code: code ?? undefined,
-            redirect_uri: redirectUri,
-          });
-        } else {
-          await api.interact(sourceId, {
-            type: "oauth_implicit_token",
-            oauth_payload: hashPayload,
-            access_token: accessToken ?? undefined,
-            token_type: tokenType ?? "Bearer",
-            expires_in: expiresIn ? Number(expiresIn) : undefined,
-            scope: scope ?? undefined,
-            state: hashState ?? undefined,
-          });
+        const result = await api.oauthCallbackInteract(payload);
+        const sourceId = result.source_id || pendingSourceId;
+        if (!sourceId) {
+          throw new Error("OAuth callback did not return source ID");
+        }
+        if (pendingSourceId) {
+          try {
+            window.localStorage.removeItem(OAUTH_PENDING_SOURCE_ID_KEY);
+          } catch (_e) {
+            // Ignore localStorage errors.
+          }
         }
 
         setStatus("success");

@@ -328,6 +328,23 @@ class ApiClient {
     }
   }
 
+  async oauthCallbackInteract(
+    data: Record<string, any>,
+  ): Promise<{ message: string; source_id: string }> {
+    const res = await this.request(`/oauth/callback/interact`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        err.detail || err.message || "OAuth callback interaction failed",
+      );
+    }
+    return res.json();
+  }
+
   async getAuthorizeUrl(
     sourceId: string,
     redirectUri: string,

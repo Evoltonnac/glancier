@@ -246,3 +246,155 @@ def test_interact_same_source_input_text_still_succeeds():
     )
     runtime["executor"]._update_state.assert_called_once()
     runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_interact_oauth_code_exchange_succeeds_without_pending_runtime_interaction():
+    source = make_stored_source("oauth-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    handler = _MockOAuthInteractionHandler()
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+        oauth_handlers={"oauth-source": handler},
+    )
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: None,
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/oauth-source/interact",
+        json={
+            "type": "oauth_code_exchange",
+            "auth_code": "code-no-pending",
+            "state": "glanceus.b2F1dGgtc291cmNl.nonce",
+            "redirect_uri": "http://localhost:5173/oauth/callback",
+        },
+    )
+
+    assert response.status_code == 200
+    assert handler.exchange_calls == [
+        ("code-no-pending", "http://localhost:5173/oauth/callback", "glanceus.b2F1dGgtc291cmNl.nonce")
+    ]
+    runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_interact_oauth_code_exchange_succeeds_with_stale_pending_interaction_type():
+    source = make_stored_source("oauth-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    handler = _MockOAuthInteractionHandler()
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+        oauth_handlers={"oauth-source": handler},
+    )
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: SimpleNamespace(
+            interaction=SimpleNamespace(
+                type=InteractionType.INPUT_TEXT,
+                source_id="oauth-source",
+                fields=[],
+            ),
+        ),
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/oauth-source/interact",
+        json={
+            "type": "oauth_code_exchange",
+            "auth_code": "code-stale",
+            "state": "glanceus.b2F1dGgtc291cmNl.nonce2",
+            "redirect_uri": "http://localhost:5173/oauth/callback",
+        },
+    )
+
+    assert response.status_code == 200
+    assert handler.exchange_calls == [
+        ("code-stale", "http://localhost:5173/oauth/callback", "glanceus.b2F1dGgtc291cmNl.nonce2")
+    ]
+    runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_oauth_callback_interact_resolves_source_id_by_opaque_state():
+    source_a = make_stored_source("oauth-source-a", integration_id="oauth-integration")
+    source_b = make_stored_source("oauth-source-b", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    handler_a = _MockOAuthInteractionHandler()
+    handler_b = _MockOAuthInteractionHandler()
+    secrets_by_source = {
+        "oauth-source-a": {"oauth_pkce": {"state": "state-a"}},
+        "oauth-source-b": {"oauth_pkce": {"state": "state-b"}},
+    }
+    runtime = make_api_runtime(
+        sources=[source_a, source_b],
+        integrations={"oauth-integration": integration},
+        oauth_handlers={
+            "oauth-source-a": handler_a,
+            "oauth-source-b": handler_b,
+        },
+    )
+    runtime["secrets_controller"] = SimpleNamespace(
+        get_secrets=lambda source_id: secrets_by_source.get(source_id, {}),
+    )
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: None,
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/oauth/callback/interact",
+        json={
+            "type": "oauth_code_exchange",
+            "auth_code": "code-xyz",
+            "state": "state-b",
+            "redirect_uri": "http://localhost:5173/oauth/callback",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["source_id"] == "oauth-source-b"
+    assert handler_a.exchange_calls == []
+    assert handler_b.exchange_calls == [
+        ("code-xyz", "http://localhost:5173/oauth/callback", "state-b")
+    ]
+    runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_oauth_callback_interact_rejects_unknown_state():
+    source = make_stored_source("oauth-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    handler = _MockOAuthInteractionHandler()
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+        oauth_handlers={"oauth-source": handler},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(
+        get_secrets=lambda _source_id: {"oauth_pkce": {"state": "other-state"}},
+    )
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: None,
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/oauth/callback/interact",
+        json={
+            "type": "oauth_code_exchange",
+            "auth_code": "code-xyz",
+            "state": "missing-state",
+            "redirect_uri": "http://localhost:5173/oauth/callback",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "oauth_state_invalid"
