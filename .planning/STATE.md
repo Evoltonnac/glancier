@@ -1,49 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1
-milestone_name: milestone
-status: "**Phase 02 Complete** — All plans completed (2026-03-16)"
-last_updated: "2026-03-18T13:50:41Z"
-last_activity: "2026-03-18 - Completed quick task 260318-u6b: 优化两个交互问题：Dashboard 轮询启动即请求；集成 default_refresh_interval_minutes 支持 120 分钟"
+milestone: v1.1
+milestone_name: security-audit-remediation
+status: "Milestone v1.1 initialized; Phase 3 pending planning"
+last_updated: "2026-03-19T00:00:00Z"
+last_activity: "2026-03-19 - Created v1.1 roadmap with Phase 3 scope"
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
-See: .planning/PROJECT.md (Updated for v1.0)
+See: .planning/PROJECT.md (Updated for v1.1)
+
+**Core value:** In a config-first workflow, users can still finish auth -> fetch -> parse -> render without backend hardcoding.
+**Current focus:** Define v1.1 security-hardening requirements and prepare Phase 3 planning.
 
 ## Current Position
-Status: **Phase 02 Complete** — Plans 01-03 completed (2026-03-16)
-Phase 2 delivered standardized error envelopes, EN/ZH i18n foundation, and final refresh/encryption default hardening (30-minute global refresh default, 5m-1d option contract, default-on encryption for new installs, startup master-key provisioning).
-
-## Performance Metrics (v1.0)
-- Completed Phases: 09, 10, 11, 12, 13, 14, 15
-- Total Plans: 30
-- Timeline: 2026-03-05 → 2026-03-13 (8 days)
+Phase: 3
+Plan: Not started (run `$gsd-plan-phase 3`)
+Status: Milestone initialized; Phase 3 planning pending
+Last activity: 2026-03-19 — Created v1.1 roadmap and mapped all v1.1 requirements
 
 ## Session Continuity
-
-Last session: 2026-03-15T16:21:25Z
-Last activity: 2026-03-18 - Completed quick task 260318-u6b: 优化两个交互问题：Dashboard 轮询启动即请求；集成 default_refresh_interval_minutes 支持 120 分钟
-- 2026-03-18: Completed quick task `260318-u6b`; added immediate Dashboard polling request on start and fixed integration-level refresh interval to honor custom non-negative minutes (for example, 120).
-- 2026-03-18: Completed quick task `260318-eax`; removed plaintext master_key settings/API/UI paths and switched encryption to keyring-only MasterKeyProvider with capability checks.
-- 2026-03-17: Completed quick task `260317-uyq`; added backend timeout-specific error classification (`runtime.network_timeout`), regression tests, and EN/ZH i18n error copy.
-- 2026-03-16: Completed quick task `260317-0uf`; enabled Tauri updater detection, generated local updater signing keys, and wired release signing secrets.
-- 2026-03-17: Completed `gsd:workflow:verify-phase` for Phase 02; validation sign-off updated to approved and all task checks marked green.
-- 2026-03-16: Completed Phase 02 Plan 03; added `02-03-SUMMARY.md` and `02-VERIFICATION.md`, and updated roadmap/status to 3/3 complete.
-- 2026-03-16: Added backend `SystemSettings.language` (`en`/`zh`, default `en`) and compatibility normalization for old settings payloads.
-- 2026-03-16: Added frontend i18n runtime (`ui-react/src/i18n/*`), wired provider in app bootstrap, and migrated core Settings/Dashboard/Integrations copy to translation keys.
-- 2026-03-16: Added frontend-friendly source error summary mapping from standardized `error_code` while preserving existing `error/error_details` flow.
-- 2026-03-16: Added `core/error_formatter.py`, integrated executor runtime error persistence, and aligned `/api/system/reload` error serialization with backward-compatible `detail` plus structured `error`.
-- 2026-03-16: Added `tests/core/test_error_formatter.py` and updated `tests/api/test_reload_error_boundary.py`; backend gate passed.
-- 2026-03-11: Executed Phase 15 plans 01/02/04/05 (Authlib refactor, device flow backend, client credentials + refresh hardening, integration tests).
-- 2026-03-11: Implemented Phase 15-03 frontend work and created plan summaries (`15-01` ~ `15-05`), with `15-03` remaining `checkpoint_pending`.
-- Pending checkpoint: manually verify device flow modal and callback fragment handling before closing milestone v1.0.
+- v1.0 has shipped and Phase 1/2 follow-up work is completed and retained in historical context.
+- This milestone starts from Phase 3, scoped to critical security-audit remediation in core modules.
 
 ## Accumulated Context
 
@@ -52,6 +37,7 @@ Last activity: 2026-03-18 - Completed quick task 260318-u6b: 优化两个交互�
 - 2026-03-15: Phase 1 completed - all 3 plans executed and manual UAT matrix passed.
 - 2026-03-16: Phase 2 added - 易用性优化（统一界面文案与错误格式化、支持中英 i18n、刷新间隔和默认加密体验优化）。
 - 2026-03-17: Phase 3 added - Remediate critical security audit findings in core modules.
+- 2026-03-19: Started milestone v1.1 and consolidated completed Phase 1/2 history into v1.0 context.
 
 ### Pending Todos
 

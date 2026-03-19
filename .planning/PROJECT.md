@@ -14,10 +14,12 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 - **Local-First 的极简便当盒 UI (The Bento Grid)**：配置与密钥基于 AES-256 加密存在本地。彻底抛弃老旧运维风格，采用 2026 前端最新趋势的 High-Density Minimalist（高密度极简），构建可高度自定义的 Bento 流体网格系统。
 - **配置即一切 (Configuration as Code)**：接入新平台零 Python 后端修改，全生命周期由 Integration YAML 与 View Template 驱动。
 
-## 3. 当前状态 (v1.0 Milestone in Progress)
+## 3. 当前状态 (v1.0 Shipped, v1.1 Planning)
 
 - **Shipped v0.1**：核心链路已打通。在不修改 Python 业务代码的前提下，通过配置完成「鉴权 -> 采集 -> 解析 -> 展示」全链路接入。UI 完成了高密度、响应式的看板重构。
-- **v1.0 跃迁**：进行品牌与精神重塑、代码语义更新与组件重构，引入严格的 TDD 测试覆盖规范，最终交付稳定高可用的正式版客户端。
+- **Shipped v1.0**：完成品牌与术语重塑、代码语义统一、测试体系加固与稳定版交付。
+- **Post-v1.0 completed phases**：已完成 Phase 1/2（WebView Scraper reliability + usability/i18n/defaults hardening），并收敛归档到 v1.0 milestone context。
+- **Current focus (v1.1)**：Phase 3 将作为 v1.1 的首个计划阶段，聚焦核心模块关键安全审计问题修复。
 
 ## 4. 全局目标 (Source of Truth 提炼)
 
@@ -113,3 +115,22 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 7. `docs/webview-scraper/README.md`
 8. `docs/testing_tdd.md`
 9. `docs/ui_design_guidelines.md`
+
+## 12. Current Milestone: v1.1 Security Audit Remediation
+
+**Goal:** Close critical security audit findings in core runtime modules without regressing the config-first integration workflow.
+
+**Target features:**
+- Close critical/high security findings in executor, auth, and secret handling paths.
+- Harden config/runtime validation and reduce exploitability from malformed integration inputs.
+- Add release-gating security checks and regression coverage for patched surfaces.
+
+## 13. Active Requirements (v1.1)
+
+- [ ] **SEC-01**: User can run integrations without exposing plaintext secrets in logs, API payloads, or persisted runtime artifacts.
+- [ ] **SEC-02**: User can trust that critical executor/auth endpoints reject malformed or unsafe inputs with deterministic error responses.
+- [ ] **SEC-03**: User can complete key auth and data-refresh flows after security remediations with no behavior regression.
+- [ ] **SEC-04**: User can verify security hardening status through documented and repeatable checks before release.
+
+---
+*Last updated: 2026-03-19 after milestone v1.1 initialization*
