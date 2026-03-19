@@ -138,3 +138,55 @@ async def test_http_step_raises_after_retry_exhausted(monkeypatch: pytest.Monkey
             executor,
         )
     assert exc_info.value.code == "runtime.network_timeout"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "expected_code"),
+    [
+        ("http://127.0.0.1:8080/internal", "http_target_blocked_private:127.0.0.1"),
+        ("http://169.254.169.254/latest/meta-data", "http_target_blocked_private:169.254.169.254"),
+        ("file:///tmp/a", "http_target_blocked_scheme:"),
+    ],
+)
+async def test_http_step_blocks_unsafe_target_urls(
+    monkeypatch: pytest.MonkeyPatch,
+    url: str,
+    expected_code: str,
+):
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            _ = kwargs
+
+        async def __aenter__(self):
+            raise AssertionError("AsyncClient should not be initialized for blocked targets")
+
+        async def __aexit__(self, exc_type, exc, tb):
+            _ = (exc_type, exc, tb)
+            return None
+
+    import core.steps.http_step as http_step_module
+
+    monkeypatch.setattr(http_step_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    step = build_step(step_id="fetch", use=StepType.HTTP)
+    source = build_source_config(source_id="source-http", flow=[step])
+    executor = SimpleNamespace(
+        _get_proxy_url=lambda: None,
+        _classify_http_status_error=lambda source, step, error: error,
+        _classify_http_network_error=lambda source, step, error: error,
+    )
+
+    with pytest.raises(RuntimeError, match=expected_code):
+        await execute_http_step(
+            step,
+            source,
+            {
+                "url": url,
+                "method": "GET",
+                "headers": {},
+            },
+            {},
+            {},
+            executor,
+        )

@@ -20,6 +20,8 @@ Return Structure:
 
 import asyncio
 import httpx
+import ipaddress
+from urllib.parse import urlsplit
 from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -34,6 +36,43 @@ _RETRYABLE_NETWORK_ERRORS = (
     httpx.PoolTimeout,
     httpx.RemoteProtocolError,
 )
+
+_ALLOWED_HTTP_SCHEMES = {"http", "https"}
+
+
+def _sanitize_url_host(url: str) -> str:
+    try:
+        parsed = urlsplit(url)
+    except Exception:
+        return ""
+    return (parsed.hostname or "").strip().lower()
+
+
+def _is_private_target_host(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        target_ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if target_ip.is_loopback or target_ip.is_link_local:
+        return True
+    if isinstance(target_ip, ipaddress.IPv4Address) and target_ip.is_private:
+        return True
+    return False
+
+
+def _validate_http_target_url(url: str) -> None:
+    parsed = urlsplit(url or "")
+    scheme = (parsed.scheme or "").strip().lower()
+    host = _sanitize_url_host(url)
+
+    if scheme not in _ALLOWED_HTTP_SCHEMES:
+        raise RuntimeError(f"http_target_blocked_scheme:{host}")
+    if not host:
+        raise RuntimeError("http_target_blocked_scheme:")
+    if _is_private_target_host(host):
+        raise RuntimeError(f"http_target_blocked_private:{host}")
 
 
 async def execute_http_step(
@@ -58,6 +97,7 @@ async def execute_http_step(
     backoff_seconds = float(args.get("retry_backoff_seconds", 0.5))
     retries = max(0, retries)
     backoff_seconds = max(0.0, backoff_seconds)
+    _validate_http_target_url(str(url or ""))
 
     proxy_url = executor._get_proxy_url()
     client_kwargs: Dict[str, Any] = {

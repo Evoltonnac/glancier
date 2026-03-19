@@ -60,7 +60,7 @@ async def execute_script_step(
     from core.executor import _RuntimeStreamRelay
 
     script_code = args.get("code")
-    if not script_code:
+    if not isinstance(script_code, str) or not script_code:
         raise ValueError(f"Step {step.id} has use=script but no 'code' argument provided.")
     
     local_env = {**context, **outputs}
@@ -100,5 +100,5 @@ async def execute_script_step(
                     
         return output
     except Exception as script_e:
-        logger.error(f"Error executing script in step {step.id}:\n{script_code}")
+        logger.error("Error executing script in step %s: %s", step.id, script_e)
         raise script_e
