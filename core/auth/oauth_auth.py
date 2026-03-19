@@ -176,29 +176,45 @@ class OAuthAuth:
 
     # -- PKCE/device states -----------------------------------------------
 
-    def _save_pkce_state(self, verifier: str, state: str) -> None:
+    def _save_pkce_state(self, verifier: str | None, state: str, redirect_uri: str) -> None:
         self.secrets.set_secrets(
             self.source_id,
             {
                 "oauth_pkce": {
                     "verifier": verifier,
                     "state": state,
+                    "source_id": self.source_id,
+                    "redirect_uri": redirect_uri,
                     "created_at": time.time(),
+                    "used_at": None,
                 }
             },
         )
 
-    def _get_pkce_verifier(self) -> str | None:
+    def _validate_code_exchange_state(
+        self,
+        state: str | None,
+        redirect_uri: str | None,
+    ) -> str | None:
         secrets = self.secrets.get_secrets(self.source_id)
         pkce_data = secrets.get("oauth_pkce") if secrets else None
 
-        if not pkce_data:
-            return None
+        if not isinstance(pkce_data, dict):
+            raise ValueError(f"[{self.source_id}] oauth_state_invalid")
         if time.time() - pkce_data.get("created_at", 0) > 600:
-            logger.warning(f"[{self.source_id}] PKCE verifier expired")
-            return None
+            raise ValueError(f"[{self.source_id}] oauth_state_expired")
+        if pkce_data.get("used_at") is not None:
+            raise ValueError(f"[{self.source_id}] oauth_state_invalid")
 
-        self.secrets.delete_secret(self.source_id, "oauth_pkce")
+        if state is None or state != pkce_data.get("state"):
+            raise ValueError(f"[{self.source_id}] oauth_state_invalid")
+        if pkce_data.get("source_id") != self.source_id:
+            raise ValueError(f"[{self.source_id}] oauth_state_invalid")
+        if pkce_data.get("redirect_uri") != redirect_uri:
+            raise ValueError(f"[{self.source_id}] oauth_state_invalid")
+
+        pkce_data["used_at"] = time.time()
+        self.secrets.set_secrets(self.source_id, {"oauth_pkce": pkce_data})
         return pkce_data.get("verifier")
 
     def _save_device_state(self, payload: dict[str, Any]) -> None:
@@ -365,9 +381,10 @@ class OAuthAuth:
         if not self.config.auth_url:
             raise ValueError(f"[{self.source_id}] OAuth authorization requires auth_url")
 
-        state = self.source_id
+        state = generate_token(48)
         kwargs: dict[str, Any] = {"response_type": self.config.response_type or ResponseType.CODE.value}
         client = self._build_oauth_client(redirect_uri=final_redirect_uri)
+        verifier: str | None = None
 
         if self.config.supports_pkce:
             verifier = generate_token(64)
@@ -375,7 +392,8 @@ class OAuthAuth:
             kwargs["code_verifier"] = verifier
             kwargs["code_challenge_method"] = method.value
             kwargs["code_challenge"] = PKCEUtils.generate_challenge(verifier, method)
-            self._save_pkce_state(verifier, state)
+
+        self._save_pkce_state(verifier, state, final_redirect_uri)
 
         authorize_url, resolved_state = client.create_authorization_url(
             self.config.auth_url,
@@ -388,7 +406,12 @@ class OAuthAuth:
 
     # -- Code flow exchange ------------------------------------------------
 
-    async def exchange_code(self, code: str, redirect_uri: Optional[str] = None) -> None:
+    async def exchange_code(
+        self,
+        code: str,
+        redirect_uri: Optional[str] = None,
+        state: str | None = None,
+    ) -> None:
         if not self.config.token_url:
             raise ValueError(f"[{self.source_id}] OAuth token_url is required")
 
@@ -399,14 +422,11 @@ class OAuthAuth:
             OAuthParams.GRANT_TYPE: GrantType.AUTHORIZATION_CODE.value,
         }
 
-        verifier = None
-        if self.config.supports_pkce:
-            verifier = self._get_pkce_verifier()
-            if verifier:
-                payload[OAuthParams.CODE_VERIFIER] = verifier
-
         if final_redirect_uri:
             payload[self.config.redirect_param or OAuthParams.REDIRECT_URI] = final_redirect_uri
+        verifier = self._validate_code_exchange_state(state, final_redirect_uri)
+        if verifier:
+            payload[OAuthParams.CODE_VERIFIER] = verifier
 
         requires_manual_token_exchange = (
             (self.config.token_request_type or "form").strip().lower() in JSON_STYLE_TOKEN_REQUEST_TYPES

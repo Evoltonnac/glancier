@@ -35,7 +35,7 @@ async def test_start_authorization_code_flow_returns_polymorphic_payload(
         captured["code_verifier"] = code_verifier
         captured["response_type"] = kwargs.get("response_type")
         captured["code_challenge_method"] = kwargs.get("code_challenge_method")
-        return ("https://provider.example.com/oauth/authorize?state=src", "src")
+        return (f"https://provider.example.com/oauth/authorize?state={state}", state)
 
     monkeypatch.setattr(
         AsyncOAuth2Client,
@@ -49,12 +49,17 @@ async def test_start_authorization_code_flow_returns_polymorphic_payload(
     assert result["flow"] == "code"
     assert result["authorize_url"].startswith("https://provider.example.com/oauth/authorize")
     assert captured["url"] == "https://provider.example.com/oauth/authorize"
-    assert captured["state"] == "src"
+    assert isinstance(captured["state"], str)
+    assert len(captured["state"]) >= 48
     assert isinstance(captured["code_verifier"], str)
     assert len(captured["code_verifier"]) >= 43
     assert captured["response_type"] == "code"
     assert captured["code_challenge_method"] == "plain"
-    assert "oauth_pkce" in secrets_controller.get_secrets("src")
+    pkce_state = secrets_controller.get_secrets("src")["oauth_pkce"]
+    assert pkce_state["state"] == captured["state"]
+    assert pkce_state["source_id"] == "src"
+    assert pkce_state["redirect_uri"] == "http://localhost:5173/oauth/callback"
+    assert pkce_state["used_at"] is None
 
 
 @pytest.mark.asyncio
@@ -75,8 +80,12 @@ async def test_exchange_code_uses_authlib_fetch_token_and_persists_token(
     monkeypatch.setattr(AsyncOAuth2Client, "fetch_token", fake_fetch_token)
 
     handler = OAuthAuth(_build_auth_config(), "src", secrets_controller)
-    handler._save_pkce_state("verifier-123", "src")
-    await handler.exchange_code("auth-code", "http://localhost:5173/oauth/callback")
+    handler._save_pkce_state("verifier-123", "server-state", "http://localhost:5173/oauth/callback")
+    await handler.exchange_code(
+        "auth-code",
+        "http://localhost:5173/oauth/callback",
+        state="server-state",
+    )
 
     all_secrets = secrets_controller.get_secrets("src")
     stored = all_secrets["oauth_secrets"]
@@ -89,3 +98,4 @@ async def test_exchange_code_uses_authlib_fetch_token_and_persists_token(
     assert captured["grant_type"] == "authorization_code"
     assert captured["code"] == "auth-code"
     assert captured["code_verifier"] == "verifier-123"
+    assert all_secrets["oauth_pkce"]["used_at"] is not None
