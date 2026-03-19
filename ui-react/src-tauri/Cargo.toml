@@ -27,6 +27,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
+dotenv = "0.15"
 flate2 = "1.1"
 tar = "0.4"
 

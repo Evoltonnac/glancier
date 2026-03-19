@@ -9,6 +9,7 @@ const packageJson = JSON.parse(packageJsonRaw) as { version?: string };
 const appVersion = packageJson.version ?? "0.0.0";
 
 export default defineConfig({
+  envDir: path.resolve(__dirname, ".."),
   plugins: [react()],
   define: {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),

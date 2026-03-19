@@ -2,6 +2,9 @@
 Glanceus entrypoint: boot the FastAPI backend service.
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import copy
 import json

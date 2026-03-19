@@ -1172,6 +1172,7 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    dotenv::dotenv().ok();
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .manage(AppLifecycleState::default())
