@@ -16,6 +16,7 @@ Return Structure:
 import logging
 from contextlib import redirect_stderr, redirect_stdout
 from typing import Dict, Any, TYPE_CHECKING
+from core.log_redaction import sanitize_log_reason
 from core.source_state import SourceStatus
 
 if TYPE_CHECKING:
@@ -100,5 +101,10 @@ async def execute_script_step(
                     
         return output
     except Exception as script_e:
-        logger.error("Error executing script in step %s: %s", step.id, script_e)
-        raise script_e
+        logger.error(
+            "Script step failed source_id=%s step_id=%s reason=%s",
+            source.id,
+            step.id,
+            sanitize_log_reason(script_e),
+        )
+        raise

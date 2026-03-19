@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from core.models import StoredSource, StoredView, ViewItem
 from core.integration_manager import IntegrationManager
 from core.error_formatter import build_error_envelope
+from core.log_redaction import redact_sensitive_fields, sanitize_log_reason
 from core.master_key_provider import MasterKeyUnavailableError
 from core.source_state import SourceStatus, InteractionType, InteractionRequest
 from core.refresh_policy import (
@@ -140,6 +141,21 @@ def _require_local_request(request: Request) -> None:
     if client_host in {"127.0.0.1", "::1", "localhost", "testclient"}:
         return
     raise HTTPException(403, "Internal scraper endpoint is localhost-only")
+
+
+_API_LOG_SENSITIVE_FIELDS = {
+    "token",
+    "access_token",
+    "refresh_token",
+    "secret",
+    "client_secret",
+    "code",
+    "device_code",
+}
+
+
+def _redact_log_payload(payload: Any) -> Any:
+    return redact_sensitive_fields(payload, sensitive_fields=_API_LOG_SENSITIVE_FIELDS)
 
 
 def _build_webview_interaction_from_task(task: dict[str, Any], message: str) -> InteractionRequest:
@@ -983,12 +999,12 @@ async def oauth_authorize(source_id: str, redirect_uri: Optional[str] = None) ->
     try:
         logger.info(f"[{source_id}] Starting OAuth authorization with redirect_uri: {redirect_uri}")
         result = await handler.start_authorization(redirect_uri=redirect_uri)
-        logger.info(f"[{source_id}] OAuth authorization result: {result}")
+        logger.info("[%s] OAuth authorization result: %s", source_id, _redact_log_payload(result))
     except ValueError as exc:
-        logger.error(f"[{source_id}] OAuth authorization ValueError: {exc}")
+        logger.error("[%s] OAuth authorization ValueError: %s", source_id, sanitize_log_reason(exc))
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        logger.error(f"[{source_id}] OAuth authorize start failed: {exc}")
+        logger.error("[%s] OAuth authorize start failed: %s", source_id, sanitize_log_reason(exc))
         raise HTTPException(400, f"OAuth start failed: {exc}") from exc
 
     if result.get("flow") == "code":
@@ -1020,7 +1036,7 @@ async def oauth_device_poll(source_id: str, background_tasks: BackgroundTasks) -
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        logger.error(f"[{source_id}] Device flow poll failed: {exc}")
+        logger.error("[%s] Device flow poll failed: %s", source_id, sanitize_log_reason(exc))
         raise HTTPException(400, f"Device flow poll failed: {exc}") from exc
 
 
@@ -1058,7 +1074,7 @@ async def oauth_device_status(source_id: str, background_tasks: BackgroundTasks)
         # No pending device flow - return idle
         return {"status": "idle"}
     except Exception as exc:
-        logger.error(f"[{source_id}] Device flow status check failed: {exc}")
+        logger.error("[%s] Device flow status check failed: %s", source_id, sanitize_log_reason(exc))
         raise HTTPException(400, f"Device flow status check failed: {exc}") from exc
 
 
@@ -1175,7 +1191,7 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         try:
             await handler.exchange_code(code, redirect_uri=redirect_uri, state=exchange_state)
         except Exception as e:
-            logger.error(f"[{source_id}] OAuth Exchange Failed: {e}")
+            logger.error("[%s] OAuth exchange failed: %s", source_id, sanitize_log_reason(e))
             raise HTTPException(400, f"授权失败: {str(e)}")
         
         background_tasks.add_task(_executor.fetch_source, source)
@@ -1223,7 +1239,7 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         try:
             handler.store_implicit_token(token_payload)
         except Exception as exc:
-            logger.error(f"[{source_id}] OAuth implicit token store failed: {exc}")
+            logger.error("[%s] OAuth implicit token store failed: %s", source_id, sanitize_log_reason(exc))
             raise HTTPException(400, f"授权失败: {exc}") from exc
 
         background_tasks.add_task(_executor.fetch_source, source)
@@ -1261,7 +1277,12 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         # Save interaction data into Secrets keyed by source_id.
         # Assumes data is a flat dictionary.
         _secrets.set_secrets(source_id, payload_data)
-        logger.info(f"[{source_id}] Received interaction data for source '{source_id}'.")
+        logger.info(
+            "[%s] Received interaction payload for source_id=%s payload=%s",
+            source_id,
+            source_id,
+            _redact_log_payload(payload_data),
+        )
     
     # Update status to refreshing.
     _executor._update_state(source_id, SourceStatus.REFRESHING, "Processing interaction results...")

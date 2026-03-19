@@ -15,6 +15,7 @@ from authlib.integrations.base_client.errors import InvalidTokenError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 
 from core.config_loader import AuthConfig
+from core.log_redaction import redact_sensitive_fields, sanitize_log_reason
 from core.secrets_controller import SecretsController
 from .oauth_types import CodeChallengeMethod, GrantType, OAuthParams, ResponseType
 from .pkce import PKCEUtils
@@ -461,7 +462,13 @@ class OAuthAuth:
                 raise ValueError(f"[{self.source_id}] token_url is required for device flow")
 
             client_id, client_secret = self._get_client_credentials()
-            logger.info(f"[{self.source_id}] Client ID: {client_id}, has secret: {bool(client_secret)}")
+            # Sensitive fields are masked with [REDACTED] before logging.
+            logger.info(
+                "[%s] Device flow credentials present: client_id=%s client_secret=%s",
+                self.source_id,
+                bool(client_id),
+                bool(client_secret),
+            )
             if not client_id:
                 raise ValueError(f"[{self.source_id}] client_id is required for device flow")
 
@@ -473,15 +480,24 @@ class OAuthAuth:
                 payload[OAuthParams.CLIENT_SECRET] = client_secret
 
             async with httpx.AsyncClient() as client:
-                logger.info(f"[{self.source_id}] Posting to device URL: {device_url} with payload: {payload}")
+                logger.info(
+                    "[%s] Posting to device URL: %s payload=%s",
+                    self.source_id,
+                    device_url,
+                    redact_sensitive_fields(payload),
+                )
                 response = await client.post(device_url, data=payload, headers={"Accept": "application/json"})
-                logger.info(f"[{self.source_id}] Response status: {response.status_code}, content: {response.text[:200] if response.text else 'empty'}")
+                logger.info("[%s] Device URL response status=%s", self.source_id, response.status_code)
                 response.raise_for_status()
                 parsed_payload = self._parse_oauth_payload(response)
                 if not isinstance(parsed_payload, dict):
                     raise ValueError(f"[{self.source_id}] device authorization endpoint returned invalid payload")
                 device_payload = parsed_payload
-                logger.info(f"[{self.source_id}] Device flow response: {device_payload}")
+                logger.info(
+                    "[%s] Device flow response payload=%s",
+                    self.source_id,
+                    redact_sensitive_fields(device_payload),
+                )
 
             device_code = self._first_non_none(
                 device_payload.get(self.config.device_code_field),
@@ -523,7 +539,11 @@ class OAuthAuth:
             stored_payload["interval"] = interval
             stored_payload["expires_in"] = expires_in
             stored_payload["expires_at"] = int(time.time()) + expires_in
-            logger.info(f"[{self.source_id}] Saving device state: {stored_payload}")
+            logger.info(
+                "[%s] Saving device state payload=%s",
+                self.source_id,
+                redact_sensitive_fields(stored_payload),
+            )
             self._save_device_state(stored_payload)
             # Save initial pending status
             self._save_device_flow_status("pending", {
@@ -533,7 +553,11 @@ class OAuthAuth:
             logger.info(f"[{self.source_id}] Device flow started successfully")
             return stored_payload
         except Exception as e:
-            logger.exception(f"[{self.source_id}] Device flow failed with exception: {type(e).__name__}: {e}")
+            logger.exception(
+                "[%s] Device flow failed: %s",
+                self.source_id,
+                sanitize_log_reason(e),
+            )
             raise
 
     async def poll_device_token(self) -> dict[str, Any]:
@@ -636,7 +660,7 @@ class OAuthAuth:
                 self.source_id,
                 error_code,
                 current_interval,
-                error_description,
+                sanitize_log_reason(error_description),
             )
             if error_code == "authorization_pending":
                 device_state["interval"] = current_interval
@@ -811,7 +835,7 @@ class OAuthAuth:
             else:
                 await self.ensure_fresh_token()
         except Exception as exc:
-            logger.warning("[%s] OAuth refresh failed: %s", self.source_id, exc)
+            logger.warning("[%s] OAuth refresh failed: %s", self.source_id, sanitize_log_reason(exc))
             return False
 
         self._load_token()
