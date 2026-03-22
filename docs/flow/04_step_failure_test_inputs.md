@@ -39,6 +39,16 @@ These inputs are for fast regression on recoverability after auth failures.
   - `fetch_blocked` returns 403
   - source status becomes `suspended`
   - interaction type is `webview_scrape`
-  - interaction payload includes `force_foreground=true` and `manual_only=true`
+  - interaction payload includes `manual_only=true`
+  - interaction payload does not require `force_foreground=true` default
+
+## 5. `test_fail_step_webview_uncertain.yaml`
+
+- Goal: validate uncertain WebView runtime failure retries (`ERROR` + retry budget)
+- Input: `test_webview_data: {"mode":"uncertain","note":"retry-test"}`
+- Expected:
+  - source `error_code` becomes `runtime.retry_required`
+  - refresh scheduler retries with bounded backoff (`60s`, `180s`, `600s`)
+  - retry cap is `3` attempts before terminal failure handling
 
 WebView runtime details: [../webview-scraper/02_runtime_and_fallback.md](../webview-scraper/02_runtime_and_fallback.md)

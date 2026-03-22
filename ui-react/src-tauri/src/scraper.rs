@@ -1630,16 +1630,12 @@ pub async fn handle_scraper_auth(
         ScraperLifecycleLog::new(
             source_id.clone(),
             resolved_task_id.clone(),
-            "window_shown",
-            "info",
-            "Showing window for manual authentication".to_string(),
+            "manual_action_required",
+            "warn",
+            "Authentication required; waiting for explicit user action to open the foreground window"
+                .to_string(),
         ),
     );
-    let _ = window.set_decorations(true);
-    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(800.0, 600.0)));
-    let _ = window.center();
-    let _ = window.show();
-    let _ = window.set_focus();
     Ok(())
 }
 
@@ -1855,6 +1851,34 @@ pub async fn get_scraper_queue_snapshot(
 mod tests {
     use super::*;
 
+    fn extract_function_body(source: &str, fn_name: &str) -> String {
+        let fn_marker = source
+            .find(fn_name)
+            .unwrap_or_else(|| panic!("Function marker not found: {}", fn_name));
+        let body_start = source[fn_marker..]
+            .find('{')
+            .map(|idx| fn_marker + idx)
+            .unwrap_or_else(|| panic!("Function body start not found: {}", fn_name));
+
+        let mut depth = 0usize;
+        let mut end = None;
+        for (idx, ch) in source[body_start..].char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = Some(body_start + idx);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let body_end = end.unwrap_or_else(|| panic!("Function body end not found: {}", fn_name));
+        source[body_start..=body_end].to_string()
+    }
+
     fn make_log(task_id: &str, stage: &str, message: &str) -> ScraperLifecycleLog {
         ScraperLifecycleLog::new(
             "source-1".to_string(),
@@ -1894,5 +1918,52 @@ mod tests {
         let kill_decision =
             state.evaluate(&make_log("task-burst", "spam", "log-overflow"), now + 1);
         assert!(matches!(kill_decision, LogDecision::Kill { .. }));
+    }
+
+    #[test]
+    fn auth_required_handler_emits_callback_without_auto_focus_contract() {
+        let source = include_str!("scraper.rs");
+        let body = extract_function_body(source, "pub async fn handle_scraper_auth");
+
+        assert!(
+            body.contains("fail_scraper_task("),
+            "Auth-required fallback should keep backend fail callback"
+        );
+        assert!(
+            body.contains("\"scraper_auth_required\""),
+            "Auth-required fallback should emit scraper_auth_required event"
+        );
+        assert!(
+            !body.contains("window.show("),
+            "Auth-required fallback must not auto-show the scraper window"
+        );
+        assert!(
+            !body.contains("window.set_focus("),
+            "Auth-required fallback must not auto-focus the scraper window"
+        );
+    }
+
+    #[test]
+    fn explicit_manual_foreground_paths_still_focus_window_contract() {
+        let source = include_str!("scraper.rs");
+        let show_window_body = extract_function_body(source, "pub async fn show_scraper_window");
+        let push_task_body = extract_function_body(source, "pub async fn push_scraper_task");
+
+        assert!(
+            show_window_body.contains("win.show("),
+            "Manual show_scraper_window path should still show the window"
+        );
+        assert!(
+            show_window_body.contains("win.set_focus("),
+            "Manual show_scraper_window path should still focus the window"
+        );
+        assert!(
+            push_task_body.contains("_webview.show("),
+            "Explicit foreground task start should still show the window"
+        );
+        assert!(
+            push_task_body.contains("_webview.set_focus("),
+            "Explicit foreground task start should still focus the window"
+        );
     }
 }

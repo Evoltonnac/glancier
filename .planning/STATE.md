@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Security Audit Remediation
 status: executing
-last_updated: "2026-03-20T05:20:09.793Z"
-last_activity: 2026-03-20 — Completed 04-02 internal fail classification and explicit foreground-intent control plan with passing backend/frontend gates
+last_updated: "2026-03-20T05:28:27.526Z"
+last_activity: 2026-03-20 — Completed 04-03 rust no-auto-focus auth fallback and docs contract sync plan with passing tauri/doc gates
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -18,13 +18,13 @@ progress:
 See: .planning/PROJECT.md (Updated for v1.1)
 
 **Core value:** In a config-first workflow, users can still finish auth -> fetch -> parse -> render without backend hardcoding.
-**Current focus:** Phase 4 execution in progress; 04-01 and 04-02 completed, 04-03 pending.
+**Current focus:** Phase 4 completed; all plans through 04-03 are complete and documented.
 
 ## Current Position
 Phase: 4
-Plan: 02 completed (`04-02-PLAN.md`)
-Status: Phase 4 in progress; 04-01 and 04-02 completed, 04-03 pending
-Last activity: 2026-03-20 — Completed 04-02 internal fail classification and explicit foreground-intent control plan with passing backend/frontend gates
+Plan: 03 completed (`04-03-PLAN.md`)
+Status: Phase 4 complete; 04-01, 04-02, and 04-03 all completed
+Last activity: 2026-03-20 — Completed 04-03 rust no-auto-focus auth fallback and docs contract sync plan with passing tauri/doc gates
 
 ## Session Continuity
 - v1.0 has shipped and Phase 1/2 follow-up work is completed and retained in historical context.
@@ -35,6 +35,7 @@ Last activity: 2026-03-20 — Completed 04-02 internal fail classification and e
 - 2026-03-19T14:15:55Z: Completed Plan 03-05 with atomic task commits, script timeout+sandbox controls, and passing regression/typecheck/backend/frontend gates.
 - 2026-03-20T05:04:11Z: Completed Plan 04-01 with deterministic webview manual-vs-retry classification, bounded scheduler retries, and passing targeted/backend regression gates.
 - 2026-03-20T05:19:07Z: Completed Plan 04-02 with deterministic internal fail contracts and explicit foreground-intent scraper controls, passing backend/frontend/typecheck gates.
+- 2026-03-20T05:27:13Z: Completed Plan 04-03 with no-auto-focus Rust auth fallback behavior, synchronized runtime/fallback docs, and passing tauri/doc regression gates.
 
 ## Accumulated Context
 
@@ -53,6 +54,7 @@ Last activity: 2026-03-20 — Completed 04-02 internal fail classification and e
 - 2026-03-19: Completed Plan 03-05 with backend-owned script sandbox/timeout settings, Beta advanced UI controls, deterministic runtime error codes, and concurrent regression coverage.
 - 2026-03-20: Completed Plan 04-01 with explicit manual-vs-retry webview failure contracts and bounded scheduler retry policy.
 - 2026-03-20: Completed Plan 04-02 with deterministic internal fail classification and explicit frontend foreground-intent queue controls.
+- 2026-03-20: Completed Plan 04-03 with Rust no-auto-focus auth-required fallback and synchronized fallback/retry documentation.
 
 ### Decisions
 - 2026-03-19: OAuth code exchange now requires single-use server state bound to `source_id` and `redirect_uri`.
@@ -74,6 +76,9 @@ Last activity: 2026-03-20 — Completed 04-02 internal fail classification and e
 - [Phase 04]: Refresh scheduler retries only runtime.network_timeout/runtime.retry_required with 60/180/600 backoff and 3-attempt cap.
 - [Phase 04-improve-web-scraping-stability-remove-focus-stealing-fallback-and-allow-retry-for-uncertain-failures]: Internal scraper fail callbacks now classify fail reasons into manual_required (auth.manual_webview_required) and retry_required (runtime.retry_required) deterministic contracts.
 - [Phase 04-improve-web-scraping-stability-remove-focus-stealing-fallback-and-allow-retry-for-uncertain-failures]: Frontend scraper queue flow ignores legacy force_foreground metadata and only enters foreground mode when options.foreground=true is explicitly requested.
+- [Phase 04]: Automatic auth-required fallback is signal-only and does not invoke window focus/foreground operations.
+- [Phase 04]: Explicit manual recovery retains show/focus behavior only through user-triggered foreground commands.
+- [Phase 04]: Phase docs now define manual_only payload semantics without implicit force_foreground and preserve uncertain retry budget at 3 attempts (60/180/600s).
 
 ### Pending Todos
 

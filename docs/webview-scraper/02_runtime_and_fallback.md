@@ -23,8 +23,15 @@ When Flow enters `webview_scrape` in browser runtime:
 
 When scraper is blocked (captcha/login wall) in Tauri runtime:
 1. Backend marks task as failed and keeps source in `suspended`.
-2. UI presents manual foreground resume action.
-3. User can reopen worker window to finish auth/captcha and retry.
+2. Backend emits a deterministic manual-required payload with `manual_only=true`.
+3. Automatic fallback does not auto-show or auto-focus scraper windows.
+4. UI presents manual foreground resume action.
+5. User can explicitly open the foreground window to finish auth/captcha and retry.
+
+Manual-required payload contract:
+- Keep `manual_only=true` for auth-required/manual interactions.
+- Do not set `force_foreground=true` by default in automatic fallback payloads.
+- Foreground/focus behavior is only enabled by explicit user action.
 
 ## 4. Timeout and Queue Progress Rules
 
@@ -41,7 +48,14 @@ When scraper is blocked (captcha/login wall) in Tauri runtime:
    - "Clear queue" must remove all active queue tasks in backend storage (optionally per source).
    - Clearing should not leave the next queued task continuing silently.
 
-## 5. State Observability
+## 5. Retry Policy for Uncertain Failures
+
+1. Uncertain transient failures use deterministic `runtime.retry_required`.
+2. Scheduler retries uncertain failures with a `3`-attempt cap.
+3. Retry backoff sequence is `60s`, `180s`, and `600s`.
+4. Manual-required failures (`auth.manual_webview_required`) remain excluded from automatic retries.
+
+## 6. State Observability
 
 Recommended signals:
 - current task status (`idle` / `running` / `timeout` / `failed`)
@@ -49,7 +63,7 @@ Recommended signals:
 - latest error summary
 - backend task lease/attempt metadata for daemon diagnostics
 
-## 6. Regression Checklist for Refactor Reviews
+## 7. Regression Checklist for Refactor Reviews
 
 Before shipping scraper refactors, verify all checks:
 
@@ -59,5 +73,6 @@ Before shipping scraper refactors, verify all checks:
 4. Queue task timeout still cancels task and queue continues to next task.
 5. Foreground/manual tasks are never auto-cancelled by 10s timeout logic.
 6. "Clear queue" removes all pending backend queue tasks and queue UI drops to zero.
+7. Auth-required fallback emits manual-only signals without auto show/focus behavior.
 
 Flow-side failure examples: [../flow/04_step_failure_test_inputs.md](../flow/04_step_failure_test_inputs.md)

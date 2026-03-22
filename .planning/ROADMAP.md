@@ -45,7 +45,7 @@ Plans:
 **Goal:** Remove automatic focus-stealing fallback in WebView scraper recovery and add bounded retries for uncertain failures while preserving backend-owned workflow state.
 **Requirements**: PH4-01, PH4-02, PH4-03, PH4-04, PH4-05
 **Depends on:** Phase 3
-**Plans:** 3 plans (2 completed)
+**Plans:** 3 plans (3 completed)
 
 Success criteria:
 1. Automatic WebView fallback paths no longer force foreground/focus behavior across backend, frontend, and Rust runtime paths.
@@ -56,4 +56,4 @@ Success criteria:
 Plans:
 - [x] 04-01-PLAN.md — Backend failure classification matrix and bounded uncertain-failure retry policy. ([[Summary](.planning/phases/04-improve-web-scraping-stability-remove-focus-stealing-fallback-and-allow-retry-for-uncertain-failures/04-01-SUMMARY.md)])
 - [x] 04-02-PLAN.md — Internal scraper fail contract + frontend observer/manual control foreground-intent cleanup. ([[Summary](.planning/phases/04-improve-web-scraping-stability-remove-focus-stealing-fallback-and-allow-retry-for-uncertain-failures/04-02-SUMMARY.md)])
-- [ ] 04-03-PLAN.md — Rust no-auto-focus auth fallback, docs contract sync, and manual focus-behavior checkpoint.
+- [x] 04-03-PLAN.md — Rust no-auto-focus auth fallback, docs contract sync, and manual focus-behavior checkpoint. ([[Summary](.planning/phases/04-improve-web-scraping-stability-remove-focus-stealing-fallback-and-allow-retry-for-uncertain-failures/04-03-SUMMARY.md)])
