@@ -37,6 +37,7 @@ Last activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeou
 ## Accumulated Context
 
 ### Roadmap Evolution
+- 2026-03-20: Phase 4 added - Improve web scraping stability, remove focus-stealing fallback, and allow retry for uncertain failures.
 - 2026-03-15: Phase 1 added - Backend-driven webview scraper reliability for minimized, hidden, and occluded window states.
 - 2026-03-15: Phase 1 completed - all 3 plans executed and manual UAT matrix passed.
 - 2026-03-16: Phase 2 added - 易用性优化（统一界面文案与错误格式化、支持中英 i18n、刷新间隔和默认加密体验优化）。

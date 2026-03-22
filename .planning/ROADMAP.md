@@ -13,11 +13,12 @@ This roadmap manages milestone delivery for Glanceus. Completed milestones are a
 
 **Goal:** Remediate critical security audit findings in core modules while preserving config-first integration usability and release stability.
 
-**Coverage:** 1 phase | 7/7 requirements mapped | All covered ✓
+**Coverage:** 2 phases | 12/12 requirements mapped | All covered ✓
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
 | 3 | Remediate critical security audit findings in core modules | Close critical/high findings without flow regressions | SEC-01, SEC-02, SEC-03, INT-01, INT-02, GATE-01, GATE-02 | 4 |
+| 4 | Improve web scraping stability, remove focus-stealing fallback, and allow retry for uncertain failures | Harden WebView fallback/retry behavior without regressing backend-owned scraping reliability | PH4-01, PH4-02, PH4-03, PH4-04, PH4-05 | 4 |
 
 ### Phase 3: Remediate critical security audit findings in core modules
 
@@ -38,3 +39,21 @@ Plans:
 - [x] 03-03-PLAN.md — Central redaction plus internal scraper/file API confidentiality hardening ([[Summary](.planning/phases/03-remediate-critical-security-audit-findings-in-core-modules/03-03-SUMMARY.md)])
 - [x] 03-04-PLAN.md — Regression and security release gate finalization ([[Summary](.planning/phases/03-remediate-critical-security-audit-findings-in-core-modules/03-04-SUMMARY.md)])
 - [x] 03-05-PLAN.md — Optional lightweight Script sandbox (Advanced Beta) and default script-timeout guard ([[Summary](.planning/phases/03-remediate-critical-security-audit-findings-in-core-modules/03-05-SUMMARY.md)])
+
+### Phase 4: Improve web scraping stability, remove focus-stealing fallback, and allow retry for uncertain failures
+
+**Goal:** Remove automatic focus-stealing fallback in WebView scraper recovery and add bounded retries for uncertain failures while preserving backend-owned workflow state.
+**Requirements**: PH4-01, PH4-02, PH4-03, PH4-04, PH4-05
+**Depends on:** Phase 3
+**Plans:** 3 plans
+
+Success criteria:
+1. Automatic WebView fallback paths no longer force foreground/focus behavior across backend, frontend, and Rust runtime paths.
+2. Uncertain runtime failures (`runtime.network_timeout` / `runtime.retry_required`) are retried automatically with bounded policy, while deterministic manual/auth failures are excluded.
+3. Internal scraper fail callbacks and frontend observer controls preserve deterministic `error_code`/status contracts without implicit foreground forcing.
+4. Rust fallback behavior and docs are synchronized, and manual verification confirms no focus stealing in minimized/hidden/occluded usage.
+
+Plans:
+- [ ] 04-01-PLAN.md — Backend failure classification matrix and bounded uncertain-failure retry policy.
+- [ ] 04-02-PLAN.md — Internal scraper fail contract + frontend observer/manual control foreground-intent cleanup.
+- [ ] 04-03-PLAN.md — Rust no-auto-focus auth fallback, docs contract sync, and manual focus-behavior checkpoint.
