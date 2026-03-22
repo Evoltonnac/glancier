@@ -171,6 +171,25 @@ class DataController:
             self._save_payload_locked(payload)
         logger.debug("[%s] state persisted: %s", source_id, status)
 
+    def set_retry_metadata(self, source_id: str, metadata: dict[str, Any] | None):
+        """Persist scheduler retry metadata for a source latest record."""
+        with self._lock:
+            payload = self._load_payload_locked()
+            existing = payload["latest_by_source"].get(source_id)
+            if not isinstance(existing, dict):
+                return
+
+            record = dict(existing)
+            if metadata is None:
+                record.pop("retry_metadata", None)
+            else:
+                record["retry_metadata"] = dict(metadata)
+            payload["latest_by_source"][source_id] = record
+            self._save_payload_locked(payload)
+
+    def clear_retry_metadata(self, source_id: str):
+        self.set_retry_metadata(source_id, None)
+
     # ── Queries ───────────────────────────────────────
 
     def get_latest(self, source_id: str) -> dict | None:

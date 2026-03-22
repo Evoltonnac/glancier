@@ -22,6 +22,7 @@ _RETRYABLE_STATUSES = frozenset(
     }
 )
 _RETRY_BACKOFF_SECONDS = (60, 180, 600)
+_RETRY_METADATA_KEY = "retry_metadata"
 
 
 class RefreshScheduler:
@@ -150,41 +151,47 @@ class RefreshScheduler:
             record = latest_records.get(stored.id)
             if not record:
                 # No successful history yet; do not auto schedule.
-                self._retry_states.pop(stored.id, None)
+                self._clear_retry_state(stored.id)
                 continue
 
             status = str(record.get("status") or "").strip().lower()
+            retry_state = self._read_retry_state(stored.id, record)
             if status == SourceStatus.ACTIVE.value:
-                self._retry_states.pop(stored.id, None)
+                if retry_state is not None and self._has_success_since_failure(record, retry_state):
+                    self._clear_retry_state(stored.id)
             else:
                 error_code = str(record.get("error_code") or "").strip().lower()
                 if (
                     status in _RETRYABLE_STATUSES
                     and error_code in _RETRYABLE_RUNTIME_ERROR_CODES
                 ):
-                    signature = f"{status}:{error_code}"
-                    retry_state = self._retry_states.get(stored.id)
+                    signature = error_code
                     if retry_state is None or retry_state.get("signature") != signature:
+                        first_failed_at = self._coerce_timestamp(record.get("updated_at"), now)
                         retry_state = {
                             "signature": signature,
                             "attempts": 0,
+                            "first_failed_at": first_failed_at,
+                            "next_retry_at": first_failed_at + _RETRY_BACKOFF_SECONDS[0],
                         }
-                        self._retry_states[stored.id] = retry_state
-
+                        self._write_retry_state(stored.id, retry_state)
                     attempts = int(retry_state.get("attempts", 0))
-                    if attempts < len(_RETRY_BACKOFF_SECONDS):
-                        updated_at_raw = record.get("updated_at")
-                        if isinstance(updated_at_raw, (int, float)):
-                            backoff_seconds = _RETRY_BACKOFF_SECONDS[attempts]
-                            if now - float(updated_at_raw) >= backoff_seconds:
-                                enqueued = await self._enqueue(
-                                    stored.id,
-                                    reason=f"retry:{error_code}",
-                                )
-                                if enqueued:
-                                    retry_state["attempts"] = attempts + 1
+                    if attempts < len(_RETRY_BACKOFF_SECONDS) and self._retry_due(retry_state, now):
+                        enqueued = await self._enqueue(
+                            stored.id,
+                            reason=f"retry:{error_code}",
+                        )
+                        if enqueued:
+                            next_attempts = attempts + 1
+                            retry_state["attempts"] = next_attempts
+                            if next_attempts < len(_RETRY_BACKOFF_SECONDS):
+                                retry_state["next_retry_at"] = now + _RETRY_BACKOFF_SECONDS[next_attempts]
+                            else:
+                                retry_state["next_retry_at"] = None
+                            self._write_retry_state(stored.id, retry_state)
                 else:
-                    self._retry_states.pop(stored.id, None)
+                    if retry_state is not None:
+                        self._clear_retry_state(stored.id)
                 continue
 
             source_interval = None
@@ -215,6 +222,69 @@ class RefreshScheduler:
                 continue
 
             await self._enqueue(stored.id, reason="auto")
+
+    @staticmethod
+    def _coerce_timestamp(value: Any, fallback: float) -> float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        return float(fallback)
+
+    @staticmethod
+    def _retry_due(retry_state: dict[str, Any], now: float) -> bool:
+        next_retry_at = retry_state.get("next_retry_at")
+        if not isinstance(next_retry_at, (int, float)):
+            return False
+        return now >= float(next_retry_at)
+
+    @staticmethod
+    def _has_success_since_failure(record: dict[str, Any], retry_state: dict[str, Any]) -> bool:
+        last_success_at = record.get("last_success_at")
+        first_failed_at = retry_state.get("first_failed_at")
+        return (
+            isinstance(last_success_at, (int, float))
+            and isinstance(first_failed_at, (int, float))
+            and float(last_success_at) > float(first_failed_at)
+        )
+
+    def _read_retry_state(self, source_id: str, record: dict[str, Any]) -> dict[str, Any] | None:
+        raw_state = record.get(_RETRY_METADATA_KEY)
+        if not isinstance(raw_state, dict):
+            return self._retry_states.get(source_id)
+
+        signature = str(raw_state.get("signature") or "").strip().lower()
+        if not signature:
+            return self._retry_states.get(source_id)
+
+        state = {
+            "signature": signature,
+            "attempts": max(0, int(raw_state.get("attempts", 0))),
+            "first_failed_at": self._coerce_timestamp(raw_state.get("first_failed_at"), time.time()),
+            "next_retry_at": raw_state.get("next_retry_at"),
+        }
+        if not isinstance(state.get("next_retry_at"), (int, float)):
+            attempts = int(state["attempts"])
+            if attempts < len(_RETRY_BACKOFF_SECONDS):
+                state["next_retry_at"] = state["first_failed_at"] + _RETRY_BACKOFF_SECONDS[attempts]
+            else:
+                state["next_retry_at"] = None
+        self._retry_states[source_id] = state
+        return state
+
+    def _write_retry_state(self, source_id: str, retry_state: dict[str, Any]) -> None:
+        state = {
+            "signature": str(retry_state.get("signature") or ""),
+            "attempts": max(0, int(retry_state.get("attempts", 0))),
+            "first_failed_at": self._coerce_timestamp(retry_state.get("first_failed_at"), time.time()),
+            "next_retry_at": retry_state.get("next_retry_at"),
+        }
+        self._retry_states[source_id] = state
+        if hasattr(self._data_controller, "set_retry_metadata"):
+            self._data_controller.set_retry_metadata(source_id, state)
+
+    def _clear_retry_state(self, source_id: str) -> None:
+        self._retry_states.pop(source_id, None)
+        if hasattr(self._data_controller, "clear_retry_metadata"):
+            self._data_controller.clear_retry_metadata(source_id)
 
     async def _worker_loop(self, worker_index: int) -> None:
         try:
