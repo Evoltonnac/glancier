@@ -1,15 +1,15 @@
 ---
 phase: 5
 slug: storage-contract-refactor-and-crash-safe-persistence
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: active
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-20
 ---
 
 # Phase 5 — Validation Strategy
 
-> Per-phase validation contract for feedback sampling during execution.
+Per-phase validation contract for storage contract migration, crash-safe writes, and deterministic diagnostics.
 
 ---
 
@@ -17,20 +17,20 @@ created: 2026-03-20
 
 | Property | Value |
 |----------|-------|
-| **Framework** | {pytest 7.x / jest 29.x / vitest / go test / other} |
-| **Config file** | {path or "none — Wave 0 installs"} |
-| **Quick run command** | `{quick command}` |
-| **Full suite command** | `{full command}` |
-| **Estimated runtime** | ~{N} seconds |
+| **Framework** | `pytest` 9.x + Makefile verification wrappers |
+| **Config file** | `pytest.ini` |
+| **Quick run command** | `python -m pytest tests/core/test_storage_contract_sqlite.py tests/core/test_storage_crash_recovery.py tests/core/test_storage_startup_migration.py tests/core/test_storage_error_mapping.py tests/api/test_storage_error_codes_api.py -q` |
+| **Full suite command** | `make test-backend` and `make test-impacted` |
+| **Estimated runtime** | ~20-60 seconds (quick set), repository-dependent for full suite |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `{quick run command}`
-- **After every plan wave:** Run `{full suite command}`
+- **After every task commit:** Run the requirement-targeted quick command subset for touched STOR IDs.
+- **After every plan wave:** Run `make test-backend`.
 - **Before `$gsd-verify-work`:** Full suite must be green
-- **Max feedback latency:** {N} seconds
+- **Max feedback latency:** <= 60 seconds for per-task feedback loops
 
 ---
 
@@ -38,7 +38,11 @@ created: 2026-03-20
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| {N}-01-01 | 01 | 1 | REQ-{XX} | unit | `{command}` | ✅ / ❌ W0 | ⬜ pending |
+| 05-01-01 | 01 | 1 | STOR-01 | unit/integration | `python -m pytest tests/core/test_storage_contract_sqlite.py -q` | ✅ | ✅ green |
+| 05-02-01 | 02 | 2 | STOR-02 | fault-injection integration | `python -m pytest tests/core/test_storage_crash_recovery.py -q` | ✅ | ✅ green |
+| 05-03-01 | 03 | 3 | STOR-03 | startup migration integration | `python -m pytest tests/core/test_storage_startup_migration.py -q` | ✅ | ✅ green |
+| 05-03-02 | 03 | 3 | STOR-04 | unit + API contract | `python -m pytest tests/core/test_storage_error_mapping.py tests/api/test_storage_error_codes_api.py -q` | ✅ | ✅ green |
+| 05-03-03 | 03 | 3 | STOR-03, STOR-04 | phase gate quick aggregate | `python -m pytest tests/core/test_storage_startup_migration.py tests/core/test_storage_error_mapping.py tests/api/test_storage_error_codes_api.py -q` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -46,11 +50,13 @@ created: 2026-03-20
 
 ## Wave 0 Requirements
 
-- [ ] `{tests/test_file.py}` — stubs for REQ-{XX}
-- [ ] `{tests/conftest.py}` — shared fixtures
-- [ ] `{framework install}` — if no framework detected
+- [x] `tests/core/test_storage_contract_sqlite.py` — STOR-01 baseline schema/repository coverage
+- [x] `tests/core/test_storage_crash_recovery.py` — STOR-02 rollback + last-known-good coverage
+- [x] `tests/core/test_storage_startup_migration.py` — STOR-03 chunk migration + idempotency coverage
+- [x] `tests/core/test_storage_error_mapping.py` — STOR-04 deterministic mapping helper coverage
+- [x] `tests/api/test_storage_error_codes_api.py` — STOR-04 API `error_code` contract coverage
 
-*If none: "Existing infrastructure covers all phase requirements."*
+Existing infrastructure covers phase requirements; no additional framework bootstrapping required.
 
 ---
 
@@ -58,19 +64,20 @@ created: 2026-03-20
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| {behavior} | REQ-{XX} | {reason} | {steps} |
+| SQLite migration marker files are retained for operator rollback evidence (`*.deprecated.v1.json`) | STOR-03 | Requires real workspace file inspection after startup | Start backend against a workspace with legacy `data.json`/`sources.json`/`views.json`, then verify marker files exist and originals are absent. |
+| Release gate reviewer validates all PASS/FAIL rows in `05-STORAGE-GATE.md` before cut | STOR-04 | Process checkpoint, not code path | Execute gate commands, capture outputs, and mark final release decision with timestamp. |
 
-*If none: "All phase behaviors have automated verification."*
+All other phase behaviors have automated verification.
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < {N}s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all previously missing references
+- [x] No watch-mode flags
+- [x] Feedback latency <= 60s for quick loops
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** {pending / approved YYYY-MM-DD}
+**Approval:** approved 2026-03-20

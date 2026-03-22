@@ -18,6 +18,7 @@ from core.integration_manager import IntegrationManager
 from core.error_formatter import build_error_envelope
 from core.log_redaction import redact_sensitive_fields, sanitize_log_reason
 from core.master_key_provider import MasterKeyUnavailableError
+from core.storage.errors import StorageContractError, storage_error_to_api_response
 from core.source_state import SourceStatus, InteractionType, InteractionRequest
 from core.refresh_policy import (
     DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES,
@@ -125,6 +126,11 @@ def init_api(
 def get_runtime_config():
     """Expose current runtime config snapshot (used by background services)."""
     return _config
+
+
+def _storage_error_response(error: StorageContractError) -> JSONResponse:
+    status_code, payload = storage_error_to_api_response(error)
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 def _resolve_integration_presets_dir(config_root: Path | None) -> Optional[Path]:
@@ -287,7 +293,10 @@ def _infer_error_code_from_interaction(interaction: dict[str, Any] | None) -> st
 @router.get("/sources")
 async def list_sources() -> list[dict]:
     """Return all stored sources with runtime state snapshot."""
-    stored_sources = _resource_manager.load_sources()
+    try:
+        stored_sources = _resource_manager.load_sources()
+    except StorageContractError as error:
+        return _storage_error_response(error)
     global_refresh_interval = DEFAULT_GLOBAL_REFRESH_INTERVAL_MINUTES
     if _settings_manager is not None:
         try:
@@ -304,7 +313,10 @@ async def list_sources() -> list[dict]:
     result = []
     for source in stored_sources:
         # Read persisted state (from data.json).
-        latest_data = _data_controller.get_latest(source.id)
+        try:
+            latest_data = _data_controller.get_latest(source.id)
+        except StorageContractError as error:
+            return _storage_error_response(error)
 
         # Prefer persisted state; fallback to in-memory runtime state.
         # Runtime memory state is lost on restart, so persisted data comes first.
@@ -417,11 +429,17 @@ def _get_stored_source(source_id: str) -> "StoredSource | None":
 @router.get("/data/{source_id}")
 async def get_data(source_id: str) -> dict[str, Any]:
     """Get latest data for a source."""
-    stored = _get_stored_source(source_id)
+    try:
+        stored = _get_stored_source(source_id)
+    except StorageContractError as error:
+        return _storage_error_response(error)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
 
-    latest = _data_controller.get_latest(source_id)
+    try:
+        latest = _data_controller.get_latest(source_id)
+    except StorageContractError as error:
+        return _storage_error_response(error)
     if latest is None:
         return {"source_id": source_id, "data": None, "message": "暂无数据"}
     return latest
@@ -430,11 +448,17 @@ async def get_data(source_id: str) -> dict[str, Any]:
 @router.get("/data/{source_id}/history")
 async def get_history(source_id: str, limit: int = 100) -> list[dict]:
     """Get historical data for a source."""
-    stored = _get_stored_source(source_id)
+    try:
+        stored = _get_stored_source(source_id)
+    except StorageContractError as error:
+        return _storage_error_response(error)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
 
-    return _data_controller.get_history(source_id, limit=limit)
+    try:
+        return _data_controller.get_history(source_id, limit=limit)
+    except StorageContractError as error:
+        return _storage_error_response(error)
 
 
 # ── Manual Refresh ────────────────────────────────────
@@ -1486,13 +1510,16 @@ async def get_auth_status(source_id: str) -> dict[str, Any]:
 @router.post("/sources")
 async def create_stored_source(source: StoredSource, background_tasks: BackgroundTasks) -> StoredSource:
     """Create a new stored source."""
-    return create_stored_source_record(
-        source,
-        _resource_manager,
-        executor=_executor,
-        config=_config,
-        background_tasks=background_tasks,
-    )
+    try:
+        return create_stored_source_record(
+            source,
+            _resource_manager,
+            executor=_executor,
+            config=_config,
+            background_tasks=background_tasks,
+        )
+    except StorageContractError as error:
+        return _storage_error_response(error)
 
 
 @router.put("/sources/{source_id}")
@@ -1500,7 +1527,10 @@ async def update_stored_source(source_id: str, source: StoredSource) -> StoredSo
     """Update an existing stored source."""
     if source.id != source_id:
         raise HTTPException(400, "ID mismatch")
-    return _resource_manager.save_source(source)
+    try:
+        return _resource_manager.save_source(source)
+    except StorageContractError as error:
+        return _storage_error_response(error)
 
 
 class RefreshIntervalUpdateRequest(BaseModel):
@@ -1513,7 +1543,10 @@ async def update_source_refresh_interval(
     request: RefreshIntervalUpdateRequest,
 ) -> dict[str, Any]:
     """Update source-level refresh interval. None=unset, 0=disabled."""
-    stored = _get_stored_source(source_id)
+    try:
+        stored = _get_stored_source(source_id)
+    except StorageContractError as error:
+        return _storage_error_response(error)
     if stored is None:
         raise HTTPException(404, f"数据源 '{source_id}' 不存在")
 
@@ -1532,7 +1565,10 @@ async def update_source_refresh_interval(
         config["refresh_interval_minutes"] = normalized_interval
 
     updated = stored.model_copy(update={"config": config})
-    _resource_manager.save_source(updated)
+    try:
+        _resource_manager.save_source(updated)
+    except StorageContractError as error:
+        return _storage_error_response(error)
     return {
         "source_id": source_id,
         "refresh_interval_minutes": normalized_interval,
@@ -1542,7 +1578,11 @@ async def update_source_refresh_interval(
 @router.delete("/sources/{source_id}")
 async def delete_stored_source(source_id: str) -> dict:
     """Delete stored source."""
-    if not _resource_manager.delete_source(source_id):
+    try:
+        deleted = _resource_manager.delete_source(source_id)
+    except StorageContractError as error:
+        return _storage_error_response(error)
+    if not deleted:
         raise HTTPException(404, f"Source {source_id} not found")
 
     cleanup_warnings: list[str] = []
@@ -1551,6 +1591,8 @@ async def delete_stored_source(source_id: str) -> dict:
     try:
         if _data_controller and hasattr(_data_controller, "clear_source"):
             _data_controller.clear_source(source_id)
+    except StorageContractError as error:
+        return _storage_error_response(error)
     except Exception as exc:
         logger.warning(
             "[%s] Failed to clear source data during source deletion: %s",
@@ -1573,6 +1615,8 @@ async def delete_stored_source(source_id: str) -> dict:
     try:
         if _resource_manager and hasattr(_resource_manager, "remove_source_references_from_views"):
             affected_view_ids = _resource_manager.remove_source_references_from_views(source_id)
+    except StorageContractError as error:
+        return _storage_error_response(error)
     except Exception as exc:
         logger.warning(
             "[%s] Failed to clear source references from views: %s",
@@ -1614,11 +1658,17 @@ async def delete_stored_source(source_id: str) -> dict:
 @router.get("/views")
 async def list_stored_views() -> list[StoredView]:
     """Get all stored views."""
-    views = _resource_manager.load_views()
+    try:
+        views = _resource_manager.load_views()
+    except StorageContractError as error:
+        return _storage_error_response(error)
     if not views:
         return views
 
-    source_by_id = {source.id: source for source in _resource_manager.load_sources()}
+    try:
+        source_by_id = {source.id: source for source in _resource_manager.load_sources()}
+    except StorageContractError as error:
+        return _storage_error_response(error)
     template_lookup_by_integration = build_template_lookup_from_config(_config)
     if not source_by_id or not template_lookup_by_integration:
         return views
@@ -1636,7 +1686,10 @@ async def list_stored_views() -> list[StoredView]:
 @router.post("/views")
 async def create_stored_view(view: StoredView) -> StoredView:
     """Create new stored view."""
-    return create_stored_view_record(view, _resource_manager, config=_config)
+    try:
+        return create_stored_view_record(view, _resource_manager, config=_config)
+    except StorageContractError as error:
+        return _storage_error_response(error)
 
 
 @router.put("/views/{view_id}")
@@ -1644,14 +1697,20 @@ async def update_stored_view(view_id: str, view: StoredView) -> StoredView:
     """Update stored view."""
     if view.id != view_id:
         raise HTTPException(400, "ID mismatch")
-    return create_stored_view_record(view, _resource_manager, config=_config)
+    try:
+        return create_stored_view_record(view, _resource_manager, config=_config)
+    except StorageContractError as error:
+        return _storage_error_response(error)
 
 
 @router.delete("/views/{view_id}")
 async def delete_stored_view(view_id: str) -> dict:
     """Delete stored view."""
-    if _resource_manager.delete_view(view_id):
-        return {"message": f"View {view_id} deleted"}
+    try:
+        if _resource_manager.delete_view(view_id):
+            return {"message": f"View {view_id} deleted"}
+    except StorageContractError as error:
+        return _storage_error_response(error)
     raise HTTPException(404, f"View {view_id} not found")
 
 

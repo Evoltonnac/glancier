@@ -69,12 +69,12 @@ Plans:
   2. User can recover from interrupted writes without corrupted Integration Data and without losing the last known-good state.
   3. User can upgrade and automatically migrate existing `data/*.json` files into the refactored format without manual repair.
   4. User can diagnose storage failures via deterministic `error_code` responses and repeatable verification checks.
-**Plans**: 3 plans (planned)
+**Plans**: 3 plans (3 completed)
 
 Plans:
-- [ ] 05-01-PLAN.md - Unified versioned storage contract foundation (SQLite runtime/resources, JSON settings/secrets boundary).
-- [ ] 05-02-PLAN.md - Transaction-only crash-safe write path plus memory-only scraper task queue semantics.
-- [ ] 05-03-PLAN.md - Startup chunked/idempotent migration, deterministic storage `error_code` diagnostics, and release gate finalization.
+- [x] 05-01-PLAN.md - Unified versioned storage contract foundation (SQLite runtime/resources, JSON settings/secrets boundary). ([[Summary](.planning/phases/05-storage-contract-refactor-and-crash-safe-persistence/05-01-SUMMARY.md)])
+- [x] 05-02-PLAN.md - Transaction-only crash-safe write path plus memory-only scraper task queue semantics. ([[Summary](.planning/phases/05-storage-contract-refactor-and-crash-safe-persistence/05-02-SUMMARY.md)])
+- [x] 05-03-PLAN.md - Startup chunked/idempotent migration, deterministic storage `error_code` diagnostics, and release gate finalization. ([[Summary](.planning/phases/05-storage-contract-refactor-and-crash-safe-persistence/05-03-SUMMARY.md)])
 
 ## Progress
 
@@ -82,4 +82,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 3. Security Audit Remediation Baseline | 5/5 | Complete | 2026-03-19 |
 | 4. WebView Stability and Deterministic Recovery Baseline | 4/6 | Complete | 2026-03-20 |
-| 5. Storage Contract Refactor and Crash-Safe Persistence | 2/3 | In Progress|  |
+| 5. Storage Contract Refactor and Crash-Safe Persistence | 3/3 | Complete | 2026-03-20 |

@@ -3,7 +3,23 @@ from __future__ import annotations
 import sqlite3
 from typing import Literal
 
+from core.error_formatter import build_error_envelope
+
 StorageErrorKind = Literal["read", "write", "schema"]
+
+_STORAGE_ERROR_SUMMARY_BY_CODE = {
+    "storage.read_failed": "Storage read failed",
+    "storage.write_failed": "Storage write failed",
+    "storage.integrity_violation": "Storage integrity violation",
+    "storage.schema_mismatch": "Storage schema mismatch",
+}
+
+_STORAGE_HTTP_STATUS_BY_CODE = {
+    "storage.read_failed": 500,
+    "storage.write_failed": 500,
+    "storage.integrity_violation": 500,
+    "storage.schema_mismatch": 503,
+}
 
 
 class StorageContractError(RuntimeError):
@@ -49,3 +65,20 @@ def map_sqlite_error(
     if kind == "schema":
         return StorageSchemaMismatchError(message)
     return StorageWriteError(message)
+
+
+def storage_error_to_api_response(error: StorageContractError) -> tuple[int, dict[str, object]]:
+    code = error.error_code
+    summary = _STORAGE_ERROR_SUMMARY_BY_CODE.get(code, "Storage operation failed")
+    details = str(error).strip() or summary
+    envelope = build_error_envelope(
+        code=code,
+        summary=summary,
+        details=details,
+    )
+    status_code = _STORAGE_HTTP_STATUS_BY_CODE.get(code, 500)
+    return status_code, {
+        "detail": summary,
+        "error_code": code,
+        "error": envelope,
+    }

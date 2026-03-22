@@ -33,6 +33,7 @@ from core.refresh_scheduler import RefreshScheduler
 from core.scraper_task_store import ScraperTaskStore
 from core.storage.contract import StorageContract
 from core.storage.settings_adapter import SettingsAdapter
+from core.storage.migration import run_startup_migration
 from core.storage.sqlite_connection import create_sqlite_connection
 from core.storage.sqlite_resource_repo import SqliteResourceRepository
 from core.storage.sqlite_runtime_repo import SqliteRuntimeRepository
@@ -199,6 +200,7 @@ def create_app() -> FastAPI:
         resources=SqliteResourceRepository(storage_connection),
         settings=SettingsAdapter(settings_manager),
     )
+    run_startup_migration(storage_contract)
 
     # Initialize resource managers (used by first-launch seeding).
     resource_manager = ResourceManager(storage=storage_contract)

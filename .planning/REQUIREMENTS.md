@@ -33,8 +33,8 @@
 
 - [x] **STOR-01**: User can persist runtime/resources/settings data through a unified storage contract with explicit schema versioning.
 - [x] **STOR-02**: User can recover from interrupted writes without corrupting local Integration Data or losing last known-good state.
-- [ ] **STOR-03**: User can migrate existing `data/*.json` records into the refactored storage format automatically at startup.
-- [ ] **STOR-04**: User can rely on deterministic storage `error_code` diagnostics and repeatable verification checks before release.
+- [x] **STOR-03**: User can migrate existing `data/*.json` records into the refactored storage format automatically at startup.
+- [x] **STOR-04**: User can rely on deterministic storage `error_code` diagnostics and repeatable verification checks before release.
 
 ## v2 Requirements
 
@@ -70,8 +70,8 @@
 | PH4-05 | Phase 4 | Complete |
 | STOR-01 | Phase 5 | Complete |
 | STOR-02 | Phase 5 | Complete |
-| STOR-03 | Phase 5 | Pending |
-| STOR-04 | Phase 5 | Pending |
+| STOR-03 | Phase 5 | Complete |
+| STOR-04 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 16 total
