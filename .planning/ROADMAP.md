@@ -72,9 +72,9 @@ Plans:
 **Plans**: 3 plans (planned)
 
 Plans:
-- [ ] 05-01-PLAN.md - Unified storage contract and schema-version foundation.
-- [ ] 05-02-PLAN.md - Crash-safe write path and deterministic recovery semantics.
-- [ ] 05-03-PLAN.md - Startup migration, deterministic diagnostics, and release verification gate.
+- [ ] 05-01-PLAN.md - Unified versioned storage contract foundation (SQLite runtime/resources, JSON settings/secrets boundary).
+- [ ] 05-02-PLAN.md - Transaction-only crash-safe write path plus memory-only scraper task queue semantics.
+- [ ] 05-03-PLAN.md - Startup chunked/idempotent migration, deterministic storage `error_code` diagnostics, and release gate finalization.
 
 ## Progress
 
