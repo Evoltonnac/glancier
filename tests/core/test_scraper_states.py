@@ -9,7 +9,11 @@ from tests.factories import build_source_config, build_step
 
 
 @pytest.mark.asyncio
-async def test_webscraper_403_or_captcha_maps_to_suspended(executor, monkeypatch):
+async def test_webscraper_auth_wall_maps_to_suspended_without_force_foreground(
+    executor,
+    data_controller,
+    monkeypatch,
+):
     source = build_source_config(
         source_id="webscraper-blocked",
         name="WebScraper Blocked Source",
@@ -38,8 +42,66 @@ async def test_webscraper_403_or_captcha_maps_to_suspended(executor, monkeypatch
     assert state.interaction is not None
     assert state.interaction.type == InteractionType.WEBVIEW_SCRAPE
     assert state.interaction.data is not None
-    assert state.interaction.data["force_foreground"] is True
     assert state.interaction.data["manual_only"] is True
+    assert "force_foreground" not in state.interaction.data
+
+    suspended_calls = [
+        call.kwargs
+        for call in data_controller.set_state.call_args_list
+        if call.kwargs.get("status") == SourceStatus.SUSPENDED.value
+    ]
+    assert suspended_calls
+    assert suspended_calls[-1]["error_code"] == "auth.manual_webview_required"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "403 forbidden while rendering hidden page",
+        "webview timed out while waiting for script result",
+    ],
+)
+async def test_webscraper_uncertain_failures_map_to_retry_required_error_code(
+    executor,
+    data_controller,
+    monkeypatch,
+    message,
+):
+    source = build_source_config(
+        source_id="webscraper-retryable",
+        name="WebScraper Retryable Source",
+        flow=[
+            build_step(
+                step_id="webview",
+                use=StepType.WEBVIEW,
+                args={
+                    "url": "https://example.com/login",
+                    "intercept_api": "/dashboard",
+                    "script": "",
+                },
+            )
+        ],
+    )
+
+    async def raise_uncertain_error(_source):
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(executor, "_run_flow", raise_uncertain_error)
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ERROR
+    assert state.interaction is None
+
+    error_calls = [
+        call.kwargs
+        for call in data_controller.set_state.call_args_list
+        if call.kwargs.get("status") == SourceStatus.ERROR.value
+    ]
+    assert error_calls
+    assert error_calls[-1]["error_code"] == "runtime.retry_required"
 
 
 @pytest.mark.asyncio

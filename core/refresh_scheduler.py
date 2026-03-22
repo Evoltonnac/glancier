@@ -9,6 +9,19 @@ from core.refresh_policy import resolve_refresh_interval_minutes
 from core.source_state import SourceStatus
 
 logger = logging.getLogger(__name__)
+_RETRYABLE_RUNTIME_ERROR_CODES = frozenset(
+    {
+        "runtime.network_timeout",
+        "runtime.retry_required",
+    }
+)
+_RETRYABLE_STATUSES = frozenset(
+    {
+        SourceStatus.ERROR.value,
+        SourceStatus.SUSPENDED.value,
+    }
+)
+_RETRY_BACKOFF_SECONDS = (60, 180, 600)
 
 
 class RefreshScheduler:
@@ -46,6 +59,7 @@ class RefreshScheduler:
         self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
         self._queued_ids: set[str] = set()
         self._inflight_ids: set[str] = set()
+        self._retry_states: dict[str, dict[str, Any]] = {}
 
         self._stop_event = asyncio.Event()
         self._tick_task: asyncio.Task | None = None
@@ -85,6 +99,7 @@ class RefreshScheduler:
         self._worker_tasks = []
         self._queued_ids.clear()
         self._inflight_ids.clear()
+        self._retry_states.clear()
         while not self._queue.empty():
             try:
                 self._queue.get_nowait()
@@ -135,11 +150,41 @@ class RefreshScheduler:
             record = latest_records.get(stored.id)
             if not record:
                 # No successful history yet; do not auto schedule.
+                self._retry_states.pop(stored.id, None)
                 continue
 
             status = str(record.get("status") or "").strip().lower()
-            # User requirement: skip non-success status in tick.
-            if status != SourceStatus.ACTIVE.value:
+            if status == SourceStatus.ACTIVE.value:
+                self._retry_states.pop(stored.id, None)
+            else:
+                error_code = str(record.get("error_code") or "").strip().lower()
+                if (
+                    status in _RETRYABLE_STATUSES
+                    and error_code in _RETRYABLE_RUNTIME_ERROR_CODES
+                ):
+                    signature = f"{status}:{error_code}"
+                    retry_state = self._retry_states.get(stored.id)
+                    if retry_state is None or retry_state.get("signature") != signature:
+                        retry_state = {
+                            "signature": signature,
+                            "attempts": 0,
+                        }
+                        self._retry_states[stored.id] = retry_state
+
+                    attempts = int(retry_state.get("attempts", 0))
+                    if attempts < len(_RETRY_BACKOFF_SECONDS):
+                        updated_at_raw = record.get("updated_at")
+                        if isinstance(updated_at_raw, (int, float)):
+                            backoff_seconds = _RETRY_BACKOFF_SECONDS[attempts]
+                            if now - float(updated_at_raw) >= backoff_seconds:
+                                enqueued = await self._enqueue(
+                                    stored.id,
+                                    reason=f"retry:{error_code}",
+                                )
+                                if enqueued:
+                                    retry_state["attempts"] = attempts + 1
+                else:
+                    self._retry_states.pop(stored.id, None)
                 continue
 
             source_interval = None

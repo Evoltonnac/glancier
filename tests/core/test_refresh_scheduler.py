@@ -71,6 +71,15 @@ def _build_scheduler(
     )
 
 
+def _drain_scheduler_queue(scheduler: RefreshScheduler) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    while not scheduler._queue.empty():
+        entries.append(scheduler._queue.get_nowait())
+        scheduler._queue.task_done()
+    scheduler._queued_ids.clear()
+    return entries
+
+
 def test_tick_enqueues_due_active_sources_only():
     now = time.time()
     sources = [
@@ -195,3 +204,130 @@ def test_tick_supports_custom_integration_interval_minutes():
     asyncio.run(scheduler.run_tick_once())
 
     assert scheduler._queued_ids == {"integration-custom-due"}
+
+
+def test_tick_enqueues_retryable_runtime_error_after_backoff(monkeypatch):
+    now = time.time()
+    source = SimpleNamespace(
+        id="retryable-error-source",
+        integration_id="integration-a",
+        config={"refresh_interval_minutes": 5},
+    )
+    latest = [
+        {
+            "source_id": source.id,
+            "status": "error",
+            "error_code": "runtime.network_timeout",
+            "updated_at": now - 61,
+        }
+    ]
+    scheduler = _build_scheduler(
+        latest_records=latest,
+        sources=[source],
+        integration_defaults={"integration-a": 5},
+        global_interval=30,
+    )
+
+    monkeypatch.setattr("core.refresh_scheduler.time.time", lambda: now)
+    asyncio.run(scheduler.run_tick_once())
+
+    assert scheduler._queued_ids == {source.id}
+    retry_state = scheduler._retry_states[source.id]
+    assert retry_state["attempts"] == 1
+    assert retry_state["signature"] == "error:runtime.network_timeout"
+
+
+def test_tick_skips_non_retryable_error_codes_for_error_and_suspended():
+    now = time.time()
+    sources = [
+        SimpleNamespace(
+            id="manual-required-error",
+            integration_id="integration-a",
+            config={},
+        ),
+        SimpleNamespace(
+            id="manual-required-suspended",
+            integration_id="integration-a",
+            config={},
+        ),
+    ]
+    latest = [
+        {
+            "source_id": "manual-required-error",
+            "status": "error",
+            "error_code": "auth.manual_webview_required",
+            "updated_at": now - 10_000,
+        },
+        {
+            "source_id": "manual-required-suspended",
+            "status": "suspended",
+            "error_code": "auth.manual_webview_required",
+            "updated_at": now - 10_000,
+        },
+    ]
+    scheduler = _build_scheduler(
+        latest_records=latest,
+        sources=sources,
+        integration_defaults={"integration-a": 5},
+        global_interval=30,
+    )
+
+    asyncio.run(scheduler.run_tick_once())
+
+    assert scheduler._queued_ids == set()
+
+
+def test_tick_applies_retry_backoff_windows_and_caps_at_three(monkeypatch):
+    base = 10_000.0
+    source = SimpleNamespace(
+        id="retry-cap-source",
+        integration_id="integration-a",
+        config={"refresh_interval_minutes": 5},
+    )
+    latest_record = {
+        "source_id": source.id,
+        "status": "error",
+        "error_code": "runtime.retry_required",
+        "updated_at": base,
+    }
+    scheduler = _build_scheduler(
+        latest_records=[latest_record],
+        sources=[source],
+        integration_defaults={"integration-a": 5},
+        global_interval=30,
+    )
+
+    current_time = {"value": base + 59}
+    monkeypatch.setattr("core.refresh_scheduler.time.time", lambda: current_time["value"])
+
+    asyncio.run(scheduler.run_tick_once())
+    assert scheduler._queued_ids == set()
+
+    current_time["value"] = base + 60
+    asyncio.run(scheduler.run_tick_once())
+    first = _drain_scheduler_queue(scheduler)
+    assert first == [(source.id, "retry:runtime.retry_required")]
+    assert scheduler._retry_states[source.id]["attempts"] == 1
+
+    latest_record["updated_at"] = base + 100
+    current_time["value"] = base + 279
+    asyncio.run(scheduler.run_tick_once())
+    assert scheduler._queued_ids == set()
+
+    current_time["value"] = base + 280
+    asyncio.run(scheduler.run_tick_once())
+    second = _drain_scheduler_queue(scheduler)
+    assert second == [(source.id, "retry:runtime.retry_required")]
+    assert scheduler._retry_states[source.id]["attempts"] == 2
+
+    latest_record["updated_at"] = base + 400
+    current_time["value"] = base + 1000
+    asyncio.run(scheduler.run_tick_once())
+    third = _drain_scheduler_queue(scheduler)
+    assert third == [(source.id, "retry:runtime.retry_required")]
+    assert scheduler._retry_states[source.id]["attempts"] == 3
+
+    latest_record["updated_at"] = base + 1500
+    current_time["value"] = base + 50_000
+    asyncio.run(scheduler.run_tick_once())
+    assert scheduler._queued_ids == set()

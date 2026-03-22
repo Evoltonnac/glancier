@@ -42,6 +42,18 @@ _ESCAPED_TEMPLATE_CHAR_PATTERN = re.compile(r"\\([{}\\])")
 _ESCAPE_TOKEN_PATTERN = re.compile("\u0000(\\d+)\u0000")
 _MISSING = object()
 _DEFAULT_MAX_CONCURRENT_FETCHES = 4
+_WEBVIEW_MANUAL_REQUIRED_KEYWORDS = (
+    "captcha",
+    "login",
+    "auth required",
+    "verification",
+)
+_WEBVIEW_RETRYABLE_KEYWORDS = (
+    "403",
+    "forbidden",
+    "timeout",
+    "timed out",
+)
 
 
 class Executor:
@@ -367,6 +379,7 @@ class Executor:
                         InvalidCredentialsError,
                         NetworkTimeoutError,
                         WebScraperBlockedError,
+                        RetryRequiredRuntimeError,
                     ),
                 ) or getattr(step_error, "code", None) in {
                     "script_timeout_exceeded",
@@ -550,6 +563,7 @@ class Executor:
                 InvalidCredentialsError,
                 NetworkTimeoutError,
                 WebScraperBlockedError,
+                RetryRequiredRuntimeError,
             ),
         ):
             return error
@@ -559,13 +573,18 @@ class Executor:
 
         message = str(error).lower()
         has_webview_step = bool(source.flow and any(step.use == StepType.WEBVIEW for step in source.flow))
-        block_keywords = ("captcha", "forbidden", "403", "login", "auth required", "timed out", "timeout")
-        if has_webview_step and any(keyword in message for keyword in block_keywords):
+        if has_webview_step and any(keyword in message for keyword in _WEBVIEW_MANUAL_REQUIRED_KEYWORDS):
             return WebScraperBlockedError(
                 source_id=source.id,
                 step_id=None,
                 message=str(error) or "Web scraper was blocked by auth wall",
-                data={"force_foreground": True, "manual_only": True},
+                data={"manual_only": True},
+            )
+        if has_webview_step and any(keyword in message for keyword in _WEBVIEW_RETRYABLE_KEYWORDS):
+            return RetryRequiredRuntimeError(
+                source_id=source.id,
+                step_id=None,
+                message=str(error) or "Web scraper failure requires retry",
             )
 
         return error
@@ -579,14 +598,29 @@ class Executor:
         response = error.response
         status_code = response.status_code if response else None
         has_webview_step = bool(source.flow and any(flow_step.use == StepType.WEBVIEW for flow_step in source.flow))
-        if status_code == 403 and has_webview_step:
-            return WebScraperBlockedError(
-                source_id=source.id,
-                step_id=step.id if step else None,
-                message=str(error),
-                status_code=status_code,
-                data={"force_foreground": True, "manual_only": True},
-            )
+        if status_code in {401, 403} and has_webview_step:
+            response_text = ""
+            if response is not None:
+                try:
+                    response_text = (response.text or "").lower()
+                except Exception:
+                    response_text = ""
+            status_message = f"{str(error).lower()} {response_text}".strip()
+            if any(keyword in status_message for keyword in _WEBVIEW_MANUAL_REQUIRED_KEYWORDS):
+                return WebScraperBlockedError(
+                    source_id=source.id,
+                    step_id=step.id if step else None,
+                    message=str(error),
+                    status_code=status_code,
+                    data={"manual_only": True},
+                )
+            if status_code == 403:
+                return RetryRequiredRuntimeError(
+                    source_id=source.id,
+                    step_id=step.id if step else None,
+                    message=str(error) or "Web scraper returned 403 and should retry",
+                    status_code=status_code,
+                )
 
         if status_code in {401, 403}:
             return InvalidCredentialsError(
@@ -858,7 +892,6 @@ class Executor:
                         "script": (step.args or {}).get("script"),
                         "intercept_api": (step.args or {}).get("intercept_api"),
                         "secret_key": step.secrets.get("webview_data", "webview_data") if step.secrets else "webview_data",
-                        "force_foreground": True,
                         "manual_only": True,
                         "failed_step_id": error.step_id,
                         "recovery_step_id": step.id,
@@ -961,7 +994,6 @@ class Executor:
             if source.flow:
                 webview_step = next((step for step in source.flow if step.use == StepType.WEBVIEW), None)
             interaction_data = {
-                "force_foreground": True,
                 "manual_only": True,
             }
             if webview_step:
@@ -1053,6 +1085,25 @@ class NetworkTimeoutError(Exception):
         self.source_id = source_id
         self.step_id = step_id
         self.message = message
+        self.code = code
+        super().__init__(message)
+
+
+class RetryRequiredRuntimeError(Exception):
+    """Custom exception: uncertain/transient runtime failure eligible for retry."""
+
+    def __init__(
+        self,
+        source_id: str,
+        step_id: str | None,
+        message: str,
+        status_code: int | None = None,
+        code: str = "runtime.retry_required",
+    ):
+        self.source_id = source_id
+        self.step_id = step_id
+        self.message = message
+        self.status_code = status_code
         self.code = code
         super().__init__(message)
 

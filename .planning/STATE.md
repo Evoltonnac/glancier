@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Security Audit Remediation
 status: executing
-last_updated: "2026-03-19T14:17:15.886Z"
-last_activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeout controls with full regression/typecheck gates passing
+last_updated: "2026-03-20T05:05:23.377Z"
+last_activity: 2026-03-20 — Completed 04-01 backend webview failure policy and bounded retry scheduler plan with passing backend gates
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 8
+  completed_plans: 6
 ---
 
 # Project State
@@ -18,13 +18,13 @@ progress:
 See: .planning/PROJECT.md (Updated for v1.1)
 
 **Core value:** In a config-first workflow, users can still finish auth -> fetch -> parse -> render without backend hardcoding.
-**Current focus:** Phase 3 completion recorded; milestone is ready for closeout verification and archival workflow.
+**Current focus:** Phase 4 execution in progress; 04-01 completed and 04-02/04-03 pending.
 
 ## Current Position
-Phase: 3
-Plan: 05 completed (`03-05-PLAN.md`)
-Status: Phase 3 complete; 03-01 through 03-05 completed
-Last activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeout controls with passing targeted regressions, impacted, backend, frontend, and typecheck gates
+Phase: 4
+Plan: 01 completed (`04-01-PLAN.md`)
+Status: Phase 4 in progress; 04-01 completed and 04-02 through 04-03 pending
+Last activity: 2026-03-20 — Completed 04-01 backend webview failure policy and bounded retry scheduler plan with passing backend gates
 
 ## Session Continuity
 - v1.0 has shipped and Phase 1/2 follow-up work is completed and retained in historical context.
@@ -33,6 +33,7 @@ Last activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeou
 - 2026-03-19T12:18:25Z: Added `03-05-PLAN.md` to phase roadmap for opt-in lightweight sandbox (Beta) plus default script timeout controls.
 - 2026-03-19T12:54:33Z: Completed Plan 03-04 with atomic task commits, release-gate checklist finalization, and passing auth/fetch/refresh regression gates.
 - 2026-03-19T14:15:55Z: Completed Plan 03-05 with atomic task commits, script timeout+sandbox controls, and passing regression/typecheck/backend/frontend gates.
+- 2026-03-20T05:04:11Z: Completed Plan 04-01 with deterministic webview manual-vs-retry classification, bounded scheduler retries, and passing targeted/backend regression gates.
 
 ## Accumulated Context
 
@@ -49,6 +50,7 @@ Last activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeou
 - 2026-03-19: Completed Plan 03-03 with centralized log redaction, authenticated internal scraper endpoints, and logical integration file response hardening.
 - 2026-03-19: Completed Plan 03-04 with OAuth callback hardening, documented security release gate evidence, and passing regression gates.
 - 2026-03-19: Completed Plan 03-05 with backend-owned script sandbox/timeout settings, Beta advanced UI controls, deterministic runtime error codes, and concurrent regression coverage.
+- 2026-03-20: Completed Plan 04-01 with explicit manual-vs-retry webview failure contracts and bounded scheduler retry policy.
 
 ### Decisions
 - 2026-03-19: OAuth code exchange now requires single-use server state bound to `source_id` and `redirect_uri`.
@@ -65,6 +67,9 @@ Last activity: 2026-03-19 — Completed 03-05 optional script sandbox and timeou
 - [Phase 03-remediate-critical-security-audit-findings-in-core-modules]: Keep script sandbox disabled by default and mark UI control as Beta to preserve existing integration behavior.
 - [Phase 03-remediate-critical-security-audit-findings-in-core-modules]: Bind script runtime controls to /api/settings so backend remains owner of persisted security preferences.
 - [Phase 03-remediate-critical-security-audit-findings-in-core-modules]: Use deterministic runtime error codes script_timeout_exceeded/script_sandbox_blocked for stable regression handling.
+- [Phase 04]: Manual-required WebView interactions now omit implicit force_foreground metadata while preserving manual_only semantics.
+- [Phase 04]: Uncertain WebView failures are normalized to runtime.retry_required for deterministic scheduler retry eligibility.
+- [Phase 04]: Refresh scheduler retries only runtime.network_timeout/runtime.retry_required with 60/180/600 backoff and 3-attempt cap.
 
 ### Pending Todos
 
