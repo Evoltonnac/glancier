@@ -5,7 +5,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from core.models import StoredSource, StoredView
 from core.storage.contract import StorageContract
@@ -16,7 +16,8 @@ from core.storage.errors import (
     StorageWriteError,
     map_sqlite_error,
 )
-from core.storage.sqlite_connection import execute_write_transaction
+from core.storage.sqlite_resource_repo import SqliteResourceRepository
+from core.storage.sqlite_runtime_repo import SqliteRuntimeRepository
 
 _DEPRECATED_SUFFIX = ".deprecated.v1.json"
 _CHUNK_ORDER = ("data.json", "sources.json", "views.json")
@@ -78,26 +79,25 @@ def _normalize_entries(payload: Any, *, chunk_name: str) -> list[dict[str, Any]]
     return normalized
 
 
-def _resolve_sqlite_connection(storage: StorageContract) -> sqlite3.Connection:
-    runtime_conn = getattr(storage.runtime, "_connection", None)
-    resource_conn = getattr(storage.resources, "_connection", None)
+def _resolve_sqlite_context(
+    storage: StorageContract,
+) -> tuple[SqliteRuntimeRepository, SqliteResourceRepository, sqlite3.Connection]:
+    runtime_repo = storage.runtime
+    resource_repo = storage.resources
+    if not isinstance(runtime_repo, SqliteRuntimeRepository):
+        raise StorageSchemaMismatchError("startup migration requires sqlite runtime repository")
+    if not isinstance(resource_repo, SqliteResourceRepository):
+        raise StorageSchemaMismatchError("startup migration requires sqlite resource repository")
+
+    runtime_conn = getattr(runtime_repo, "_connection", None)
+    resource_conn = getattr(resource_repo, "_connection", None)
     if not isinstance(runtime_conn, sqlite3.Connection):
         raise StorageSchemaMismatchError("startup migration requires sqlite runtime repository")
     if not isinstance(resource_conn, sqlite3.Connection):
         raise StorageSchemaMismatchError("startup migration requires sqlite resource repository")
     if runtime_conn is not resource_conn:
         raise StorageSchemaMismatchError("startup migration requires shared sqlite connection")
-    return runtime_conn
-
-
-def _to_source_ids(records: Iterable[dict[str, Any]], *, chunk_name: str) -> list[str]:
-    ids: list[str] = []
-    for record in records:
-        raw_id = record.get("source_id")
-        if not isinstance(raw_id, str) or not raw_id.strip():
-            raise StorageWriteError(f"startup migration missing source_id in {chunk_name}")
-        ids.append(raw_id.strip())
-    return sorted(set(ids))
+    return runtime_repo, resource_repo, runtime_conn
 
 
 def _validate_runtime_rows(connection: sqlite3.Connection, source_ids: list[str]) -> None:
@@ -148,62 +148,46 @@ def _validate_view_rows(connection: sqlite3.Connection, view_ids: list[str]) -> 
         raise StorageWriteError("startup migration validation failed for views.json chunk")
 
 
-def _migrate_data_chunk(path: Path, connection: sqlite3.Connection) -> None:
+def _migrate_data_chunk(
+    path: Path,
+    connection: sqlite3.Connection,
+    runtime_repo: SqliteRuntimeRepository,
+) -> None:
     entries = _normalize_entries(_load_json_payload(path), chunk_name=path.name)
-    source_ids = _to_source_ids(entries, chunk_name=path.name)
+    normalized_records: list[dict[str, Any]] = []
+    for entry in entries:
+        source_id_raw = entry.get("source_id")
+        if not isinstance(source_id_raw, str) or not source_id_raw.strip():
+            raise StorageWriteError(f"startup migration missing source_id in {path.name}")
+        payload = dict(entry)
+        payload["source_id"] = source_id_raw.strip()
+        payload.setdefault("data", None)
 
-    def _apply() -> None:
-        for entry in entries:
-            source_id = entry["source_id"].strip()
-            payload = dict(entry)
-            payload.setdefault("data", None)
+        now = time.time()
+        updated_at_raw = payload.get("updated_at")
+        updated_at = float(updated_at_raw) if isinstance(updated_at_raw, (int, float)) else now
+        payload["updated_at"] = updated_at
+        last_success_raw = payload.get("last_success_at")
+        last_success_at = (
+            float(last_success_raw)
+            if isinstance(last_success_raw, (int, float))
+            else (updated_at if payload.get("data") is not None else None)
+        )
+        if last_success_at is None:
+            payload.pop("last_success_at", None)
+        else:
+            payload["last_success_at"] = last_success_at
+        normalized_records.append(payload)
 
-            now = time.time()
-            updated_at_raw = payload.get("updated_at")
-            updated_at = (
-                float(updated_at_raw)
-                if isinstance(updated_at_raw, (int, float))
-                else now
-            )
-            payload["updated_at"] = updated_at
-            last_success_raw = payload.get("last_success_at")
-            last_success_at = (
-                float(last_success_raw)
-                if isinstance(last_success_raw, (int, float))
-                else (updated_at if payload.get("data") is not None else None)
-            )
-            if last_success_at is None:
-                payload.pop("last_success_at", None)
-            else:
-                payload["last_success_at"] = last_success_at
-
-            connection.execute(
-                """
-                INSERT INTO runtime_latest(source_id, payload_json, updated_at, last_success_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(source_id) DO UPDATE SET
-                    payload_json = excluded.payload_json,
-                    updated_at = excluded.updated_at,
-                    last_success_at = excluded.last_success_at
-                """,
-                (
-                    source_id,
-                    json.dumps(payload, ensure_ascii=False),
-                    updated_at,
-                    last_success_at,
-                ),
-            )
-
-        _validate_runtime_rows(connection, source_ids)
-
-    execute_write_transaction(
-        connection,
-        operation="migration.data_chunk",
-        action=_apply,
-    )
+    source_ids = runtime_repo.upsert_migration_latest(normalized_records)
+    _validate_runtime_rows(connection, source_ids)
 
 
-def _migrate_sources_chunk(path: Path, connection: sqlite3.Connection) -> None:
+def _migrate_sources_chunk(
+    path: Path,
+    connection: sqlite3.Connection,
+    resource_repo: SqliteResourceRepository,
+) -> None:
     entries = _normalize_entries(_load_json_payload(path), chunk_name=path.name)
     sources: list[StoredSource] = []
     for entry in entries:
@@ -211,35 +195,15 @@ def _migrate_sources_chunk(path: Path, connection: sqlite3.Connection) -> None:
             sources.append(StoredSource.model_validate(entry))
         except Exception as error:
             raise StorageWriteError(f"startup migration invalid sources.json record: {error}") from error
-    source_ids = sorted({source.id for source in sources})
-
-    def _apply() -> None:
-        now = time.time()
-        for source in sources:
-            connection.execute(
-                """
-                INSERT INTO stored_sources(source_id, payload_json, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(source_id) DO UPDATE SET
-                    payload_json = excluded.payload_json,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    source.id,
-                    json.dumps(source.model_dump(), ensure_ascii=False),
-                    now,
-                ),
-            )
-        _validate_source_rows(connection, source_ids)
-
-    execute_write_transaction(
-        connection,
-        operation="migration.sources_chunk",
-        action=_apply,
-    )
+    source_ids = resource_repo.upsert_migration_sources(sources)
+    _validate_source_rows(connection, source_ids)
 
 
-def _migrate_views_chunk(path: Path, connection: sqlite3.Connection) -> None:
+def _migrate_views_chunk(
+    path: Path,
+    connection: sqlite3.Connection,
+    resource_repo: SqliteResourceRepository,
+) -> None:
     entries = _normalize_entries(_load_json_payload(path), chunk_name=path.name)
     views: list[StoredView] = []
     for entry in entries:
@@ -247,32 +211,8 @@ def _migrate_views_chunk(path: Path, connection: sqlite3.Connection) -> None:
             views.append(StoredView.model_validate(entry))
         except Exception as error:
             raise StorageWriteError(f"startup migration invalid views.json record: {error}") from error
-    view_ids = sorted({view.id for view in views})
-
-    def _apply() -> None:
-        now = time.time()
-        for view in views:
-            connection.execute(
-                """
-                INSERT INTO stored_views(view_id, payload_json, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(view_id) DO UPDATE SET
-                    payload_json = excluded.payload_json,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    view.id,
-                    json.dumps(view.model_dump(), ensure_ascii=False),
-                    now,
-                ),
-            )
-        _validate_view_rows(connection, view_ids)
-
-    execute_write_transaction(
-        connection,
-        operation="migration.views_chunk",
-        action=_apply,
-    )
+    view_ids = resource_repo.upsert_migration_views(views)
+    _validate_view_rows(connection, view_ids)
 
 
 def _rename_to_deprecated(path: Path) -> None:
@@ -285,23 +225,28 @@ def _rename_to_deprecated(path: Path) -> None:
         ) from error
 
 
-def _migrate_chunk(path: Path, connection: sqlite3.Connection) -> None:
-    handler_map = {
-        "data.json": _migrate_data_chunk,
-        "sources.json": _migrate_sources_chunk,
-        "views.json": _migrate_views_chunk,
-    }
-    handler = handler_map.get(path.name)
-    if handler is None:
+def _migrate_chunk(
+    path: Path,
+    *,
+    connection: sqlite3.Connection,
+    runtime_repo: SqliteRuntimeRepository,
+    resource_repo: SqliteResourceRepository,
+) -> None:
+    if path.name == "data.json":
+        _migrate_data_chunk(path, connection, runtime_repo)
+    elif path.name == "sources.json":
+        _migrate_sources_chunk(path, connection, resource_repo)
+    elif path.name == "views.json":
+        _migrate_views_chunk(path, connection, resource_repo)
+    else:
         raise StorageSchemaMismatchError(f"unsupported startup migration chunk: {path.name}")
-    handler(path, connection)
     _rename_to_deprecated(path)
 
 
 def run_startup_migration(storage: StorageContract, *, data_dir: str | Path | None = None) -> None:
     resolved_dir = _resolve_data_dir(data_dir)
     resolved_dir.mkdir(parents=True, exist_ok=True)
-    connection = _resolve_sqlite_connection(storage)
+    runtime_repo, resource_repo, connection = _resolve_sqlite_context(storage)
 
     for chunk_name in _CHUNK_ORDER:
         chunk_path = resolved_dir / chunk_name
@@ -310,4 +255,9 @@ def run_startup_migration(storage: StorageContract, *, data_dir: str | Path | No
             continue
         if not chunk_path.exists():
             continue
-        _migrate_chunk(chunk_path, connection)
+        _migrate_chunk(
+            chunk_path,
+            connection=connection,
+            runtime_repo=runtime_repo,
+            resource_repo=resource_repo,
+        )

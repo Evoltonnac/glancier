@@ -58,6 +58,19 @@ For STOR-03 marker lifecycle, also capture:
 | Startup migration marker files are retained (renamed, not deleted) | STOR-03 | ⬜ pending | Workspace `data/` directory listing before/after startup |
 | Storage diagnostic payload includes `error_code` and stable summary text for operators | STOR-04 | ⬜ pending | API response snippets from failing storage route tests |
 
+## Gap Closure: Migration Key-Link
+
+The following checks are required evidence for closing the migration abstraction gap from verification.
+
+| Command | Expected Outcome | Status |
+|---------|------------------|--------|
+| `python -m pytest tests/core/test_storage_contract_sqlite.py tests/core/test_storage_startup_migration.py -q` | Exits `0`; migration/repository boundary tests pass together. | ⬜ pending |
+| `rg -n "upsert_migration_latest|upsert_migration_sources|upsert_migration_views" core/storage/migration.py` | Returns matches confirming repository migration APIs are called by migrator writes. | ⬜ pending |
+| `rg -n "INSERT INTO runtime_latest|INSERT INTO stored_sources|INSERT INTO stored_views|UPDATE stored_views SET payload_json" core/storage/migration.py` | Returns no matches, proving no direct runtime/resource mutation SQL in migrator. | ⬜ pending |
+
+PASS criterion:
+- This section must be fully PASS (`✅`) before Phase 5 can be marked `verified`.
+
 ## Release Decision
 
 Decision rules:

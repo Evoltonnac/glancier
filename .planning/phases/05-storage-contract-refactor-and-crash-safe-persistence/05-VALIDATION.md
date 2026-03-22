@@ -71,6 +71,21 @@ All other phase behaviors have automated verification.
 
 ---
 
+## Gap Closure: Migration Key-Link
+
+This section is mandatory for closing the Phase 5 key-link gap (`migration.py -> sqlite_*_repo.py`).
+
+| Command | Expected Outcome |
+|---------|------------------|
+| `python -m pytest tests/core/test_storage_contract_sqlite.py tests/core/test_storage_startup_migration.py -q` | Exits `0`; migration/repository boundary regression tests pass. |
+| `rg -n "upsert_migration_latest|upsert_migration_sources|upsert_migration_views" core/storage/migration.py` | Returns matches showing migration chunk writes call repository migration APIs. |
+| `rg -n "INSERT INTO runtime_latest|INSERT INTO stored_sources|INSERT INTO stored_views|UPDATE stored_views SET payload_json" core/storage/migration.py` | Returns no matches; migrator embeds no direct runtime/resource mutation SQL. |
+
+PASS criterion:
+- All three commands above must satisfy their expected outcomes before Phase 5 can be marked `verified`.
+
+---
+
 ## Validation Sign-Off
 
 - [x] All tasks have `<automated>` verify or Wave 0 dependencies

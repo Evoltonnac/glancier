@@ -4,14 +4,14 @@ milestone: v1.1
 milestone_name: Security and Stability Hardening
 current_plan: 3
 status: verifying
-stopped_at: Completed 05-storage-contract-refactor-and-crash-safe-persistence-03-PLAN.md
-last_updated: "2026-03-20T14:12:13.937Z"
+stopped_at: Completed 05-storage-contract-refactor-and-crash-safe-persistence-04-PLAN.md
+last_updated: "2026-03-20T15:20:14.750Z"
 last_activity: 2026-03-20
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 14
-  completed_plans: 12
+  total_plans: 15
+  completed_plans: 13
   percent: 86
 ---
 
@@ -54,6 +54,7 @@ Progress: [█████████░] 86%
 | Phase 05-storage-contract-refactor-and-crash-safe-persistence P01 | 14m | 3 tasks | 12 files |
 | Phase 05-storage-contract-refactor-and-crash-safe-persistence P02 | 11m | 3 tasks | 11 files |
 | Phase 05-storage-contract-refactor-and-crash-safe-persistence P03 | 12m | 3 tasks | 10 files |
+| Phase 05-storage-contract-refactor-and-crash-safe-persistence P04 | 7m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Progress: [█████████░] 86%
 - [Phase 05-storage-contract-refactor-and-crash-safe-persistence]: Startup migration now runs during create_app before API/runtime initialization so legacy JSON chunks are imported before first request handling.
 - [Phase 05-storage-contract-refactor-and-crash-safe-persistence]: Storage failures are normalized through a single storage_error_to_api_response helper to keep storage.* error_code/status behavior deterministic.
 - [Phase 05-storage-contract-refactor-and-crash-safe-persistence]: Phase 5 validation and release gate docs are now requirement-indexed to STOR-01..STOR-04 with repeatable evidence capture commands.
+- [Phase 05-storage-contract-refactor-and-crash-safe-persistence]: Startup migration chunk writes now call repository migration upsert APIs instead of direct SQL mutation in migration.py.
+- [Phase 05-storage-contract-refactor-and-crash-safe-persistence]: Phase 5 cannot be marked verified until migration key-link pytest/grep checks pass.
 
 ### Pending Todos
 - 13 pending todo items remain in `.planning/todos/pending/` (use `$gsd-check-todos` to inspect/select).
@@ -80,6 +83,6 @@ Progress: [█████████░] 86%
 - None.
 
 ## Session Continuity
-Last session: 2026-03-20T14:10:22.521Z
-Stopped at: Completed 05-storage-contract-refactor-and-crash-safe-persistence-03-PLAN.md
+Last session: 2026-03-20T15:19:16.211Z
+Stopped at: Completed 05-storage-contract-refactor-and-crash-safe-persistence-04-PLAN.md
 Resume file: None

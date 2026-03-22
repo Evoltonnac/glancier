@@ -79,6 +79,34 @@ class SqliteResourceRepository:
             )
         return source
 
+    def upsert_migration_sources(self, sources: list[StoredSource]) -> list[str]:
+        if not sources:
+            return []
+
+        with self._lock:
+            migrated_source_ids: list[str] = []
+            seen: set[str] = set()
+
+            def _upsert_sources() -> list[str]:
+                now = time.time()
+                for source in sources:
+                    self._connection.execute(
+                        """
+                        INSERT INTO stored_sources(source_id, payload_json, updated_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(source_id) DO UPDATE SET
+                            payload_json = excluded.payload_json,
+                            updated_at = excluded.updated_at
+                        """,
+                        (source.id, json.dumps(source.model_dump(), ensure_ascii=False), now),
+                    )
+                    if source.id not in seen:
+                        seen.add(source.id)
+                        migrated_source_ids.append(source.id)
+                return migrated_source_ids
+
+            return self._write("resource.upsert_migration_sources", _upsert_sources)
+
     def delete_source(self, source_id: str) -> bool:
         with self._lock:
             cursor = self._write(
@@ -153,6 +181,34 @@ class SqliteResourceRepository:
                 ),
             )
         return view
+
+    def upsert_migration_views(self, views: list[StoredView]) -> list[str]:
+        if not views:
+            return []
+
+        with self._lock:
+            migrated_view_ids: list[str] = []
+            seen: set[str] = set()
+
+            def _upsert_views() -> list[str]:
+                now = time.time()
+                for view in views:
+                    self._connection.execute(
+                        """
+                        INSERT INTO stored_views(view_id, payload_json, updated_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(view_id) DO UPDATE SET
+                            payload_json = excluded.payload_json,
+                            updated_at = excluded.updated_at
+                        """,
+                        (view.id, json.dumps(view.model_dump(), ensure_ascii=False), now),
+                    )
+                    if view.id not in seen:
+                        seen.add(view.id)
+                        migrated_view_ids.append(view.id)
+                return migrated_view_ids
+
+            return self._write("resource.upsert_migration_views", _upsert_views)
 
     def delete_view(self, view_id: str) -> bool:
         with self._lock:

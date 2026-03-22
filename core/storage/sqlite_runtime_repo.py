@@ -82,6 +82,50 @@ class SqliteRuntimeRepository:
             ),
         )
 
+    def upsert_migration_latest(self, records: list[dict[str, Any]]) -> list[str]:
+        if not records:
+            return []
+
+        with self._lock:
+            migrated_source_ids: list[str] = []
+            seen: set[str] = set()
+
+            def _upsert_batch() -> list[str]:
+                for record in records:
+                    source_id = str(record.get("source_id", "")).strip()
+                    if not source_id:
+                        continue
+                    payload_json = json.dumps(record, ensure_ascii=False)
+                    raw_updated_at = record.get("updated_at")
+                    updated_at = (
+                        float(raw_updated_at)
+                        if isinstance(raw_updated_at, (int, float))
+                        else time.time()
+                    )
+                    raw_last_success_at = record.get("last_success_at")
+                    last_success_at = (
+                        float(raw_last_success_at)
+                        if isinstance(raw_last_success_at, (int, float))
+                        else None
+                    )
+                    self._connection.execute(
+                        """
+                        INSERT INTO runtime_latest(source_id, payload_json, updated_at, last_success_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(source_id) DO UPDATE SET
+                            payload_json = excluded.payload_json,
+                            updated_at = excluded.updated_at,
+                            last_success_at = excluded.last_success_at
+                        """,
+                        (source_id, payload_json, updated_at, last_success_at),
+                    )
+                    if source_id not in seen:
+                        seen.add(source_id)
+                        migrated_source_ids.append(source_id)
+                return migrated_source_ids
+
+            return self._write("runtime.upsert_migration_latest", _upsert_batch)
+
     def upsert(self, source_id: str, data: dict[str, Any]) -> None:
         now = time.time()
         record = {

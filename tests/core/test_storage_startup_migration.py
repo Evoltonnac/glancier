@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from core.models import StoredSource, StoredView, ViewItem
 from core.storage.contract import StorageContract
 from core.storage.errors import StorageContractError
+import core.storage.migration as migration_module
 from core.storage.migration import run_startup_migration
 from core.storage.sqlite_connection import create_sqlite_connection
 from core.storage.sqlite_resource_repo import SqliteResourceRepository
@@ -161,3 +164,81 @@ def test_run_startup_migration_is_idempotent_and_skips_deprecated_chunks(tmp_pat
         assert (data_dir / "views.deprecated.v1.json").exists()
     finally:
         connection.close()
+
+
+def test_run_startup_migration_routes_writes_through_repository_migration_apis(tmp_path: Path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        data_dir / "data.json",
+        [{"source_id": "source-alpha", "data": {"value": 1}}],
+    )
+    _write_json(
+        data_dir / "sources.json",
+        [
+            {
+                "id": "source-alpha",
+                "integration_id": "integration-alpha",
+                "name": "Alpha Source",
+                "config": {},
+                "vars": {},
+            }
+        ],
+    )
+    _write_json(
+        data_dir / "views.json",
+        [{"id": "view-alpha", "name": "Alpha View", "layout_columns": 12, "items": []}],
+    )
+
+    class RuntimeMigrationSpy(SqliteRuntimeRepository):
+        def __init__(self, connection, events: list[str]):  # type: ignore[no-untyped-def]
+            super().__init__(connection)
+            self._events = events
+            self.migration_batches: list[list[dict[str, Any]]] = []
+
+        def upsert_migration_latest(self, records: list[dict[str, Any]]) -> list[str]:
+            self._events.append("data")
+            self.migration_batches.append([dict(record) for record in records])
+            return super().upsert_migration_latest(records)
+
+    class ResourceMigrationSpy(SqliteResourceRepository):
+        def __init__(self, connection, events: list[str]):  # type: ignore[no-untyped-def]
+            super().__init__(connection)
+            self._events = events
+            self.source_batches: list[list[StoredSource]] = []
+            self.view_batches: list[list[StoredView]] = []
+
+        def upsert_migration_sources(self, sources: list[StoredSource]) -> list[str]:
+            self._events.append("sources")
+            self.source_batches.append(list(sources))
+            return super().upsert_migration_sources(sources)
+
+        def upsert_migration_views(self, views: list[StoredView]) -> list[str]:
+            self._events.append("views")
+            self.view_batches.append(list(views))
+            return super().upsert_migration_views(views)
+
+    connection = create_sqlite_connection(tmp_path / "storage.db")
+    events: list[str] = []
+    runtime = RuntimeMigrationSpy(connection, events)
+    resources = ResourceMigrationSpy(connection, events)
+    storage = StorageContract(runtime=runtime, resources=resources, settings=object())
+
+    try:
+        run_startup_migration(storage, data_dir=data_dir)
+
+        assert events == ["data", "sources", "views"]
+        assert len(runtime.migration_batches) == 1
+        assert len(resources.source_batches) == 1
+        assert len(resources.view_batches) == 1
+    finally:
+        connection.close()
+
+
+def test_migration_module_does_not_embed_runtime_or_resource_mutation_sql():
+    source = inspect.getsource(migration_module)
+    assert "INSERT INTO runtime_latest" not in source
+    assert "INSERT INTO stored_sources" not in source
+    assert "INSERT INTO stored_views" not in source
+    assert "UPDATE stored_views SET payload_json" not in source

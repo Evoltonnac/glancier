@@ -236,6 +236,173 @@ def test_settings_adapter_writes_to_settings_json(tmp_path):
     assert payload["language"] == "zh"
 
 
+def test_runtime_repo_migration_upsert_preserves_timestamps_and_returns_source_ids(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    repo = SqliteRuntimeRepository(conn)
+
+    records = [
+        {
+            "source_id": "source-alpha",
+            "data": {"value": 1},
+            "updated_at": 101.0,
+            "last_success_at": 100.0,
+        },
+        {
+            "source_id": "source-beta",
+            "status": "error",
+            "error": "failure",
+            "updated_at": 88.0,
+            "last_success_at": None,
+        },
+        {
+            "source_id": "source-alpha",
+            "data": {"value": 2},
+            "updated_at": 111.0,
+            "last_success_at": 109.0,
+        },
+    ]
+
+    try:
+        migrated_source_ids = repo.upsert_migration_latest(records)
+        assert migrated_source_ids == ["source-alpha", "source-beta"]
+
+        latest_alpha = repo.get_latest("source-alpha")
+        latest_beta = repo.get_latest("source-beta")
+        assert latest_alpha is not None
+        assert latest_beta is not None
+        assert latest_alpha["data"] == {"value": 2}
+        assert latest_alpha["updated_at"] == 111.0
+        assert latest_alpha["last_success_at"] == 109.0
+        assert latest_beta["updated_at"] == 88.0
+        assert latest_beta["last_success_at"] is None
+    finally:
+        conn.close()
+
+
+def test_resource_repo_migration_upsert_batches_sources_and_views(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    repo = SqliteResourceRepository(conn)
+
+    sources = [
+        StoredSource(
+            id="source-alpha",
+            integration_id="integration-alpha",
+            name="Alpha Source",
+            config={"token": "abc"},
+            vars={"region": "us"},
+        ),
+        StoredSource(
+            id="source-beta",
+            integration_id="integration-beta",
+            name="Beta Source",
+            config={"token": "xyz"},
+            vars={"region": "eu"},
+        ),
+        StoredSource(
+            id="source-alpha",
+            integration_id="integration-alpha",
+            name="Alpha Source Updated",
+            config={"token": "def"},
+            vars={"region": "us-east"},
+        ),
+    ]
+    views = [
+        StoredView(
+            id="view-alpha",
+            name="Alpha View",
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-beta",
+            name="Beta View",
+            layout_columns=24,
+            items=[],
+        ),
+        StoredView(
+            id="view-alpha",
+            name="Alpha View Updated",
+            layout_columns=12,
+            items=[],
+        ),
+    ]
+
+    try:
+        migrated_source_ids = repo.upsert_migration_sources(sources)
+        migrated_view_ids = repo.upsert_migration_views(views)
+
+        assert migrated_source_ids == ["source-alpha", "source-beta"]
+        assert migrated_view_ids == ["view-alpha", "view-beta"]
+        assert [source.id for source in repo.load_sources()] == ["source-alpha", "source-beta"]
+        assert [view.id for view in repo.load_views()] == ["view-alpha", "view-beta"]
+        assert repo.get_source("source-alpha") is not None
+        assert repo.get_source("source-alpha").name == "Alpha Source Updated"  # type: ignore[union-attr]
+        assert repo.get_view("view-alpha") is not None
+        assert repo.get_view("view-alpha").name == "Alpha View Updated"  # type: ignore[union-attr]
+    finally:
+        conn.close()
+
+
+def test_migration_upsert_apis_run_in_single_begin_immediate_transaction(tmp_path):
+    db_path = tmp_path / "storage.db"
+    connection = create_sqlite_connection(db_path)
+    spy = SqlConnectionSpy(connection)
+    runtime_repo = SqliteRuntimeRepository(spy)  # type: ignore[arg-type]
+    resource_repo = SqliteResourceRepository(spy)  # type: ignore[arg-type]
+
+    runtime_records = [
+        {"source_id": "source-alpha", "data": {"value": 1}, "updated_at": 10.0, "last_success_at": 9.0},
+        {"source_id": "source-beta", "data": {"value": 2}, "updated_at": 20.0, "last_success_at": 19.0},
+    ]
+    source_batch = [
+        StoredSource(
+            id="source-alpha",
+            integration_id="integration-alpha",
+            name="Alpha Source",
+            config={},
+            vars={},
+        ),
+        StoredSource(
+            id="source-beta",
+            integration_id="integration-beta",
+            name="Beta Source",
+            config={},
+            vars={},
+        ),
+    ]
+    view_batch = [
+        StoredView(
+            id="view-alpha",
+            name="Alpha View",
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-beta",
+            name="Beta View",
+            layout_columns=24,
+            items=[],
+        ),
+    ]
+
+    try:
+        runtime_repo.upsert_migration_latest(runtime_records)
+        begin_after_runtime = len([sql for sql in spy.sql_statements if "BEGIN IMMEDIATE" in sql])
+        assert begin_after_runtime == 1
+
+        resource_repo.upsert_migration_sources(source_batch)
+        begin_after_sources = len([sql for sql in spy.sql_statements if "BEGIN IMMEDIATE" in sql])
+        assert begin_after_sources == 2
+
+        resource_repo.upsert_migration_views(view_batch)
+        begin_after_views = len([sql for sql in spy.sql_statements if "BEGIN IMMEDIATE" in sql])
+        assert begin_after_views == 3
+    finally:
+        connection.close()
+
+
 def test_runtime_repo_mutations_run_in_begin_immediate_transaction(tmp_path):
     db_path = tmp_path / "storage.db"
     connection = create_sqlite_connection(db_path)

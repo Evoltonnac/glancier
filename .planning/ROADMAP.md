@@ -69,12 +69,13 @@ Plans:
   2. User can recover from interrupted writes without corrupted Integration Data and without losing the last known-good state.
   3. User can upgrade and automatically migrate existing `data/*.json` files into the refactored format without manual repair.
   4. User can diagnose storage failures via deterministic `error_code` responses and repeatable verification checks.
-**Plans**: 3 plans (3 completed)
+**Plans**: 4 plans (3 completed, 1 gap-closure planned)
 
 Plans:
 - [x] 05-01-PLAN.md - Unified versioned storage contract foundation (SQLite runtime/resources, JSON settings/secrets boundary). ([[Summary](.planning/phases/05-storage-contract-refactor-and-crash-safe-persistence/05-01-SUMMARY.md)])
 - [x] 05-02-PLAN.md - Transaction-only crash-safe write path plus memory-only scraper task queue semantics. ([[Summary](.planning/phases/05-storage-contract-refactor-and-crash-safe-persistence/05-02-SUMMARY.md)])
 - [x] 05-03-PLAN.md - Startup chunked/idempotent migration, deterministic storage `error_code` diagnostics, and release gate finalization. ([[Summary](.planning/phases/05-storage-contract-refactor-and-crash-safe-persistence/05-03-SUMMARY.md)])
+- [ ] 05-04-PLAN.md - Gap-closure: route startup migration writes through repository upsert APIs and add key-link verification checks.
 
 ## Progress
 
