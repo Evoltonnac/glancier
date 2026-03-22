@@ -274,9 +274,7 @@ export function useScraper() {
             nextSkipped.delete(source.id);
             setSkippedScrapers(nextSkipped);
 
-            const forceForeground =
-                Boolean(options?.foreground) ||
-                Boolean(source.interaction?.data?.force_foreground);
+            const forceForeground = Boolean(options?.foreground);
 
             if (forceForeground) {
                 const data = source.interaction?.data ?? {};
@@ -502,17 +500,16 @@ export function useScraper() {
                             ...source,
                             status: "suspended",
                             message:
-                                "Web scraper blocked by login wall/captcha. Resume in foreground mode.",
+                                "Web scraper blocked by login wall/captcha. Manual action is required before retry.",
                             interaction: {
                                 type: "webview_scrape",
                                 step_id: source.interaction?.step_id || "webview",
                                 message:
-                                    "Web scraper blocked. Resume in foreground mode.",
+                                    "Web scraper blocked. Manual action is required before retry.",
                                 fields: source.interaction?.fields || [],
                                 warning_message: source.interaction?.warning_message,
                                 data: {
                                     ...(source.interaction?.data || {}),
-                                    force_foreground: true,
                                     manual_only: true,
                                     blocked_target_url: targetUrl,
                                 },

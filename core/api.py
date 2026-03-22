@@ -158,6 +158,18 @@ _API_LOG_SENSITIVE_FIELDS = {
     "code",
     "device_code",
 }
+_WEBVIEW_FAIL_MANUAL_REQUIRED_KEYWORDS = (
+    "captcha",
+    "login",
+    "sign in",
+    "signin",
+    "auth required",
+    "authentication required",
+    "verify",
+    "verification",
+    "2fa",
+    "two-factor",
+)
 
 
 def _redact_log_payload(payload: Any) -> Any:
@@ -194,10 +206,16 @@ def _build_webview_interaction_from_task(task: dict[str, Any], message: str) -> 
             "script": task.get("script"),
             "intercept_api": task.get("intercept_api"),
             "secret_key": task.get("secret_key"),
-            "force_foreground": True,
             "manual_only": True,
         },
     )
+
+
+def _classify_scraper_fail_reason(reason: str) -> str:
+    normalized = reason.lower()
+    if any(keyword in normalized for keyword in _WEBVIEW_FAIL_MANUAL_REQUIRED_KEYWORDS):
+        return "manual_required"
+    return "retry_required"
 
 
 def _apply_runtime_log_level(debug_enabled: bool) -> None:
@@ -930,16 +948,27 @@ async def internal_fail_scraper_task(
     if not changed:
         return {"accepted": True, "idempotent": True, "task": _serialize_scraper_task(updated)}
 
-    interaction = _build_webview_interaction_from_task(
-        updated,
-        message=f"Web scraper failed: {payload.error}. Resume in foreground mode.",
-    )
-    _executor._update_state(
-        payload.source_id,
-        SourceStatus.SUSPENDED,
-        payload.error,
-        interaction=interaction,
-    )
+    classification = _classify_scraper_fail_reason(payload.error)
+    if classification == "manual_required":
+        interaction = _build_webview_interaction_from_task(
+            updated,
+            message=f"Web scraper failed: {payload.error}. Manual action is required before retry.",
+        )
+        _executor._update_state(
+            payload.source_id,
+            SourceStatus.SUSPENDED,
+            payload.error,
+            interaction=interaction,
+            error_code="auth.manual_webview_required",
+        )
+    else:
+        _executor._update_state(
+            payload.source_id,
+            SourceStatus.ERROR,
+            payload.error,
+            error=payload.error,
+            error_code="runtime.retry_required",
+        )
     return {
         "accepted": True,
         "idempotent": False,

@@ -108,6 +108,70 @@ describe("useScraper observer mode", () => {
         expect(useStore.getState().skippedScrapers.has(source.id)).toBe(true);
     });
 
+    it("default queue action retries through backend refresh path", async () => {
+        const source = buildWebviewSource("default-refresh", "Default Refresh");
+        useStore.setState({
+            sources: [source],
+            activeScraper: null,
+            skippedScrapers: new Set(),
+        });
+
+        const { result } = renderHook(() => useScraper());
+        let started = false;
+        act(() => {
+            started = result.current.handlePushToQueue(source);
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(started).toBe(true);
+        expect(apiMock.refreshSource).toHaveBeenCalledWith(source.id);
+        expect(
+            mockInvoke.mock.calls.some(
+                ([cmd]) =>
+                    cmd === "promote_active_scraper_to_foreground" ||
+                    cmd === "push_scraper_task",
+            ),
+        ).toBe(false);
+    });
+
+    it("legacy force_foreground metadata does not trigger foreground mode automatically", async () => {
+        const source = buildWebviewSource("legacy-force", "Legacy Force");
+        const interaction = source.interaction!;
+        source.interaction = {
+            ...interaction,
+            data: {
+                ...interaction.data,
+                force_foreground: true,
+            },
+        };
+        useStore.setState({
+            sources: [source],
+            activeScraper: null,
+            skippedScrapers: new Set(),
+        });
+
+        const { result } = renderHook(() => useScraper());
+        let started = false;
+        act(() => {
+            started = result.current.handlePushToQueue(source);
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(started).toBe(true);
+        expect(apiMock.refreshSource).toHaveBeenCalledWith(source.id);
+        expect(
+            mockInvoke.mock.calls.some(
+                ([cmd]) =>
+                    cmd === "promote_active_scraper_to_foreground" ||
+                    cmd === "push_scraper_task",
+            ),
+        ).toBe(false);
+    });
+
     it("manual foreground action promotes existing backend task for same source without re-pushing", async () => {
         const source = buildWebviewSource("manual-promote", "Manual Promote");
         useStore.setState({
@@ -145,6 +209,52 @@ describe("useScraper observer mode", () => {
         expect(
             mockInvoke.mock.calls.some(([cmd]) => cmd === "push_scraper_task"),
         ).toBe(false);
+    });
+
+    it("auth-required listener keeps manual_only metadata without force_foreground", async () => {
+        const source = buildWebviewSource("auth-required", "Auth Required");
+        useStore.setState({
+            sources: [source],
+            activeScraper: null,
+            skippedScrapers: new Set(),
+        });
+
+        let authRequiredListener:
+            | ((event: { payload: any }) => void | Promise<void>)
+            | undefined;
+        mockListen.mockImplementation((eventName: string, callback: any) => {
+            if (eventName === "scraper_auth_required") {
+                authRequiredListener = callback;
+            }
+            return Promise.resolve(mockUnlisten);
+        });
+
+        renderHook(() => useScraper());
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(authRequiredListener).toBeDefined();
+
+        act(() => {
+            authRequiredListener?.({
+                payload: {
+                    sourceId: source.id,
+                    taskId: "task-auth-1",
+                    targetUrl: "https://example.com/login",
+                },
+            });
+        });
+
+        const updatedSource = useStore
+            .getState()
+            .sources.find((item) => item.id === source.id);
+        expect(updatedSource?.interaction?.data?.manual_only).toBe(true);
+        expect(updatedSource?.interaction?.data?.blocked_target_url).toBe(
+            "https://example.com/login",
+        );
+        expect(updatedSource?.interaction?.data).not.toHaveProperty(
+            "force_foreground",
+        );
     });
 
     it("show window first tries promotion, then falls back to showing worker window", async () => {

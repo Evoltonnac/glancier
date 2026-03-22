@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Security Audit Remediation
 status: executing
-last_updated: "2026-03-20T05:05:23.377Z"
-last_activity: 2026-03-20 — Completed 04-01 backend webview failure policy and bounded retry scheduler plan with passing backend gates
+last_updated: "2026-03-20T05:20:09.793Z"
+last_activity: 2026-03-20 — Completed 04-02 internal fail classification and explicit foreground-intent control plan with passing backend/frontend gates
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -18,13 +18,13 @@ progress:
 See: .planning/PROJECT.md (Updated for v1.1)
 
 **Core value:** In a config-first workflow, users can still finish auth -> fetch -> parse -> render without backend hardcoding.
-**Current focus:** Phase 4 execution in progress; 04-01 completed and 04-02/04-03 pending.
+**Current focus:** Phase 4 execution in progress; 04-01 and 04-02 completed, 04-03 pending.
 
 ## Current Position
 Phase: 4
-Plan: 01 completed (`04-01-PLAN.md`)
-Status: Phase 4 in progress; 04-01 completed and 04-02 through 04-03 pending
-Last activity: 2026-03-20 — Completed 04-01 backend webview failure policy and bounded retry scheduler plan with passing backend gates
+Plan: 02 completed (`04-02-PLAN.md`)
+Status: Phase 4 in progress; 04-01 and 04-02 completed, 04-03 pending
+Last activity: 2026-03-20 — Completed 04-02 internal fail classification and explicit foreground-intent control plan with passing backend/frontend gates
 
 ## Session Continuity
 - v1.0 has shipped and Phase 1/2 follow-up work is completed and retained in historical context.
@@ -34,6 +34,7 @@ Last activity: 2026-03-20 — Completed 04-01 backend webview failure policy and
 - 2026-03-19T12:54:33Z: Completed Plan 03-04 with atomic task commits, release-gate checklist finalization, and passing auth/fetch/refresh regression gates.
 - 2026-03-19T14:15:55Z: Completed Plan 03-05 with atomic task commits, script timeout+sandbox controls, and passing regression/typecheck/backend/frontend gates.
 - 2026-03-20T05:04:11Z: Completed Plan 04-01 with deterministic webview manual-vs-retry classification, bounded scheduler retries, and passing targeted/backend regression gates.
+- 2026-03-20T05:19:07Z: Completed Plan 04-02 with deterministic internal fail contracts and explicit foreground-intent scraper controls, passing backend/frontend/typecheck gates.
 
 ## Accumulated Context
 
@@ -51,6 +52,7 @@ Last activity: 2026-03-20 — Completed 04-01 backend webview failure policy and
 - 2026-03-19: Completed Plan 03-04 with OAuth callback hardening, documented security release gate evidence, and passing regression gates.
 - 2026-03-19: Completed Plan 03-05 with backend-owned script sandbox/timeout settings, Beta advanced UI controls, deterministic runtime error codes, and concurrent regression coverage.
 - 2026-03-20: Completed Plan 04-01 with explicit manual-vs-retry webview failure contracts and bounded scheduler retry policy.
+- 2026-03-20: Completed Plan 04-02 with deterministic internal fail classification and explicit frontend foreground-intent queue controls.
 
 ### Decisions
 - 2026-03-19: OAuth code exchange now requires single-use server state bound to `source_id` and `redirect_uri`.
@@ -70,6 +72,8 @@ Last activity: 2026-03-20 — Completed 04-01 backend webview failure policy and
 - [Phase 04]: Manual-required WebView interactions now omit implicit force_foreground metadata while preserving manual_only semantics.
 - [Phase 04]: Uncertain WebView failures are normalized to runtime.retry_required for deterministic scheduler retry eligibility.
 - [Phase 04]: Refresh scheduler retries only runtime.network_timeout/runtime.retry_required with 60/180/600 backoff and 3-attempt cap.
+- [Phase 04-improve-web-scraping-stability-remove-focus-stealing-fallback-and-allow-retry-for-uncertain-failures]: Internal scraper fail callbacks now classify fail reasons into manual_required (auth.manual_webview_required) and retry_required (runtime.retry_required) deterministic contracts.
+- [Phase 04-improve-web-scraping-stability-remove-focus-stealing-fallback-and-allow-retry-for-uncertain-failures]: Frontend scraper queue flow ignores legacy force_foreground metadata and only enters foreground mode when options.foreground=true is explicitly requested.
 
 ### Pending Todos
 

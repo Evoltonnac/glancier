@@ -157,7 +157,7 @@ def test_internal_claim_and_complete_is_idempotent(tmp_path):
     executor.fetch_source.assert_called_once()
 
 
-def test_internal_fail_moves_source_to_suspended_with_webview_interaction(tmp_path):
+def test_internal_fail_manual_required_suspends_with_webview_interaction(tmp_path):
     client, store, executor, _secrets = _build_client(tmp_path)
     task = store.upsert_pending_task(
         source_id="source-1",
@@ -189,11 +189,95 @@ def test_internal_fail_moves_source_to_suspended_with_webview_interaction(tmp_pa
     call_args = executor._update_state.call_args
     assert call_args.args[0] == "source-1"
     assert call_args.args[1] == SourceStatus.SUSPENDED
+    assert call_args.kwargs["error_code"] == "auth.manual_webview_required"
     interaction = call_args.kwargs["interaction"]
     assert interaction.type == InteractionType.WEBVIEW_SCRAPE
     assert interaction.data is not None
     assert interaction.data["manual_only"] is True
+    assert "force_foreground" not in interaction.data
     assert interaction.data["task_id"] == task["task_id"]
+
+
+def test_internal_fail_uncertain_marks_retryable_runtime_error(tmp_path):
+    client, store, executor, _secrets = _build_client(tmp_path)
+    task = store.upsert_pending_task(
+        source_id="source-1",
+        step_id="webview-step",
+        url="https://example.com/dashboard",
+        script="",
+        intercept_api="/api",
+        secret_key="session_capture",
+    )
+    claimed = store.claim_next_task(worker_id="daemon-1", lease_seconds=10)
+    assert claimed is not None
+
+    failed = client.post(
+        "/api/internal/scraper/fail",
+        headers=_internal_headers(),
+        json={
+            "worker_id": "daemon-1",
+            "source_id": "source-1",
+            "task_id": task["task_id"],
+            "attempt": claimed["attempt_count"],
+            "error": "runtime page navigation timeout in hidden window",
+        },
+    )
+    assert failed.status_code == 200
+    assert failed.json()["accepted"] is True
+    assert failed.json()["idempotent"] is False
+
+    executor._update_state.assert_called_once()
+    call_args = executor._update_state.call_args
+    assert call_args.args[0] == "source-1"
+    assert call_args.args[1] == SourceStatus.ERROR
+    assert call_args.args[2] == "runtime page navigation timeout in hidden window"
+    assert call_args.kwargs["error_code"] == "runtime.retry_required"
+    assert "interaction" not in call_args.kwargs
+
+
+def test_internal_fail_is_idempotent_for_repeated_attempts(tmp_path):
+    client, store, executor, _secrets = _build_client(tmp_path)
+    task = store.upsert_pending_task(
+        source_id="source-1",
+        step_id="webview-step",
+        url="https://example.com/dashboard",
+        script="",
+        intercept_api="/api",
+        secret_key="session_capture",
+    )
+    claimed = store.claim_next_task(worker_id="daemon-1", lease_seconds=10)
+    assert claimed is not None
+
+    failed = client.post(
+        "/api/internal/scraper/fail",
+        headers=_internal_headers(),
+        json={
+            "worker_id": "daemon-1",
+            "source_id": "source-1",
+            "task_id": task["task_id"],
+            "attempt": claimed["attempt_count"],
+            "error": "runtime driver detached unexpectedly",
+        },
+    )
+    assert failed.status_code == 200
+    assert failed.json()["accepted"] is True
+    assert failed.json()["idempotent"] is False
+
+    failed_again = client.post(
+        "/api/internal/scraper/fail",
+        headers=_internal_headers(),
+        json={
+            "worker_id": "daemon-1",
+            "source_id": "source-1",
+            "task_id": task["task_id"],
+            "attempt": claimed["attempt_count"],
+            "error": "runtime driver detached unexpectedly",
+        },
+    )
+    assert failed_again.status_code == 200
+    assert failed_again.json()["accepted"] is True
+    assert failed_again.json()["idempotent"] is True
+    executor._update_state.assert_called_once()
 
 
 def test_internal_complete_rejects_source_mismatch(tmp_path):
