@@ -1,6 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import type {
+    DownloadEvent,
+    Update as UpdaterUpdate,
+} from "@tauri-apps/plugin-updater";
 import { api, getApiBaseUrl } from "../api/client";
 import type { SystemSettings } from "../api/client";
 import type { SystemSettingsUpdateRequest } from "../api/client";
@@ -9,6 +13,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Separator } from "../components/ui/separator";
+import { Progress } from "../components/ui/progress";
 import {
     Select,
     SelectContent,
@@ -78,6 +83,30 @@ interface RuntimePortInfo {
     web_mode_port: number | null;
 }
 
+type UpdatePhase =
+    | "idle"
+    | "checking"
+    | "downloading"
+    | "installing"
+    | "restarting"
+    | "cancelled";
+
+interface UpdateProgressState {
+    phase: UpdatePhase;
+    latestVersion: string | null;
+    totalBytes: number | null;
+    downloadedBytes: number;
+    speedBytesPerSecond: number;
+}
+
+const INITIAL_UPDATE_PROGRESS: UpdateProgressState = {
+    phase: "idle",
+    latestVersion: null,
+    totalBytes: null,
+    downloadedBytes: 0,
+    speedBytesPerSecond: 0,
+};
+
 function normalizeScraperTimeoutSeconds(value: number | undefined): number {
     if (typeof value !== "number" || !Number.isFinite(value)) {
         return 10;
@@ -140,6 +169,19 @@ function toUpdatePayload(
     return payload;
 }
 
+function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+    }
+    const decimals = value >= 100 || unitIndex === 0 ? 0 : 1;
+    return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
 export default function SettingsPage() {
     const tauriRuntime = isTauri();
     const navigate = useNavigate();
@@ -147,6 +189,10 @@ export default function SettingsPage() {
     const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
     const [saving, setSaving] = useState(false);
     const [checkingUpdates, setCheckingUpdates] = useState(false);
+    const [cancelUpdateRequested, setCancelUpdateRequested] = useState(false);
+    const [updateProgress, setUpdateProgress] = useState<UpdateProgressState>(
+        INITIAL_UPDATE_PROGRESS,
+    );
     const [openingDevtools, setOpeningDevtools] = useState(false);
     const [openingLogFolder, setOpeningLogFolder] = useState(false);
     const [runtimePortInfo, setRuntimePortInfo] =
@@ -154,6 +200,9 @@ export default function SettingsPage() {
     const [appVersion, setAppVersion] = useState(
         import.meta.env.VITE_APP_VERSION,
     );
+    const activeUpdateRef = useRef<UpdaterUpdate | null>(null);
+    const cancelUpdateRequestedRef = useRef(false);
+    const downloadStartedAtRef = useRef<number | null>(null);
     const { theme, setTheme } = useTheme();
     const { t, setLocale } = useI18n();
     const refreshIntervalOptions: Array<{ value: number; label: string }> = [
@@ -324,13 +373,32 @@ export default function SettingsPage() {
     const handleCheckUpdates = async () => {
         if (!tauriRuntime || checkingUpdates) return;
 
+        setCancelUpdateRequested(false);
+        cancelUpdateRequestedRef.current = false;
+        downloadStartedAtRef.current = null;
+        setUpdateProgress({
+            ...INITIAL_UPDATE_PROGRESS,
+            phase: "checking",
+        });
         setCheckingUpdates(true);
         showToast(t("settings.toast.check_update_checking"), "info");
         try {
             const { check } = await import("@tauri-apps/plugin-updater");
             const update = await check();
             if (!update) {
+                setUpdateProgress(INITIAL_UPDATE_PROGRESS);
                 showToast(t("settings.about.up_to_date"), "info");
+                return;
+            }
+            activeUpdateRef.current = update;
+
+            if (cancelUpdateRequestedRef.current) {
+                setUpdateProgress((current) => ({
+                    ...current,
+                    phase: "cancelled",
+                    speedBytesPerSecond: 0,
+                }));
+                showToast(t("settings.toast.check_update_cancelled"), "info");
                 return;
             }
 
@@ -338,17 +406,93 @@ export default function SettingsPage() {
                 update && typeof update.version === "string"
                     ? update.version
                     : "latest";
+            setUpdateProgress((current) => ({
+                ...current,
+                phase: "downloading",
+                latestVersion,
+            }));
             showToast(
                 t("settings.toast.check_update_available", {
                     version: latestVersion,
                 }),
                 "info",
             );
-            await update.downloadAndInstall();
+
+            await update.download((event: DownloadEvent) => {
+                if (cancelUpdateRequestedRef.current) {
+                    return;
+                }
+                if (event.event === "Started") {
+                    downloadStartedAtRef.current = Date.now();
+                    setUpdateProgress((current) => ({
+                        ...current,
+                        totalBytes:
+                            typeof event.data.contentLength === "number"
+                                ? event.data.contentLength
+                                : null,
+                        downloadedBytes: 0,
+                        speedBytesPerSecond: 0,
+                    }));
+                    return;
+                }
+                if (event.event === "Progress") {
+                    const now = Date.now();
+                    setUpdateProgress((current) => {
+                        const downloadedBytes =
+                            current.downloadedBytes + event.data.chunkLength;
+                        const startedAt = downloadStartedAtRef.current;
+                        const elapsedSeconds =
+                            startedAt != null ? (now - startedAt) / 1000 : 0;
+                        const speedBytesPerSecond =
+                            elapsedSeconds > 0
+                                ? downloadedBytes / elapsedSeconds
+                                : current.speedBytesPerSecond;
+                        return {
+                            ...current,
+                            downloadedBytes,
+                            speedBytesPerSecond,
+                        };
+                    });
+                }
+            });
+
+            if (cancelUpdateRequestedRef.current) {
+                setUpdateProgress((current) => ({
+                    ...current,
+                    phase: "cancelled",
+                    speedBytesPerSecond: 0,
+                }));
+                showToast(t("settings.toast.check_update_cancelled"), "info");
+                return;
+            }
+
+            setUpdateProgress((current) => ({
+                ...current,
+                phase: "installing",
+                speedBytesPerSecond: 0,
+            }));
+            await update.install();
+
+            if (cancelUpdateRequestedRef.current) {
+                setUpdateProgress((current) => ({
+                    ...current,
+                    phase: "cancelled",
+                    speedBytesPerSecond: 0,
+                }));
+                showToast(t("settings.toast.check_update_cancelled"), "info");
+                return;
+            }
+
+            setUpdateProgress((current) => ({
+                ...current,
+                phase: "restarting",
+                speedBytesPerSecond: 0,
+            }));
             showToast(t("settings.toast.check_update_restarting"), "info");
             await invoke("relaunch_app");
         } catch (err) {
             console.error("Failed to check updates:", err);
+            setUpdateProgress(INITIAL_UPDATE_PROGRESS);
             showToast(
                 t("settings.toast.check_update_failed", {
                     reason: String(err),
@@ -356,7 +500,32 @@ export default function SettingsPage() {
                 "error",
             );
         } finally {
+            const activeUpdate = activeUpdateRef.current;
+            if (activeUpdate) {
+                void activeUpdate.close().catch((error) => {
+                    console.debug("Failed to release updater resource:", error);
+                });
+            }
+            activeUpdateRef.current = null;
+            cancelUpdateRequestedRef.current = false;
+            downloadStartedAtRef.current = null;
+            setCancelUpdateRequested(false);
             setCheckingUpdates(false);
+        }
+    };
+
+    const handleCancelUpdate = async () => {
+        if (!checkingUpdates || cancelUpdateRequested) return;
+        cancelUpdateRequestedRef.current = true;
+        setCancelUpdateRequested(true);
+        showToast(t("settings.toast.check_update_cancel_requested"), "info");
+        const activeUpdate = activeUpdateRef.current;
+        if (activeUpdate) {
+            try {
+                await activeUpdate.close();
+            } catch (error) {
+                console.debug("Failed to close updater resource:", error);
+            }
         }
     };
 
@@ -404,6 +573,52 @@ export default function SettingsPage() {
         runtimePortInfo?.web_mode_port != null
             ? String(runtimePortInfo.web_mode_port)
             : currentPagePort;
+    const updateProgressPercent =
+        typeof updateProgress.totalBytes === "number" && updateProgress.totalBytes > 0
+            ? Math.min(
+                  100,
+                  Math.floor(
+                      (updateProgress.downloadedBytes / updateProgress.totalBytes) *
+                          100,
+                  ),
+              )
+            : 0;
+    const isUpdateProgressVisible =
+        tauriRuntime &&
+        (updateProgress.phase === "downloading" ||
+            updateProgress.phase === "installing" ||
+            updateProgress.phase === "restarting" ||
+            updateProgress.phase === "cancelled");
+    const canCancelUpdate =
+        checkingUpdates &&
+        updateProgress.phase === "downloading" &&
+        !cancelUpdateRequested;
+    const updatePhaseLabel =
+        updateProgress.phase === "idle"
+            ? ""
+            : t(`settings.update.phase.${updateProgress.phase}`);
+    const downloadedText = formatBytes(updateProgress.downloadedBytes);
+    const totalText =
+        typeof updateProgress.totalBytes === "number" &&
+        updateProgress.totalBytes > 0
+            ? formatBytes(updateProgress.totalBytes)
+            : null;
+    const downloadProgressText = totalText
+        ? t("settings.update.progress.with_total", {
+              downloaded: downloadedText,
+              total: totalText,
+              percent: updateProgressPercent,
+          })
+        : t("settings.update.progress.unknown_total", {
+              downloaded: downloadedText,
+          });
+    const downloadSpeedText =
+        updateProgress.phase === "downloading" &&
+        updateProgress.speedBytesPerSecond > 0
+            ? t("settings.update.speed", {
+                  speed: `${formatBytes(updateProgress.speedBytesPerSecond)}/s`,
+              })
+            : "";
 
     return (
         <TooltipProvider>
@@ -1100,6 +1315,52 @@ export default function SettingsPage() {
                                                     Report Bug
                                                 </Button>
                                             </div>
+                                            {isUpdateProgressVisible && (
+                                                <div className="mt-4 w-full max-w-xl rounded-2xl border border-border/70 bg-surface/80 p-4 space-y-3">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <p className="text-sm font-medium">
+                                                            {updatePhaseLabel}
+                                                        </p>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 px-3 rounded-full"
+                                                            onClick={
+                                                                handleCancelUpdate
+                                                            }
+                                                            disabled={
+                                                                !canCancelUpdate
+                                                            }
+                                                        >
+                                                            {cancelUpdateRequested
+                                                                ? t(
+                                                                      "settings.button.cancelling_update",
+                                                                  )
+                                                                : t(
+                                                                      "settings.button.cancel_update",
+                                                                  )}
+                                                        </Button>
+                                                    </div>
+                                                    <Progress
+                                                        value={
+                                                            updateProgressPercent
+                                                        }
+                                                        className="h-2"
+                                                    />
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                                                        <span>
+                                                            {downloadProgressText}
+                                                        </span>
+                                                        {downloadSpeedText && (
+                                                            <span>
+                                                                {
+                                                                    downloadSpeedText
+                                                                }
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </TabsContent>
