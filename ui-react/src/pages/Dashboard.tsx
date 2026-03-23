@@ -76,6 +76,8 @@ import {
     sanitizeGridNodeLayout,
 } from "./dashboardLayout";
 import {
+    DASHBOARD_VISIBLE_TAB_CAP,
+    buildReorderedViewIds,
     createIndexedViewName,
     normalizeViewNameInput,
     splitVisibleAndOverflowViewIds,
@@ -481,6 +483,13 @@ export default function Dashboard() {
     } = useScraper();
     const [errorSourceId, setErrorSourceId] = useState<string | null>(null);
     const [showErrorDetails, setShowErrorDetails] = useState(false);
+    const [dragSession, setDragSession] = useState<{
+        draggedViewId: string | null;
+        sourceZone: "visible" | "overflow" | null;
+    }>({
+        draggedViewId: null,
+        sourceZone: null,
+    });
 
     // GridStack ref
     const gridRef = useRef<HTMLDivElement>(null);
@@ -503,6 +512,53 @@ export default function Dashboard() {
         }
         setActiveViewId(viewId);
     };
+
+    const handleViewDragStart = useCallback(
+        (draggedViewId: string, sourceZone: "visible" | "overflow") => {
+            setDragSession({
+                draggedViewId,
+                sourceZone,
+            });
+        },
+        [],
+    );
+
+    const clearViewDragSession = useCallback(() => {
+        setDragSession({
+            draggedViewId: null,
+            sourceZone: null,
+        });
+    }, []);
+
+    const handleViewDrop = useCallback(
+        (
+            dropZone: "visible" | "overflow",
+            dropIndex: number,
+            dropTargetViewId: string | null,
+        ) => {
+            if (!dragSession.draggedViewId || !dragSession.sourceZone) {
+                return;
+            }
+
+            const nextOrderedIds = buildReorderedViewIds({
+                orderedViewIds: orderedViews.map((view) => view.id),
+                draggedViewId: dragSession.draggedViewId,
+                dropTargetViewId,
+                dropZone,
+                dropIndex,
+                cap: DASHBOARD_VISIBLE_TAB_CAP,
+            });
+            setOrderedViewIds(nextOrderedIds);
+            clearViewDragSession();
+        },
+        [
+            clearViewDragSession,
+            dragSession.draggedViewId,
+            dragSession.sourceZone,
+            orderedViews,
+            setOrderedViewIds,
+        ],
+    );
 
     const handleCreateView = async () => {
         const nextView: StoredView = {
@@ -1641,6 +1697,16 @@ export default function Dashboard() {
                             renamePlaceholder={t(
                                 "dashboard.tabs.rename_placeholder",
                             )}
+                            draggedViewId={dragSession.draggedViewId}
+                            onDragStartView={handleViewDragStart}
+                            onDragEndView={clearViewDragSession}
+                            onDropVisibleIndex={(dropIndex, dropTargetViewId) =>
+                                handleViewDrop(
+                                    "visible",
+                                    dropIndex,
+                                    dropTargetViewId,
+                                )
+                            }
                         />
                     </div>
 
@@ -1649,6 +1715,7 @@ export default function Dashboard() {
                             <ViewManagementPanel
                                 views={orderedViews}
                                 activeViewId={resolvedActiveViewId}
+                                overflowViewIds={overflowViewIds}
                                 onSelectView={handleSelectView}
                                 onCreateView={handleCreateView}
                                 onRenameView={handleRenameView}
@@ -1659,6 +1726,19 @@ export default function Dashboard() {
                                     "dashboard.tabs.rename_placeholder",
                                 )}
                                 deleteLabel={t("dashboard.tabs.delete_view")}
+                                draggedViewId={dragSession.draggedViewId}
+                                onDragStartView={handleViewDragStart}
+                                onDragEndView={clearViewDragSession}
+                                onDropOverflowIndex={(
+                                    dropIndex,
+                                    dropTargetViewId,
+                                ) =>
+                                    handleViewDrop(
+                                        "overflow",
+                                        dropIndex,
+                                        dropTargetViewId,
+                                    )
+                                }
                             />
                         </div>
                     )}

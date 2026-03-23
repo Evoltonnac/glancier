@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { type DragEvent, useEffect, useState } from "react";
 
 import type { StoredView } from "../../types/config";
 
 interface ViewManagementPanelProps {
     views: StoredView[];
     activeViewId: string | null;
+    overflowViewIds?: string[];
     onSelectView(viewId: string): void;
     onCreateView(): void;
     onRenameView(viewId: string, nextName: string): void;
@@ -13,11 +14,19 @@ interface ViewManagementPanelProps {
     createLabel: string;
     renamePlaceholder: string;
     deleteLabel: string;
+    draggedViewId?: string | null;
+    onDragStartView?(
+        viewId: string,
+        sourceZone: "visible" | "overflow",
+    ): void;
+    onDragEndView?(): void;
+    onDropOverflowIndex?(dropIndex: number, dropTargetViewId: string | null): void;
 }
 
 export default function ViewManagementPanel({
     views,
     activeViewId,
+    overflowViewIds = [],
     onSelectView,
     onCreateView,
     onRenameView,
@@ -26,9 +35,17 @@ export default function ViewManagementPanel({
     createLabel,
     renamePlaceholder,
     deleteLabel,
+    draggedViewId = null,
+    onDragStartView,
+    onDragEndView,
+    onDropOverflowIndex,
 }: ViewManagementPanelProps) {
     const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
     const isDeleteBlocked = views.length <= 1;
+    const overflowViewIdSet = new Set(overflowViewIds);
+    const overflowViews = overflowViewIds
+        .map((viewId) => views.find((view) => view.id === viewId))
+        .filter((view): view is StoredView => Boolean(view));
 
     useEffect(() => {
         setRenameDrafts((current) => {
@@ -52,6 +69,22 @@ export default function ViewManagementPanel({
         onRenameView(view.id, draft);
     };
 
+    const handleDropTargetDragOver = (
+        event: DragEvent<HTMLDivElement>,
+    ) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+    };
+
+    const handleDropTargetDrop = (
+        event: DragEvent<HTMLDivElement>,
+        dropIndex: number,
+        dropTargetViewId: string | null,
+    ) => {
+        event.preventDefault();
+        onDropOverflowIndex?.(dropIndex, dropTargetViewId);
+    };
+
     return (
         <section className="rounded-lg border border-border bg-surface/70 p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -65,6 +98,27 @@ export default function ViewManagementPanel({
                     {createLabel}
                 </button>
             </div>
+            <div className="mb-3 space-y-1">
+                {Array.from({ length: overflowViews.length + 1 }, (_, index) => (
+                    <div
+                        key={`overflow-drop-${index}`}
+                        data-testid={`dashboard-overflow-drop-${index}`}
+                        className={`h-2 rounded-sm transition-colors ${
+                            draggedViewId
+                                ? "bg-brand/20 hover:bg-brand/30"
+                                : "bg-muted/40"
+                        }`}
+                        onDragOver={handleDropTargetDragOver}
+                        onDrop={(event) =>
+                            handleDropTargetDrop(
+                                event,
+                                index,
+                                overflowViews[index]?.id ?? null,
+                            )
+                        }
+                    />
+                ))}
+            </div>
             <ol className="space-y-2">
                 {views.map((view) => (
                     <li
@@ -75,6 +129,16 @@ export default function ViewManagementPanel({
                                 ? "border-brand/60 bg-brand/5"
                                 : "border-border bg-background/60"
                         }`}
+                        draggable
+                        onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", view.id);
+                            const sourceZone = overflowViewIdSet.has(view.id)
+                                ? "overflow"
+                                : "visible";
+                            onDragStartView?.(view.id, sourceZone);
+                        }}
+                        onDragEnd={() => onDragEndView?.()}
                     >
                         <button
                             type="button"
