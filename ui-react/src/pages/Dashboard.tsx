@@ -66,6 +66,13 @@ import { ScraperStatusBanner } from "../components/ScraperStatusBanner";
 import { EmptyState } from "../components/EmptyState";
 import ViewManagementPanel from "../components/dashboard/ViewManagementPanel";
 import ViewTabsBar from "../components/dashboard/ViewTabsBar";
+import {
+    DashboardGrid,
+    DashboardSwiper,
+    CreateDashboardDialog,
+    DeleteConfirmDialog,
+    RenameDialog,
+} from "../components/dashboard";
 import { useStore } from "../store";
 import { useViewTabsState } from "../store/viewTabsState";
 import { useI18n } from "../i18n";
@@ -83,6 +90,7 @@ import {
     splitVisibleAndOverflowViewIds,
 } from "./dashboardViewTabs";
 import { parseCssLengthToPixels } from "./gridSizing";
+import { createViewSaveQueue } from "./viewSaveQueue";
 import { invoke } from "@tauri-apps/api/core";
 import {
     Play,
@@ -99,6 +107,7 @@ import {
 
 // GridStack layout constants - now dynamically read from CSS variables
 const warnedCompatibilityKeys = new Set<string>();
+const EMPTY_DASHBOARD_VIEWS: StoredView[] = [];
 
 function warnDashboardCompatibilityOnce(key: string, message: string): void {
     if (warnedCompatibilityKeys.has(key)) {
@@ -379,8 +388,11 @@ export default function Dashboard() {
         setActiveViewId,
         setOrderedViewIds,
         syncWithViews,
+        viewMode,
+        setViewMode,
+        selectedDashboardId,
+        setSelectedDashboardId,
     } = useViewTabsState();
-    const [isViewManagementOpen, setIsViewManagementOpen] = useState(true);
     const refreshIntervalOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: t("settings.refresh.option.off") },
         { value: 5, label: t("settings.refresh.option.5m") },
@@ -395,7 +407,9 @@ export default function Dashboard() {
         dataMap: swrDataMap,
         isLoading: swrLoading,
     } = useSources();
-    const { views: swrViews } = useViews();
+    const { views: fetchedViews } = useViews();
+    const swrViews =
+        fetchedViews.length === 0 ? EMPTY_DASHBOARD_VIEWS : fetchedViews;
 
     // Use SWR data, fallback to store data during initial load
     const sources: SourceSummary[] =
@@ -462,10 +476,8 @@ export default function Dashboard() {
     }, [setSources, setStoreDataMap, swrDataMap, swrLoading, swrSources]);
 
     useEffect(() => {
-        const synced = syncWithViews(swrViews);
-        setOrderedViewIds(synced.orderedViewIds);
-        setActiveViewId(synced.activeViewId);
-    }, [setActiveViewId, setOrderedViewIds, swrViews, syncWithViews]);
+        syncWithViews(swrViews);
+    }, [swrViews, syncWithViews]);
 
     useEffect(() => {
         pollingDataMapRef.current = dataMap;
@@ -491,12 +503,76 @@ export default function Dashboard() {
         sourceZone: null,
     });
 
+    // Dialog state for dashboard management
+    const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+    const [deletingView, setDeletingView] = useState<StoredView | null>(null);
+    const [renamingView, setRenamingView] = useState<StoredView | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isRenaming, setIsRenaming] = useState(false);
+
     // GridStack ref
     const gridRef = useRef<HTMLDivElement>(null);
     const gsInstanceRef = useRef<GridStack | null>(null);
     const suppressGridChangeRef = useRef(false);
+    const viewSaveQueueRef = useRef<ReturnType<typeof createViewSaveQueue> | null>(
+        null,
+    );
     const [nowSeconds, setNowSeconds] = useState<number>(() =>
         Math.floor(Date.now() / 1000),
+    );
+
+    if (!viewSaveQueueRef.current) {
+        viewSaveQueueRef.current = createViewSaveQueue(
+            async (nextView) => {
+                await api.updateView(nextView.id, nextView);
+            },
+            {
+                onError: (error) => {
+                    console.error("Failed to persist dashboard view update:", error);
+                },
+                onDrained: async () => {
+                    await invalidateViews();
+                },
+            },
+        );
+    }
+
+    const viewConfigRef = useRef(viewConfig);
+    useEffect(() => {
+        viewConfigRef.current = viewConfig;
+    }, [viewConfig]);
+
+    const applyOptimisticViewUpdate = useCallback(
+        (nextView: StoredView) => {
+            viewConfigRef.current = nextView;
+            setViewConfig(nextView);
+            void mutate(
+                "views",
+                (existingViews?: StoredView[]) => {
+                    const baseViews: StoredView[] =
+                        existingViews && existingViews.length > 0
+                            ? existingViews
+                            : swrViews;
+                    let found = false;
+                    const updatedViews = baseViews.map((view: StoredView) => {
+                        if (view.id === nextView.id) {
+                            found = true;
+                            return nextView;
+                        }
+                        return view;
+                    });
+                    if (!found) {
+                        updatedViews.push(nextView);
+                    }
+                    return updatedViews;
+                },
+                false,
+            );
+        },
+        [setViewConfig, swrViews],
     );
 
     useEffect(() => {
@@ -564,7 +640,7 @@ export default function Dashboard() {
         const nextView: StoredView = {
             id: `view-${Date.now()}`,
             name: createIndexedViewName(
-                swrViews.map((view) => view.name),
+                swrViews.map((view: StoredView) => view.name),
                 t("dashboard.tabs.new_view_base"),
             ),
             layout_columns: 12,
@@ -581,7 +657,9 @@ export default function Dashboard() {
     };
 
     const handleRenameView = async (viewId: string, rawName: string) => {
-        const currentView = swrViews.find((view) => view.id === viewId);
+        const currentView = swrViews.find(
+            (view: StoredView) => view.id === viewId,
+        );
         if (!currentView) {
             return;
         }
@@ -592,7 +670,7 @@ export default function Dashboard() {
             return;
         }
 
-        const duplicateExists = swrViews.some((view) => {
+        const duplicateExists = swrViews.some((view: StoredView) => {
             if (view.id === viewId) {
                 return false;
             }
@@ -634,7 +712,8 @@ export default function Dashboard() {
             if (resolvedActiveViewId === viewId) {
                 const nextActiveView =
                     orderedViews.find((view) => view.id !== viewId)?.id ??
-                    swrViews.find((view) => view.id !== viewId)?.id ??
+                    swrViews.find((view: StoredView) => view.id !== viewId)
+                        ?.id ??
                     null;
                 setActiveViewId(nextActiveView);
             }
@@ -644,6 +723,94 @@ export default function Dashboard() {
             console.error("Failed to delete view:", error);
             showToast(t("common.retryLater"), "error");
         }
+    };
+
+    // Dashboard management CRUD handlers
+
+    const handleCreateDashboard = async (name: string) => {
+        setIsCreating(true);
+        try {
+            const nextView: StoredView = {
+                id: `view-${Date.now()}`,
+                name: name.trim(),
+                layout_columns: 12,
+                items: [],
+            };
+            await api.createView(nextView);
+            await invalidateViews();
+            showToast(t("dashboard.management.create_success"), "success");
+            setIsCreateDialogOpen(false);
+            // Enter the new dashboard in single view mode
+            setSelectedDashboardId(nextView.id);
+            setViewMode("single");
+        } catch (error) {
+            console.error("Failed to create dashboard:", error);
+            showToast(t("common.retryLater"), "error");
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const handleEditDashboard = (view: StoredView) => {
+        setRenamingView(view);
+        setIsRenameDialogOpen(true);
+    };
+
+    const handleRenameDashboard = async (viewId: string, newName: string) => {
+        setIsRenaming(true);
+        try {
+            const currentView = swrViews.find((v: StoredView) => v.id === viewId);
+            if (!currentView) return;
+            await api.updateView(viewId, { ...currentView, name: newName.trim() });
+            await invalidateViews();
+            setIsRenameDialogOpen(false);
+            setRenamingView(null);
+        } catch (error) {
+            console.error("Failed to rename dashboard:", error);
+            showToast(t("common.retryLater"), "error");
+        } finally {
+            setIsRenaming(false);
+        }
+    };
+
+    const handleDeleteDashboard = async () => {
+        if (!deletingView) return;
+        setIsDeleting(true);
+        try {
+            await api.deleteView(deletingView.id);
+            await invalidateViews();
+            setIsDeleteDialogOpen(false);
+            setDeletingView(null);
+            // If deleted view was selected, clear selection
+            if (selectedDashboardId === deletingView.id) {
+                setSelectedDashboardId(null);
+            }
+        } catch (error) {
+            console.error("Failed to delete dashboard:", error);
+            showToast(t("common.retryLater"), "error");
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const handleReorderDashboards = (newOrderedIds: string[]) => {
+        // Update orderedViewIds in Zustand - this persists the new order
+        setOrderedViewIds(newOrderedIds);
+    };
+
+    const handleSelectDashboard = (view: StoredView) => {
+        // Click on dashboard card to enter that dashboard
+        setSelectedDashboardId(view.id);
+        setActiveViewId(view.id);
+        setViewMode("single");
+    };
+
+    const handleEnterManagementMode = () => {
+        setViewMode("management");
+    };
+
+    const handleExitManagementMode = () => {
+        setViewMode("single");
     };
 
     const handleAddWidget = async (
@@ -681,17 +848,19 @@ export default function Dashboard() {
         };
 
         try {
-            setViewConfig(updatedView);
             if (isNewView) {
+                setViewConfig(updatedView);
                 await api.createView(updatedView);
+                await invalidateViews();
             } else {
-                await api.updateView(updatedView.id, updatedView);
+                applyOptimisticViewUpdate(updatedView);
+                viewSaveQueueRef.current?.enqueue(updatedView);
             }
             // Refresh data via SWR
             invalidateSources();
-            invalidateViews();
         } catch (error) {
             console.error("Failed to add widget:", error);
+            void invalidateViews();
             setViewConfig(viewConfig);
         }
     };
@@ -701,8 +870,7 @@ export default function Dashboard() {
         const newItems = viewConfig.items.filter((it) => it.id !== itemId);
         const updatedView = { ...viewConfig, items: newItems };
 
-        viewConfigRef.current = updatedView;
-        setViewConfig(updatedView);
+        applyOptimisticViewUpdate(updatedView);
 
         const gs = gsInstanceRef.current;
         if (gs) {
@@ -714,15 +882,8 @@ export default function Dashboard() {
             });
         }
 
-        api.updateView(updatedView.id, updatedView)
-            .then(() => invalidateViews())
-            .catch((e) => console.error(e));
+        viewSaveQueueRef.current?.enqueue(updatedView);
     };
-
-    const viewConfigRef = useRef(viewConfig);
-    useEffect(() => {
-        viewConfigRef.current = viewConfig;
-    }, [viewConfig]);
 
     const handleGridChange = useCallback(() => {
         if (suppressGridChangeRef.current) return;
@@ -764,11 +925,9 @@ export default function Dashboard() {
         );
 
         const updatedView = { ...currentViewConfig, items: updatedItems };
-        setViewConfig(updatedView);
-        api.updateView(updatedView.id, updatedView)
-            .then(() => invalidateViews())
-            .catch((e) => console.error(e));
-    }, [setViewConfig, invalidateViews]);
+        applyOptimisticViewUpdate(updatedView);
+        viewSaveQueueRef.current?.enqueue(updatedView);
+    }, [applyOptimisticViewUpdate]);
 
     useEffect(() => {
         const gs = gsInstanceRef.current;
@@ -813,11 +972,15 @@ export default function Dashboard() {
         } else {
             // React re-renders (like data loading or new item addition) can strip
             // GridStack classes and lose grid styles. Re-initialize items.
+            // Also handles tab switches: clear old items before adding current ones.
             suppressGridChangeRef.current = true;
             setTimeout(() => {
                 if (gridRef.current && gsInstanceRef.current) {
                     const elements =
                         gridRef.current.querySelectorAll(".grid-stack-item");
+                    // Remove all existing widgets first to handle tab switches cleanly
+                    gsInstanceRef.current.removeAll(false);
+                    // Re-add all current items
                     elements.forEach((el) => {
                         gsInstanceRef.current!.makeWidget(el as HTMLElement);
                     });
@@ -1680,38 +1843,47 @@ export default function Dashboard() {
                 </aside>
 
                 <main className="flex-1 p-4 overflow-y-auto">
-                    <div className="mb-3">
-                        <ViewTabsBar
-                            views={orderedViews}
-                            activeViewId={resolvedActiveViewId}
-                            visibleViewIds={visibleViewIds}
-                            overflowViewIds={overflowViewIds}
-                            onSelectView={handleSelectView}
-                            onRenameView={handleRenameView}
-                            onToggleManagementPanel={() =>
-                                setIsViewManagementOpen(true)
-                            }
-                            overflowLabel={t("dashboard.tabs.overflow_more", {
-                                count: overflowViewIds.length,
-                            })}
-                            renamePlaceholder={t(
-                                "dashboard.tabs.rename_placeholder",
-                            )}
-                            draggedViewId={dragSession.draggedViewId}
-                            onDragStartView={handleViewDragStart}
-                            onDragEndView={clearViewDragSession}
-                            onDropVisibleIndex={(dropIndex, dropTargetViewId) =>
-                                handleViewDrop(
-                                    "visible",
-                                    dropIndex,
-                                    dropTargetViewId,
-                                )
-                            }
-                        />
-                    </div>
+                    {/* All Dashboards button - enters management mode */}
+                    <button
+                        type="button"
+                        onClick={handleEnterManagementMode}
+                        className={cn(
+                            "shrink-0 h-8 px-3 flex items-center gap-1.5 text-xs uppercase tracking-wider font-semibold rounded-md transition-colors duration-150",
+                            viewMode === "management"
+                                ? "bg-brand-gradient text-white"
+                                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/50",
+                        )}
+                    >
+                        {t("dashboard.management.all_dashboards")}
+                    </button>
 
-                    {isViewManagementOpen && (
-                        <div className="mb-4">
+                    <ViewTabsBar
+                        views={orderedViews}
+                        activeViewId={resolvedActiveViewId}
+                        visibleViewIds={visibleViewIds}
+                        overflowViewIds={overflowViewIds}
+                        onSelectView={handleSelectView}
+                        onRenameView={handleRenameView}
+                        onCreateView={handleCreateView}
+                        onAddWidget={() => setIsAddDialogOpen(true)}
+                        addWidgetLabel={t("dashboard.action.add_widget")}
+                        overflowLabel={t("dashboard.tabs.overflow_more", {
+                            count: overflowViewIds.length,
+                        })}
+                        renamePlaceholder={t(
+                            "dashboard.tabs.rename_placeholder",
+                        )}
+                        draggedViewId={dragSession.draggedViewId}
+                        onDragStartView={handleViewDragStart}
+                        onDragEndView={clearViewDragSession}
+                        onDropVisibleIndex={(dropIndex, dropTargetViewId) =>
+                            handleViewDrop(
+                                "visible",
+                                dropIndex,
+                                dropTargetViewId,
+                            )
+                        }
+                        overflowPanel={
                             <ViewManagementPanel
                                 views={orderedViews}
                                 activeViewId={resolvedActiveViewId}
@@ -1740,49 +1912,8 @@ export default function Dashboard() {
                                     )
                                 }
                             />
-                        </div>
-                    )}
-
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-semibold">
-                            {t("dashboard.view.title")}
-                        </h2>
-                        <div className="flex gap-2">
-                            {/* TODO: Re-enable density toggle after fixing spacing issues
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        className="h-8 px-3 flex items-center gap-1.5 text-sm font-medium rounded-md border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150"
-                                        onClick={cycleDensity}
-                                    >
-                                        <LayoutGrid className="w-4 h-4" />
-                                        {densityLabels[settings?.density || "normal"]}
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom">
-                                    Click to toggle density: Compact → Normal → Comfortable
-                                </TooltipContent>
-                            </Tooltip>
-                            */}
-                            <button
-                                className="h-8 px-3 text-sm font-medium rounded-md border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-                                onClick={() =>
-                                    setIsViewManagementOpen(
-                                        (current) => !current,
-                                    )
-                                }
-                            >
-                                {t("dashboard.tabs.manage_views")}
-                            </button>
-                            <button
-                                className="h-8 px-3 flex items-center gap-1.5 text-sm font-medium rounded-md bg-brand-gradient text-white hover:opacity-90 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 shadow-sm"
-                                onClick={() => setIsAddDialogOpen(true)}
-                            >
-                                <Plus className="w-4 h-4" />
-                                {t("dashboard.action.add_widget")}
-                            </button>
-                        </div>
-                    </div>
+                        }
+                    />
 
                     {!viewConfig || viewConfig.items.length === 0 ? (
                         <EmptyState
