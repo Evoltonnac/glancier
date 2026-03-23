@@ -75,7 +75,7 @@ Design a dense, reliable dashboard where **Metrics**, **Signals**, and **Integra
 ### Bento Card
 
 - `BaseSourceCard` uses `bg-surface`, `border-border`, `rounded-xl`.
-- Header (`qb-card-header`) is drag handle with stable height (~52px).
+- Header (`qb-card-header`) is drag handle with stable height (`2.5rem`, ~40px at default root font size).
 - Status indicator should be clear but subtle.
 - Content area defaults to compact padding (`px-4 py-3`).
 

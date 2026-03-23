@@ -123,6 +123,29 @@ Scope: `Dashboard.tsx`, `viewTabsState.ts`, dashboard management components.
   - `DashboardViewReorder.test.tsx`
   - `viewSaveQueue.test.ts`
 
+## Multi-Panel Dashboard Feature Contract
+
+This project supports a multi-panel dashboard experience with two operating modes:
+
+- `single` mode:
+  - render one active dashboard panel as the primary working surface
+  - allow fast panel switching through tabs and overflow entries
+- `management` mode:
+  - render all dashboard panels as overview cards
+  - support panel create, rename, delete, and reorder workflows
+
+Behavior contracts:
+
+- One canonical interaction-state owner must coordinate active panel, panel order, selected panel, and mode.
+- Remote dashboard data and local interaction state must synchronize idempotently.
+- Reorder/CRUD actions must persist through the same save/reconcile pipeline.
+- User-facing panel interactions must keep i18n keys and backend `error_code` diagnostics stable.
+
+Documentation and change policy:
+
+- Any feature change affecting multi-panel behavior must update this section in the same delivery.
+- Keep architecture-level behavior documented here, and avoid scattering competing contracts across multiple docs.
+
 ## API Client Notes
 
 `ui-react/src/api/client.ts` owns backend calls and base URL resolution.

@@ -42,7 +42,45 @@ Data and runtime:
 - `ui-react/src/`: React UI, SDUI widgets, pages, state hooks
 - `docs/`: architecture, flow, SDUI, testing, build contracts
 
-## 4. Code Rules
+## 4. Docs Onboarding and Directory Map
+
+Use this section as the first-stop docs index for implementation and review tasks.
+
+Recommended reading order:
+1. `docs/terminology.md`: canonical domain language.
+2. `docs/flow/01_architecture_and_orchestration.md`: flow model and execution boundary.
+3. `docs/flow/02_step_reference.md`: step contracts for integration authoring.
+4. `docs/sdui/01_architecture_and_guidelines.md`: SDUI rendering boundary and template model.
+5. `docs/frontend/01_engineering_guide.md`: frontend reliability and state-management rules.
+6. Topic-specific docs by feature area:
+   - `docs/webview-scraper/`: desktop scraper architecture and runtime fallback.
+   - `docs/flow/05_refresh_scheduler_and_retry.md`: retry/backoff and scheduler policy.
+   - `docs/flow/06_storage_contract_and_migration.md`: storage boundary and migration lifecycle.
+   - `docs/testing_tdd.md`: required test gates and TDD expectations.
+   - `docs/build-path-contract.md`: build/release entrypoints and artifact ownership.
+   - `docs/ui_design_guidelines.md`: UI visual/interaction rules.
+
+Docs map (top-level + subdirectories):
+- `docs/terminology.md`: shared vocabulary for product, data, and UI.
+- `docs/flow/01_architecture_and_orchestration.md`: high-level flow orchestration and variable channels.
+- `docs/flow/02_step_reference.md`: per-step contract and authoring reference.
+- `docs/flow/03_step_oauth.md`: OAuth step behavior and recovery guidance.
+- `docs/flow/04_step_failure_test_inputs.md`: failure/regression scenario inputs.
+- `docs/flow/05_refresh_scheduler_and_retry.md`: refresh scheduler and retry semantics.
+- `docs/flow/06_storage_contract_and_migration.md`: storage contract and startup migration.
+- `docs/sdui/01_architecture_and_guidelines.md`: SDUI architecture and template guidelines.
+- `docs/sdui/02_component_map_and_categories.md`: SDUI component taxonomy and maintenance rules.
+- `docs/sdui/03_template_expression_spec.md`: expression syntax and safety boundary.
+- `docs/webview-scraper/01_architecture_and_dataflow.md`: scraper subsystem dataflow.
+- `docs/webview-scraper/02_runtime_and_fallback.md`: runtime constraints and fallback behavior.
+- `docs/frontend/01_engineering_guide.md`: frontend engineering rules and dashboard state contracts.
+- `docs/ui_design_guidelines.md`: high-density UI principles and component-level guidance.
+- `docs/testing_tdd.md`: testing policy and release-blocking gates.
+- `docs/build-path-contract.md`: canonical build/test/release command contract.
+
+When implementing or changing any related behavior, always consult the relevant docs first, and update those docs in the same delivery when behavior/contracts change so documentation stays current.
+
+## 5. Code Rules
 
 - Split oversized modules proactively.
   - Function length target: <= 50 lines when practical.
@@ -64,22 +102,27 @@ Data and runtime:
   - Keep SWR -> Zustand synchronization idempotent; do not add duplicate write paths in `Dashboard.tsx` effects.
   - Keep translation contracts stable for `dashboard.tabs.*` and `dashboard.management.*` keys.
 
-## 5. Execution Boundaries
+## 6. Execution Boundaries
 
 - Do not invent APIs, endpoints, config fields, or runtime capabilities.
 - Do not add/remove/upgrade core dependencies without explicit approval.
 - For high-impact changes (auth, executor, API contracts), report verification commands and outcomes.
 - Keep changes scoped; avoid unrelated refactors in the same task.
 
-## 6. Documentation Rules
+## 7. Documentation Rules
 
 - When architecture or command entrypoints change, sync relevant docs in the same delivery.
 - `.planning/` is owned by GSD workflows. Do not manually change planning document structure or content unless explicitly requested through GSD operations.
-- Keep dashboard-management documentation synchronized when behavior changes:
-  - `docs/dashboard_management_design.md`
+- Keep dashboard management contracts synchronized in:
   - `docs/frontend/01_engineering_guide.md`
+- Documentation authoring standard:
+  - Prefer concept-first explanations (domain concepts, data flow, architecture boundaries, lifecycle).
+  - Avoid over-coupling docs to concrete file paths, function names, or local variable names unless required for unambiguous contracts.
+  - When implementation details are needed, describe stable interfaces/behaviors first, then add minimal code-location hints.
+  - Keep terms consistent with `docs/terminology.md`.
+  - Keep examples deterministic and aligned with current runtime behavior.
 
-## 7. Minimum Validation Before Handoff
+## 8. Minimum Validation Before Handoff
 
 Run the smallest relevant gate set:
 - Backend changes: `make test-backend`
