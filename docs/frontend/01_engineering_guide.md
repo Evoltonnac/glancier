@@ -75,6 +75,35 @@ useEffect(() => {
 }, []);
 ```
 
+## SWR + Zustand Sync Safety (Loop Prevention)
+
+When mirroring SWR data into local zustand UI state, treat it as a derived sync path that must be idempotent.
+
+Rules:
+
+- Do not call zustand `set(...)` if the derived state is semantically unchanged.
+- In store actions, return previous state for no-op branches (`set((state) => state)` semantics).
+- In sync effects, avoid chaining extra setters after a store sync action that already computes and writes state.
+- Never rely on array/object reference checks alone for network data (`data ?? []` patterns can create fresh references).
+- Prefer one owner for reconciliation logic (store action), and keep component effects as thin triggers.
+
+Recommended pattern:
+
+```tsx
+const EMPTY_VIEWS: StoredView[] = [];
+const { views = EMPTY_VIEWS } = useViews();
+
+// Store action does equality guard and decides whether to write.
+useEffect(() => {
+  syncWithViews(views);
+}, [views, syncWithViews]);
+```
+
+Regression expectation:
+
+- Add tests that cover no-op sync when SWR emits same-content data with new references.
+- Verify no repeated render/update loops occur when views are empty or unchanged.
+
 ## API Client Notes
 
 `ui-react/src/api/client.ts` owns backend calls and base URL resolution.

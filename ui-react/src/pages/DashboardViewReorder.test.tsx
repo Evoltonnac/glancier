@@ -220,7 +220,7 @@ describe("Dashboard cross-zone reorder", () => {
         const { setOrderedViewIds } = resetDashboardMocks(views, "view-1");
 
         render(<Dashboard />);
-        runDragAndDrop("dashboard-tab-view-3", "dashboard-tab-drop-1");
+        runDragAndDrop("dashboard-chrome-tab-view-3", "dashboard-tab-drop-1");
 
         await waitFor(() => {
             expect(setOrderedViewIds).toHaveBeenLastCalledWith([
@@ -243,6 +243,8 @@ describe("Dashboard cross-zone reorder", () => {
         const { setOrderedViewIds } = resetDashboardMocks(views, "view-1");
 
         render(<Dashboard />);
+        // Open the overflow popover to access the overflow view rows
+        fireEvent.click(screen.getByTestId("dashboard-tab-overflow-trigger"));
         runDragAndDrop("dashboard-view-row-view-8", "dashboard-tab-drop-1");
 
         await waitFor(() => {
@@ -266,7 +268,9 @@ describe("Dashboard cross-zone reorder", () => {
         const { setOrderedViewIds } = resetDashboardMocks(views, "view-1");
 
         render(<Dashboard />);
-        runDragAndDrop("dashboard-tab-view-2", "dashboard-overflow-drop-1");
+        // Open the overflow popover to access the overflow drop zones
+        fireEvent.click(screen.getByTestId("dashboard-tab-overflow-trigger"));
+        runDragAndDrop("dashboard-chrome-tab-view-2", "dashboard-overflow-drop-1");
 
         await waitFor(() => {
             expect(setOrderedViewIds).toHaveBeenCalled();

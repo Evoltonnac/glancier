@@ -106,4 +106,33 @@ describe("viewTabsState", () => {
         expect(result.activeViewId).toBe("view-1");
         expect(result.orderedViewIds).toEqual(["view-1", "view-3"]);
     });
+
+    it("syncWithViews is a no-op for same-content views with a new array reference", () => {
+        useViewTabsState.setState({
+            activeViewId: "view-1",
+            orderedViewIds: ["view-1", "view-2"],
+        });
+        const updates: Array<{ activeViewId: string | null; orderedViewIds: string[] }> = [];
+        const unsubscribe = useViewTabsState.subscribe((state) => {
+            updates.push({
+                activeViewId: state.activeViewId,
+                orderedViewIds: state.orderedViewIds,
+            });
+        });
+
+        const firstViews = [makeView("view-1", "Main"), makeView("view-2", "Ops")];
+        const secondViews = [makeView("view-1", "Main"), makeView("view-2", "Ops")];
+
+        useViewTabsState.getState().syncWithViews(firstViews);
+        useViewTabsState.getState().syncWithViews(secondViews);
+
+        unsubscribe();
+
+        expect(updates).toHaveLength(0);
+        expect(useViewTabsState.getState().activeViewId).toBe("view-1");
+        expect(useViewTabsState.getState().orderedViewIds).toEqual([
+            "view-1",
+            "view-2",
+        ]);
+    });
 });

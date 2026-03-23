@@ -37,6 +37,13 @@ export const useViewTabsState = create<ViewTabsState>()(
                     views,
                     state.activeViewId,
                 );
+                if (
+                    state.activeViewId === activeViewId &&
+                    state.orderedViewIds.length === orderedViewIds.length &&
+                    state.orderedViewIds.every((id, i) => id === orderedViewIds[i])
+                ) {
+                    return { activeViewId, orderedViewIds };
+                }
                 set({ activeViewId, orderedViewIds });
                 return { activeViewId, orderedViewIds };
             },

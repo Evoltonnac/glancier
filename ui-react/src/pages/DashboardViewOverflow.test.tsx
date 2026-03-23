@@ -47,7 +47,8 @@ describe("Dashboard overflow behavior", () => {
     it("updates +N overflow trigger as the overflow count changes", () => {
         const onSelectView = vi.fn();
         const onRenameView = vi.fn();
-        const onToggleManagementPanel = vi.fn();
+        const onCreateView = vi.fn();
+        const onAddWidget = vi.fn();
         const views = Array.from({ length: 9 }, (_, index) =>
             makeView(`view-${index + 1}`),
         );
@@ -64,9 +65,12 @@ describe("Dashboard overflow behavior", () => {
                 overflowViewIds={firstSplit.overflowViewIds}
                 onSelectView={onSelectView}
                 onRenameView={onRenameView}
-                onToggleManagementPanel={onToggleManagementPanel}
+                onCreateView={onCreateView}
+                onAddWidget={onAddWidget}
+                addWidgetLabel="Add Widget"
                 overflowLabel="+N"
                 renamePlaceholder="Rename view"
+                overflowPanel={<div>Overflow Panel</div>}
             />,
         );
 
@@ -87,9 +91,12 @@ describe("Dashboard overflow behavior", () => {
                 overflowViewIds={secondSplit.overflowViewIds}
                 onSelectView={onSelectView}
                 onRenameView={onRenameView}
-                onToggleManagementPanel={onToggleManagementPanel}
+                onCreateView={onCreateView}
+                onAddWidget={onAddWidget}
+                addWidgetLabel="Add Widget"
                 overflowLabel="+N"
                 renamePlaceholder="Rename view"
+                overflowPanel={<div>Overflow Panel</div>}
             />,
         );
 
@@ -110,9 +117,12 @@ describe("Dashboard overflow behavior", () => {
                 overflowViewIds={thirdSplit.overflowViewIds}
                 onSelectView={onSelectView}
                 onRenameView={onRenameView}
-                onToggleManagementPanel={onToggleManagementPanel}
+                onCreateView={onCreateView}
+                onAddWidget={onAddWidget}
+                addWidgetLabel="Add Widget"
                 overflowLabel="+N"
                 renamePlaceholder="Rename view"
+                overflowPanel={<div>Overflow Panel</div>}
             />,
         );
 

@@ -1843,20 +1843,6 @@ export default function Dashboard() {
                 </aside>
 
                 <main className="flex-1 p-4 overflow-y-auto">
-                    {/* All Dashboards button - enters management mode */}
-                    <button
-                        type="button"
-                        onClick={handleEnterManagementMode}
-                        className={cn(
-                            "shrink-0 h-8 px-3 flex items-center gap-1.5 text-xs uppercase tracking-wider font-semibold rounded-md transition-colors duration-150",
-                            viewMode === "management"
-                                ? "bg-brand-gradient text-white"
-                                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/50",
-                        )}
-                    >
-                        {t("dashboard.management.all_dashboards")}
-                    </button>
-
                     <ViewTabsBar
                         views={orderedViews}
                         activeViewId={resolvedActiveViewId}

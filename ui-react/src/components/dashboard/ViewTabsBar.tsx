@@ -1,7 +1,10 @@
-import { Fragment, type DragEvent, useMemo, useState } from "react";
+import { Fragment, type DragEvent, useMemo } from "react";
+import { Plus } from "lucide-react";
 
-import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
+import { Tabs, TabsList } from "../ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { StoredView } from "../../types/config";
+import { ChromeTab } from "./ChromeTab";
 
 interface ViewTabsBarProps {
     views: StoredView[];
@@ -10,7 +13,9 @@ interface ViewTabsBarProps {
     overflowViewIds: string[];
     onSelectView(viewId: string): void;
     onRenameView(viewId: string, nextName: string): void;
-    onToggleManagementPanel(): void;
+    onCreateView(): void;
+    onAddWidget(): void;
+    addWidgetLabel: string;
     overflowLabel: string;
     renamePlaceholder: string;
     draggedViewId?: string | null;
@@ -20,6 +25,8 @@ interface ViewTabsBarProps {
     ): void;
     onDragEndView?(): void;
     onDropVisibleIndex?(dropIndex: number, dropTargetViewId: string | null): void;
+    /** Rendered inside the overflow popover when there are overflow views. */
+    overflowPanel: React.ReactNode;
 }
 
 export default function ViewTabsBar({
@@ -29,17 +36,17 @@ export default function ViewTabsBar({
     overflowViewIds,
     onSelectView,
     onRenameView,
-    onToggleManagementPanel,
+    onCreateView,
+    onAddWidget,
+    addWidgetLabel,
     overflowLabel,
     renamePlaceholder,
     draggedViewId = null,
     onDragStartView,
     onDragEndView,
     onDropVisibleIndex,
+    overflowPanel,
 }: ViewTabsBarProps) {
-    const [editingViewId, setEditingViewId] = useState<string | null>(null);
-    const [editingName, setEditingName] = useState("");
-
     const viewsById = useMemo(() => {
         const lookup = new Map<string, StoredView>();
         for (const view of views) {
@@ -52,15 +59,7 @@ export default function ViewTabsBar({
         .map((viewId) => viewsById.get(viewId))
         .filter((view): view is StoredView => Boolean(view));
 
-    const commitRename = (viewId: string) => {
-        onRenameView(viewId, editingName);
-        setEditingViewId(null);
-        setEditingName("");
-    };
-
-    const handleDropTargetDragOver = (
-        event: DragEvent<HTMLDivElement>,
-    ) => {
+    const handleDropTargetDragOver = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
     };
@@ -75,119 +74,116 @@ export default function ViewTabsBar({
     };
 
     return (
-        <div className="flex items-center gap-2">
-            <Tabs
-                value={activeViewId ?? undefined}
-                onValueChange={onSelectView}
-                className="min-w-0 flex-1"
-            >
-                <TabsList className="h-10 w-full justify-start overflow-hidden rounded-md border border-border bg-muted/40 p-0.5">
-                    {visibleViews.map((view, index) => (
-                        <Fragment key={view.id}>
-                            <div
-                                data-testid={`dashboard-tab-drop-${index}`}
-                                className={`h-8 w-1 shrink-0 rounded-sm ${
-                                    draggedViewId
-                                        ? "bg-brand/20 hover:bg-brand/30"
-                                        : "bg-transparent"
-                                }`}
-                                onDragOver={handleDropTargetDragOver}
-                                onDrop={(event) =>
-                                    handleDropTargetDrop(
-                                        event,
-                                        index,
-                                        view.id,
-                                    )
-                                }
-                            />
-                            <TabsTrigger
-                                value={view.id}
-                                data-testid={`dashboard-tab-${view.id}`}
-                                className="max-w-[220px] min-w-[132px] rounded-sm border-b-2 border-transparent px-3 data-[state=active]:border-b-2 data-[state=active]:border-brand data-[state=active]:bg-background data-[state=active]:shadow-none"
-                                onDoubleClick={() => {
-                                    setEditingViewId(view.id);
-                                    setEditingName(view.name);
-                                }}
-                                draggable
-                                onDragStart={(event) => {
-                                    event.dataTransfer.effectAllowed = "move";
-                                    event.dataTransfer.setData(
-                                        "text/plain",
-                                        view.id,
-                                    );
-                                    onDragStartView?.(view.id, "visible");
-                                }}
-                                onDragEnd={() => onDragEndView?.()}
-                            >
-                                {editingViewId === view.id ? (
-                                    <input
-                                        type="text"
-                                        data-testid={`dashboard-tab-rename-${view.id}`}
-                                        value={editingName}
-                                        onChange={(event) =>
-                                            setEditingName(event.target.value)
-                                        }
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter") {
-                                                event.preventDefault();
-                                                commitRename(view.id);
-                                            } else if (event.key === "Escape") {
-                                                event.preventDefault();
-                                                setEditingViewId(null);
-                                                setEditingName("");
-                                            }
-                                        }}
-                                        onBlur={() => commitRename(view.id)}
-                                        onClick={(event) =>
-                                            event.stopPropagation()
-                                        }
-                                        className="w-full rounded border border-border bg-background px-1 text-sm"
-                                        placeholder={renamePlaceholder}
-                                        autoFocus
-                                    />
-                                ) : (
-                                    <span
-                                        data-testid={`dashboard-tab-label-${view.id}`}
-                                        className="truncate"
-                                        title={view.name}
-                                    >
-                                        {view.name}
-                                    </span>
-                                )}
-                            </TabsTrigger>
-                        </Fragment>
-                    ))}
-                    <div
-                        data-testid={`dashboard-tab-drop-${visibleViews.length}`}
-                        className={`h-8 w-1 shrink-0 rounded-sm ${
-                            draggedViewId
-                                ? "bg-brand/20 hover:bg-brand/30"
-                                : "bg-transparent"
-                        }`}
-                        onDragOver={handleDropTargetDragOver}
-                        onDrop={(event) =>
-                            handleDropTargetDrop(
-                                event,
-                                visibleViews.length,
-                                null,
-                            )
-                        }
-                    />
-                </TabsList>
-            </Tabs>
-
-            {overflowViewIds.length > 0 && (
-                <button
-                    type="button"
-                    data-testid="dashboard-tab-overflow-trigger"
-                    className="h-9 shrink-0 rounded-md border border-border px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={onToggleManagementPanel}
-                    title={overflowLabel}
-                    aria-label={overflowLabel}
+        <div className="flex items-center gap-3">
+            {/* Chrome tab strip — active tab sits at top of content area */}
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+                <Tabs
+                    value={activeViewId ?? undefined}
+                    onValueChange={onSelectView}
+                    className="min-w-0 flex-1"
                 >
-                    +{overflowViewIds.length}
-                </button>
-            )}
+                    <TabsList className="h-auto w-full justify-start overflow-visible rounded-none border-b border-border bg-transparent p-0">
+                        {visibleViews.map((view, index) => (
+                            <Fragment key={view.id}>
+                                {/* Drop zone between tabs */}
+                                <div
+                                    data-testid={`dashboard-tab-drop-${index}`}
+                                    className={`h-8 w-1 shrink-0 rounded-sm ${
+                                        draggedViewId
+                                            ? "bg-brand/20 hover:bg-brand/30"
+                                            : "bg-transparent"
+                                    }`}
+                                    onDragOver={handleDropTargetDragOver}
+                                    onDrop={(event) =>
+                                        handleDropTargetDrop(
+                                            event,
+                                            index,
+                                            view.id,
+                                        )
+                                    }
+                                />
+                                <ChromeTab
+                                    view={view}
+                                    isActive={activeViewId === view.id}
+                                    isDragging={draggedViewId === view.id}
+                                    onSelect={() => onSelectView(view.id)}
+                                    onRename={onRenameView}
+                                    renamePlaceholder={renamePlaceholder}
+                                    onDragStart={onDragStartView}
+                                    onDragEnd={onDragEndView}
+                                />
+                            </Fragment>
+                        ))}
+                        {/* Drop zone at the end of visible tabs */}
+                        <div
+                            data-testid={`dashboard-tab-drop-${visibleViews.length}`}
+                            className={`h-8 w-1 shrink-0 rounded-sm ${
+                                draggedViewId
+                                    ? "bg-brand/20 hover:bg-brand/30"
+                                    : "bg-transparent"
+                            }`}
+                            onDragOver={handleDropTargetDragOver}
+                            onDrop={(event) =>
+                                handleDropTargetDrop(
+                                    event,
+                                    visibleViews.length,
+                                    null,
+                                )
+                            }
+                        />
+
+                        {/* New tab (+) button */}
+                        <button
+                            type="button"
+                            data-testid="dashboard-tab-new"
+                            className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                            onClick={onCreateView}
+                            title="New view"
+                            aria-label="Create new view"
+                        >
+                            <span className="text-lg font-light leading-none">
+                                +
+                            </span>
+                        </button>
+                    </TabsList>
+                </Tabs>
+
+                {/* Overflow popover trigger */}
+                {overflowViewIds.length > 0 && (
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                data-testid="dashboard-tab-overflow-trigger"
+                                className="h-9 shrink-0 rounded-md border border-border/60 bg-muted/40 px-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                                title={overflowLabel}
+                                aria-label={overflowLabel}
+                            >
+                                +{overflowViewIds.length}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                            align="end"
+                            side="bottom"
+                            sideOffset={6}
+                            className="w-80 p-0"
+                        >
+                            {overflowPanel}
+                        </PopoverContent>
+                    </Popover>
+                )}
+            </div>
+
+            {/* Add Widget — relocated from the removed legacy header */}
+            <button
+                type="button"
+                data-testid="dashboard-add-widget"
+                className="shrink-0 h-9 px-3 flex items-center gap-1.5 text-sm font-medium rounded-md bg-brand-gradient text-white hover:opacity-90 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 shadow-sm"
+                onClick={onAddWidget}
+            >
+                <Plus className="w-4 h-4" />
+                {addWidgetLabel}
+            </button>
         </div>
     );
 }
