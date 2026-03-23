@@ -62,7 +62,7 @@ export function DashboardGrid({
             <SortableContext items={viewIds} strategy={rectSortingStrategy}>
                 <div
                     className={cn(
-                        "mx-auto grid w-full max-w-[1120px] grid-cols-1 gap-4 md:grid-cols-2 lg:max-w-[1020px] lg:grid-cols-3 xl:max-w-[1100px] xl:grid-cols-4",
+                        "mx-auto grid w-full max-w-[1320px] grid-cols-1 gap-3 md:grid-cols-2 lg:max-w-[1380px] lg:grid-cols-4 2xl:max-w-[1480px] 2xl:grid-cols-5",
                         className,
                     )}
                 >

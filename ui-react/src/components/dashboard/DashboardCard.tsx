@@ -57,8 +57,8 @@ export function DashboardCard({
             ref={setNodeRef}
             style={style}
             className={cn(
-                "group relative flex flex-col overflow-hidden rounded-xl border border-border bg-surface transition-colors duration-150 hover:border-foreground/20",
-                isActive && "border-brand/60",
+                "group relative flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-md",
+                isActive && "border-brand/70 ring-1 ring-brand/35",
                 isDragging && "opacity-50",
                 className,
             )}
@@ -66,7 +66,7 @@ export function DashboardCard({
             <div
                 {...attributes}
                 {...listeners}
-                className="qb-card-header flex cursor-grab items-center gap-3 border-b border-border px-4 py-3 active:cursor-grabbing"
+                className="qb-card-header flex cursor-grab items-center gap-2.5 border-b border-border px-3 py-2.5 active:cursor-grabbing"
                 title={t("dashboard.management.drag_handle_tooltip")}
             >
                 <span className="grid grid-cols-2 gap-0.5 text-muted-foreground/60">
@@ -87,16 +87,16 @@ export function DashboardCard({
             <button
                 type="button"
                 onClick={handleCardClick}
-                className="px-4 pb-3 pt-3 text-left"
+                className="px-3 pb-2.5 pt-2.5 text-left"
             >
                 <DashboardThumbnail view={view} className="w-full" />
             </button>
 
-            <div className="flex items-center gap-2 px-4 pb-4 pt-1">
+            <div className="flex items-center gap-1.5 px-3 pb-3 pt-0.5">
                 <button
                     type="button"
                     onClick={handleEditClick}
-                    className="flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="flex items-center gap-1 rounded-md border border-border/80 bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                     <Pencil className="h-3 w-3" />
                     {t("dashboard.management.edit")}
@@ -104,7 +104,7 @@ export function DashboardCard({
                 <button
                     type="button"
                     onClick={handleDeleteClick}
-                    className="flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
                 >
                     <Trash2 className="h-3 w-3" />
                     {t("dashboard.management.delete")}

@@ -38,6 +38,7 @@
     --qb-grid-row-height: 60px;
     --qb-grid-margin: 0.5rem;
     --qb-grid-gap: 0.75rem; /* GridStack cell spacing */
+    --qb-grid-item-margin: 0.25rem; /* Inner widget card spacing */
     /* Card header height = fixed 40px (normal density size), not affected by density */
     --qb-card-header-height: 2.5rem;
     /* Inner card padding */
@@ -123,12 +124,17 @@
   :root[data-density="compact"] .grid-stack-item-content,
   :root[data-density="normal"] .grid-stack-item-content,
   :root[data-density="relaxed"] .grid-stack-item-content {
-    margin: 0.25rem !important;
+    margin: var(--qb-grid-item-margin) !important;
   }
 
   /* GridStack row height */
   .grid-stack {
     min-height: var(--qb-grid-row-height) !important;
+  }
+
+  /* Cancel GridStack + card outer gap while keeping inner widget spacing */
+  .qb-grid-cancel-outer-gap {
+    margin: calc((var(--qb-grid-gap) + var(--qb-grid-item-margin)) * -1);
   }
 }
 

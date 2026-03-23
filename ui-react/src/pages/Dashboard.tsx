@@ -649,6 +649,16 @@ export default function Dashboard() {
         setViewMode("management");
     };
 
+    const handleReturnToSingleDashboard = () => {
+        const fallbackViewId =
+            selectedDashboardId ?? resolvedActiveViewId ?? orderedViews[0]?.id ?? null;
+        if (fallbackViewId) {
+            setSelectedDashboardId(fallbackViewId);
+            setActiveViewId(fallbackViewId);
+        }
+        setViewMode("single");
+    };
+
     const handleAddWidget = async (
         sourceId: string,
         template: ViewComponent,
@@ -1664,7 +1674,7 @@ export default function Dashboard() {
 
                 <main
                     className={cn(
-                        "flex-1 p-4",
+                        "flex-1 p-3",
                         viewMode === "management"
                             ? "overflow-y-auto"
                             : "flex min-h-0 flex-col overflow-hidden",
@@ -1675,17 +1685,26 @@ export default function Dashboard() {
                         /* Management Mode UI */
                         <div className="space-y-6">
                             {/* Header */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between gap-3">
                                 <h1 className="text-2xl font-bold">
                                     {t("dashboard.management.title")}
                                 </h1>
-                                <Button
-                                    onClick={() => setIsCreateDialogOpen(true)}
-                                    variant="secondary"
-                                    size="sm"
-                                >
-                                    {t("dashboard.management.create_button")}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={handleReturnToSingleDashboard}
+                                    >
+                                        {t("dashboard.management.back_to_single")}
+                                    </Button>
+                                    <Button
+                                        onClick={() => setIsCreateDialogOpen(true)}
+                                        size="sm"
+                                    >
+                                        {t("dashboard.management.create_button")}
+                                    </Button>
+                                </div>
                             </div>
 
                             {/* Empty state */}
@@ -1700,7 +1719,6 @@ export default function Dashboard() {
                                     </p>
                                     <Button
                                         onClick={() => setIsCreateDialogOpen(true)}
-                                        variant="secondary"
                                         size="sm"
                                     >
                                         {t("dashboard.management.create_button")}
@@ -1742,7 +1760,6 @@ export default function Dashboard() {
                                     </Button>
                                     <Button
                                         type="button"
-                                        variant="outline"
                                         size="sm"
                                         onClick={() => setIsAddDialogOpen(true)}
                                     >
@@ -1789,7 +1806,10 @@ export default function Dashboard() {
                                                         ? setActiveGridRef
                                                         : undefined
                                                 }
-                                                className={`grid-stack grid-stack-${thisViewConfig.layout_columns || 12}`}
+                                                className={cn(
+                                                    "grid-stack qb-grid-cancel-outer-gap",
+                                                    `grid-stack-${thisViewConfig.layout_columns || 12}`,
+                                                )}
                                             >
                                                 {thisViewConfig.items.map((item) => {
                                                     const safeLayout = sanitizeGridNodeLayout(

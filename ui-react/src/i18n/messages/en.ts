@@ -156,6 +156,8 @@ const enMessages = {
   "dashboard.management.create_placeholder": "Dashboard name",
   "dashboard.management.create_submit": "Create",
   "dashboard.management.create_success": "Dashboard created",
+  "dashboard.management.back_to_single": "Back to Dashboard",
+  "dashboard.management.rename_description": "Update the dashboard name to better distinguish this view.",
   "dashboard.management.edit": "Edit",
   "dashboard.management.edit_title": "Edit Dashboard",
   "dashboard.management.rename_placeholder": "Enter dashboard name",

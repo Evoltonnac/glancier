@@ -109,14 +109,13 @@ export function CreateDashboardDialog({
         </div>
         <DialogFooter>
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={() => handleOpenChange(false)}
             disabled={isCreating}
           >
             {t('common.cancel')}
           </Button>
           <Button
-            variant="outline"
             onClick={() => void handleCreate()}
             disabled={isCreating}
           >

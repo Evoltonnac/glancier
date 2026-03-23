@@ -207,7 +207,7 @@ export function DashboardThumbnail({ view, className }: DashboardThumbnailProps)
         return (
             <div
                 className={cn(
-                    "relative aspect-[16/10] overflow-hidden rounded-xl border border-border/60 bg-muted/40 p-2.5",
+                    "relative aspect-[16/9] overflow-hidden rounded-xl border border-border/60 bg-muted/40 p-2",
                     className,
                 )}
             >
@@ -219,11 +219,11 @@ export function DashboardThumbnail({ view, className }: DashboardThumbnailProps)
     return (
         <div
             className={cn(
-                "relative aspect-[16/10] overflow-hidden rounded-xl border border-border/60 bg-muted/30 p-2.5",
+                "relative aspect-[16/9] overflow-hidden rounded-xl border border-border/60 bg-muted/30 p-2",
                 className,
             )}
         >
-            <div className="grid h-full w-full grid-cols-12 grid-rows-12 gap-1 rounded-lg bg-background/80 p-1">
+            <div className="grid h-full w-full grid-cols-12 grid-rows-12 gap-0.5 rounded-lg bg-background/80 p-0.5">
                 {items.map((item) => {
                     const SkeletonComponent = getSkeletonComponent(getWidgetType(item));
                     const colStart = Math.min(item.x + 1, 12);
@@ -234,7 +234,7 @@ export function DashboardThumbnail({ view, className }: DashboardThumbnailProps)
                     return (
                         <div
                             key={item.id}
-                            className="overflow-hidden rounded-md border border-border/40 bg-muted/70 p-1"
+                            className="overflow-hidden rounded-md border border-border/40 bg-muted/70 p-0.5"
                             style={{
                                 gridColumn: `${colStart} / span ${colSpan}`,
                                 gridRow: `${rowStart} / span ${rowSpan}`,
