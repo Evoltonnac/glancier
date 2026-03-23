@@ -78,6 +78,7 @@ import { useSidebar } from "../hooks/useSidebar";
 import { useScraper } from "../hooks/useScraper";
 import {
     mergeViewItemsWithGridNodes,
+    findFirstAvailableGridPlacement,
     sanitizeGridNodeLayout,
 } from "./dashboardLayout";
 import { parseCssLengthToPixels } from "./gridSizing";
@@ -501,6 +502,12 @@ export default function Dashboard() {
     const [nowSeconds, setNowSeconds] = useState<number>(() =>
         Math.floor(Date.now() / 1000),
     );
+    const activeItemIdsKey = useMemo(() => {
+        if (!viewConfig || viewConfig.items.length === 0) {
+            return "";
+        }
+        return viewConfig.items.map((item) => item.id).join("|");
+    }, [viewConfig]);
 
     if (!viewSaveQueueRef.current) {
         viewSaveQueueRef.current = createViewSaveQueue(
@@ -580,7 +587,7 @@ export default function Dashboard() {
             await mutate(
                 "views",
                 (existingViews?: StoredView[]) => {
-                    const baseViews = existingViews ?? swrViews;
+                    const baseViews: StoredView[] = existingViews ?? swrViews;
                     if (baseViews.some((view) => view.id === nextView.id)) {
                         return baseViews;
                     }
@@ -688,12 +695,18 @@ export default function Dashboard() {
         }
 
         const newItemId = `widget-${Date.now()}`;
+        const placement = findFirstAvailableGridPlacement(
+            currentView.items,
+            currentView.layout_columns || 12,
+            4,
+            4,
+        );
         const newItem = {
             id: newItemId,
-            x: 0,
-            y: 999,
-            w: 3,
-            h: 4,
+            x: placement.x,
+            y: placement.y,
+            w: placement.w,
+            h: placement.h,
             source_id: sourceId,
             template_id: template.id,
             props: {},
@@ -722,41 +735,18 @@ export default function Dashboard() {
         }
     };
 
-    const handleDeleteWidget = async (itemId: string) => {
-        if (!viewConfig) return;
-        const newItems = viewConfig.items.filter((it) => it.id !== itemId);
-        const updatedView = { ...viewConfig, items: newItems };
-
-        applyOptimisticViewUpdate(updatedView);
-
+    const buildViewFromGrid = useCallback((baseView: StoredView): StoredView | null => {
         const gs = gsInstanceRef.current;
-        if (gs) {
-            suppressGridChangeRef.current = true;
-            const el = activeGridElement?.querySelector(`[gs-id="${itemId}"]`);
-            if (el) gs.removeWidget(el as HTMLElement, false);
-            requestAnimationFrame(() => {
-                suppressGridChangeRef.current = false;
-            });
+        if (!gs) {
+            return null;
         }
 
-        viewSaveQueueRef.current?.enqueue(updatedView);
-    };
-
-    const handleGridChange = useCallback(() => {
-        if (suppressGridChangeRef.current) return;
-
-        const gs = gsInstanceRef.current;
-        const currentViewConfig = viewConfigRef.current;
-        if (!gs || !currentViewConfig) return;
-
-        // CRITICAL: Only save if we are in the intended column layout.
-        // GridStack might switch to 1-column mode if the container is too narrow.
-        const expectedColumns = currentViewConfig.layout_columns || 12;
+        const expectedColumns = baseView.layout_columns || 12;
         if (gs.getColumn() !== expectedColumns) {
             console.warn(
                 `[GridStack] Column mismatch: expected ${expectedColumns}, got ${gs.getColumn()}. Skipping save to prevent layout corruption.`,
             );
-            return;
+            return null;
         }
 
         const nodes = gs
@@ -773,18 +763,54 @@ export default function Dashboard() {
                     expectedColumns,
                 ),
             )
-            .filter((n) => n.id !== "");
+            .filter((node) => node.id !== "");
 
         const updatedItems = mergeViewItemsWithGridNodes(
-            currentViewConfig.items,
+            baseView.items,
             nodes,
             expectedColumns,
         );
 
-        const updatedView = { ...currentViewConfig, items: updatedItems };
+        return { ...baseView, items: updatedItems };
+    }, []);
+
+    const handleDeleteWidget = async (itemId: string) => {
+        if (!viewConfig) return;
+        const newItems = viewConfig.items.filter((it) => it.id !== itemId);
+        const updatedView = { ...viewConfig, items: newItems };
+
+        applyOptimisticViewUpdate(updatedView);
+
+        const gs = gsInstanceRef.current;
+        if (gs) {
+            suppressGridChangeRef.current = true;
+            const el = activeGridElement?.querySelector(`[gs-id="${itemId}"]`);
+            if (el) gs.removeWidget(el as HTMLElement, false);
+            requestAnimationFrame(() => {
+                const compactedView = buildViewFromGrid(updatedView) ?? updatedView;
+                applyOptimisticViewUpdate(compactedView);
+                viewSaveQueueRef.current?.enqueue(compactedView);
+                suppressGridChangeRef.current = false;
+            });
+            return;
+        }
+
+        viewSaveQueueRef.current?.enqueue(updatedView);
+    };
+
+    const handleGridChange = useCallback(() => {
+        if (suppressGridChangeRef.current) return;
+
+        const currentViewConfig = viewConfigRef.current;
+        if (!currentViewConfig) return;
+
+        const updatedView = buildViewFromGrid(currentViewConfig);
+        if (!updatedView) {
+            return;
+        }
         applyOptimisticViewUpdate(updatedView);
         viewSaveQueueRef.current?.enqueue(updatedView);
-    }, [applyOptimisticViewUpdate]);
+    }, [applyOptimisticViewUpdate, buildViewFromGrid]);
 
     useEffect(() => {
         const hasRenderableGrid =
@@ -832,6 +858,48 @@ export default function Dashboard() {
             });
         }
     }, [activeGridElement, gridGap, gridRowHeight, handleGridChange, viewConfig?.id, viewConfig?.items.length, viewConfig?.layout_columns]);
+
+    useEffect(() => {
+        const gs = gsInstanceRef.current;
+        if (!gs || !activeGridElement || !viewConfig) {
+            return;
+        }
+
+        const frame = window.requestAnimationFrame(() => {
+            suppressGridChangeRef.current = true;
+            gs.batchUpdate();
+
+            const domItems = Array.from(
+                activeGridElement.querySelectorAll<HTMLElement>(".grid-stack-item"),
+            );
+            const domItemIds = new Set<string>();
+
+            for (const el of domItems) {
+                const itemId = el.getAttribute("gs-id");
+                if (itemId) {
+                    domItemIds.add(itemId);
+                }
+                const hasNode = Boolean(
+                    (el as HTMLElement & { gridstackNode?: unknown }).gridstackNode,
+                );
+                if (!hasNode) {
+                    gs.makeWidget(el);
+                }
+            }
+
+            for (const trackedEl of gs.getGridItems()) {
+                const itemId = trackedEl.getAttribute("gs-id");
+                if (itemId && !domItemIds.has(itemId)) {
+                    gs.removeWidget(trackedEl, false);
+                }
+            }
+
+            gs.batchUpdate(false);
+            suppressGridChangeRef.current = false;
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [activeGridElement, activeItemIdsKey, viewConfig?.id]);
 
     useEffect(() => {
         return () => {

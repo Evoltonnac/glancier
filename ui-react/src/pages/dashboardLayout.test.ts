@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    findFirstAvailableGridPlacement,
     hasLayoutOverlap,
     mergeViewItemsWithGridNodes,
     sanitizeGridNodeLayout,
@@ -78,5 +79,27 @@ describe("dashboardLayout", () => {
         );
 
         expect(safe).toMatchObject({ id: "n", x: 4, y: 1, w: 8, h: 2 });
+    });
+
+    it("finds the first topmost available placement for a 4x4 widget", () => {
+        const items = [
+            { id: "a", x: 0, y: 0, w: 4, h: 4, source_id: "s1", template_id: "t1", props: {} },
+            { id: "b", x: 4, y: 0, w: 4, h: 4, source_id: "s2", template_id: "t2", props: {} },
+        ];
+
+        const placement = findFirstAvailableGridPlacement(items, 12, 4, 4);
+
+        expect(placement).toEqual({ x: 8, y: 0, w: 4, h: 4 });
+    });
+
+    it("moves to next row when top row cannot fit requested width", () => {
+        const items = [
+            { id: "a", x: 0, y: 0, w: 5, h: 4, source_id: "s1", template_id: "t1", props: {} },
+            { id: "b", x: 5, y: 0, w: 5, h: 4, source_id: "s2", template_id: "t2", props: {} },
+        ];
+
+        const placement = findFirstAvailableGridPlacement(items, 12, 4, 4);
+
+        expect(placement).toEqual({ x: 0, y: 4, w: 4, h: 4 });
     });
 });

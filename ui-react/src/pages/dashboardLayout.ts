@@ -54,6 +54,62 @@ function overlaps(a: GridNodeLayout, b: GridNodeLayout): boolean {
     return horizontal && vertical;
 }
 
+export interface GridPlacement {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+export function findFirstAvailableGridPlacement(
+    items: Array<Pick<ViewItem, "x" | "y" | "w" | "h">>,
+    columnCount: number = 12,
+    preferredWidth: number = 4,
+    preferredHeight: number = 4,
+): GridPlacement {
+    const safeColumns = Math.max(1, toFiniteInt(columnCount, 12));
+    const safeW = clamp(toPositiveInt(preferredWidth, 4), 1, safeColumns);
+    const safeH = Math.max(1, toPositiveInt(preferredHeight, 4));
+    const occupied = items.map((item, index) =>
+        sanitizeGridNodeLayout(
+            {
+                id: `occupied-${index}`,
+                x: item.x,
+                y: item.y,
+                w: item.w,
+                h: item.h,
+            },
+            safeColumns,
+        ),
+    );
+    const maxBottom = occupied.reduce(
+        (max, node) => Math.max(max, node.y + node.h),
+        0,
+    );
+
+    for (let y = 0; y <= maxBottom + safeH; y += 1) {
+        for (let x = 0; x <= safeColumns - safeW; x += 1) {
+            const candidate: GridNodeLayout = {
+                id: "candidate",
+                x,
+                y,
+                w: safeW,
+                h: safeH,
+            };
+            if (!occupied.some((node) => overlaps(candidate, node))) {
+                return {
+                    x: candidate.x,
+                    y: candidate.y,
+                    w: candidate.w,
+                    h: candidate.h,
+                };
+            }
+        }
+    }
+
+    return { x: 0, y: maxBottom, w: safeW, h: safeH };
+}
+
 function settleWithoutOverlap(
     candidate: GridNodeLayout,
     placed: GridNodeLayout[],
