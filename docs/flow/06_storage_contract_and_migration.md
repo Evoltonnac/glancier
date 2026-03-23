@@ -58,6 +58,7 @@ Deprecated marker naming convention:
 Marker policy:
 - Marker files are retained (not deleted) as rollback evidence.
 - On later startups, marker presence causes chunk skip by default.
+- Runtime data chunk (`data.deprecated.v1.json`) includes a guarded repair pass: if SQLite is missing source-aligned runtime rows, startup re-imports from the deprecated marker to recover legacy data without forcing full source reruns.
 - Migration is idempotent across restarts; reruns do not duplicate SQLite rows.
 
 ## 5. Crash-Recovery Semantics
