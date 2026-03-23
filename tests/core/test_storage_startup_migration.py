@@ -88,6 +88,49 @@ def test_run_startup_migration_imports_all_chunks_in_order_and_renames_markers(t
         connection.close()
 
 
+def test_run_startup_migration_imports_legacy_data_controller_payload_shape(tmp_path: Path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        data_dir / "data.json",
+        {
+            "latest_by_source": {
+                "source-alpha": {
+                    "data": {"value": 1},
+                    "updated_at": 123.0,
+                    "last_success_at": 122.0,
+                },
+                "source-beta": {
+                    "source_id": "source-beta",
+                    "data": {"value": 2},
+                    "updated_at": 223.0,
+                    "last_success_at": 222.0,
+                },
+            },
+            "history_by_source": {
+                "source-alpha": [{"timestamp": 120.0, "data": {"value": 0}}],
+            },
+        },
+    )
+
+    storage, connection = _build_storage(tmp_path)
+    try:
+        run_startup_migration(storage, data_dir=data_dir)
+
+        latest_alpha = storage.runtime.get_latest("source-alpha")
+        latest_beta = storage.runtime.get_latest("source-beta")
+
+        assert latest_alpha is not None
+        assert latest_beta is not None
+        assert latest_alpha["data"] == {"value": 1}
+        assert latest_beta["data"] == {"value": 2}
+        assert storage.runtime.get_latest("latest_by_source") is None
+        assert (data_dir / "data.deprecated.v1.json").exists()
+    finally:
+        connection.close()
+
+
 def test_run_startup_migration_renames_only_after_successful_chunk_validation(tmp_path: Path):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
