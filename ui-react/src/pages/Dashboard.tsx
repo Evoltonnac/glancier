@@ -4,6 +4,7 @@ import {
     useEffect,
     useRef,
     useCallback,
+    useMemo,
     useState,
 } from "react";
 import { GridStack } from "gridstack";
@@ -63,7 +64,10 @@ import { BaseSourceCard } from "../components/BaseSourceCard";
 import { AddWidgetDialog } from "../components/AddWidgetDialog";
 import { ScraperStatusBanner } from "../components/ScraperStatusBanner";
 import { EmptyState } from "../components/EmptyState";
+import ViewManagementPanel from "../components/dashboard/ViewManagementPanel";
+import ViewTabsBar from "../components/dashboard/ViewTabsBar";
 import { useStore } from "../store";
+import { useViewTabsState } from "../store/viewTabsState";
 import { useI18n } from "../i18n";
 import { useSidebar } from "../hooks/useSidebar";
 import { useScraper } from "../hooks/useScraper";
@@ -71,6 +75,11 @@ import {
     mergeViewItemsWithGridNodes,
     sanitizeGridNodeLayout,
 } from "./dashboardLayout";
+import {
+    createIndexedViewName,
+    normalizeViewNameInput,
+    splitVisibleAndOverflowViewIds,
+} from "./dashboardViewTabs";
 import { parseCssLengthToPixels } from "./gridSizing";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -360,7 +369,16 @@ export default function Dashboard() {
         deletingSourceId,
         setDeletingSourceId,
         setSkippedScrapers,
+        showToast,
     } = useStore();
+    const {
+        activeViewId,
+        orderedViewIds,
+        setActiveViewId,
+        setOrderedViewIds,
+        syncWithViews,
+    } = useViewTabsState();
+    const [isViewManagementOpen, setIsViewManagementOpen] = useState(true);
     const refreshIntervalOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: t("settings.refresh.option.off") },
         { value: 5, label: t("settings.refresh.option.5m") },
@@ -382,8 +400,39 @@ export default function Dashboard() {
         swrSources.length > 0 ? swrSources : storeSources;
     const dataMap =
         Object.keys(swrDataMap).length > 0 ? swrDataMap : storeDataMap;
-    const viewConfig: StoredView | null =
-        swrViews.length > 0 ? swrViews[0] : storeViewConfig;
+    const viewsById = useMemo(() => {
+        const lookup = new Map<string, StoredView>();
+        for (const view of swrViews) {
+            lookup.set(view.id, view);
+        }
+        return lookup;
+    }, [swrViews]);
+    const orderedViews = useMemo(() => {
+        const ordered = orderedViewIds
+            .map((viewId) => viewsById.get(viewId))
+            .filter((view): view is StoredView => Boolean(view));
+        const seen = new Set(ordered.map((view) => view.id));
+        for (const view of swrViews) {
+            if (!seen.has(view.id)) {
+                ordered.push(view);
+            }
+        }
+        return ordered;
+    }, [orderedViewIds, swrViews, viewsById]);
+    const { visibleViewIds, overflowViewIds } = useMemo(
+        () =>
+            splitVisibleAndOverflowViewIds(
+                orderedViews.map((view) => view.id),
+            ),
+        [orderedViews],
+    );
+    const resolvedActiveViewId =
+        activeViewId && viewsById.has(activeViewId)
+            ? activeViewId
+            : orderedViews[0]?.id ?? null;
+    const viewConfig: StoredView | null = resolvedActiveViewId
+        ? (viewsById.get(resolvedActiveViewId) ?? null)
+        : storeViewConfig;
     const isDataLoading = swrLoading && storeSources.length === 0;
     const pollingDataMapRef = useRef<Record<string, DataResponse>>(dataMap);
 
@@ -409,6 +458,12 @@ export default function Dashboard() {
         setSources(swrSources);
         setStoreDataMap(swrDataMap);
     }, [setSources, setStoreDataMap, swrDataMap, swrLoading, swrSources]);
+
+    useEffect(() => {
+        const synced = syncWithViews(swrViews);
+        setOrderedViewIds(synced.orderedViewIds);
+        setActiveViewId(synced.activeViewId);
+    }, [setActiveViewId, setOrderedViewIds, swrViews, syncWithViews]);
 
     useEffect(() => {
         pollingDataMapRef.current = dataMap;
@@ -441,6 +496,99 @@ export default function Dashboard() {
         }, 60000);
         return () => window.clearInterval(timer);
     }, []);
+
+    const handleSelectView = (viewId: string) => {
+        if (!viewId) {
+            return;
+        }
+        setActiveViewId(viewId);
+    };
+
+    const handleCreateView = async () => {
+        const nextView: StoredView = {
+            id: `view-${Date.now()}`,
+            name: createIndexedViewName(
+                swrViews.map((view) => view.name),
+                t("dashboard.tabs.new_view_base"),
+            ),
+            layout_columns: 12,
+            items: [],
+        };
+
+        try {
+            await api.createView(nextView);
+            await invalidateViews();
+        } catch (error) {
+            console.error("Failed to create view:", error);
+            showToast(t("common.retryLater"), "error");
+        }
+    };
+
+    const handleRenameView = async (viewId: string, rawName: string) => {
+        const currentView = swrViews.find((view) => view.id === viewId);
+        if (!currentView) {
+            return;
+        }
+
+        const normalizedName = normalizeViewNameInput(rawName);
+        if (!normalizedName) {
+            showToast(t("dashboard.tabs.rename_empty"), "error");
+            return;
+        }
+
+        const duplicateExists = swrViews.some((view) => {
+            if (view.id === viewId) {
+                return false;
+            }
+            return (
+                normalizeViewNameInput(view.name).toLocaleLowerCase() ===
+                normalizedName.toLocaleLowerCase()
+            );
+        });
+        if (duplicateExists) {
+            showToast(t("dashboard.tabs.rename_duplicate"), "error");
+            return;
+        }
+
+        if (normalizedName === currentView.name) {
+            return;
+        }
+
+        try {
+            await api.updateView(viewId, {
+                ...currentView,
+                name: normalizedName,
+            });
+            await invalidateViews();
+        } catch (error) {
+            console.error("Failed to rename view:", error);
+            showToast(t("common.retryLater"), "error");
+        }
+    };
+
+    const handleDeleteView = async (viewId: string) => {
+        if (swrViews.length <= 1) {
+            showToast(t("dashboard.tabs.delete_blocked_last"), "error");
+            return;
+        }
+
+        try {
+            await api.deleteView(viewId);
+
+            if (resolvedActiveViewId === viewId) {
+                const nextActiveView =
+                    orderedViews.find((view) => view.id !== viewId)?.id ??
+                    swrViews.find((view) => view.id !== viewId)?.id ??
+                    null;
+                setActiveViewId(nextActiveView);
+            }
+
+            await invalidateViews();
+        } catch (error) {
+            console.error("Failed to delete view:", error);
+            showToast(t("common.retryLater"), "error");
+        }
+    };
 
     const handleAddWidget = async (
         sourceId: string,
@@ -1476,6 +1624,45 @@ export default function Dashboard() {
                 </aside>
 
                 <main className="flex-1 p-4 overflow-y-auto">
+                    <div className="mb-3">
+                        <ViewTabsBar
+                            views={orderedViews}
+                            activeViewId={resolvedActiveViewId}
+                            visibleViewIds={visibleViewIds}
+                            overflowViewIds={overflowViewIds}
+                            onSelectView={handleSelectView}
+                            onRenameView={handleRenameView}
+                            onToggleManagementPanel={() =>
+                                setIsViewManagementOpen(true)
+                            }
+                            overflowLabel={t("dashboard.tabs.overflow_more", {
+                                count: overflowViewIds.length,
+                            })}
+                            renamePlaceholder={t(
+                                "dashboard.tabs.rename_placeholder",
+                            )}
+                        />
+                    </div>
+
+                    {isViewManagementOpen && (
+                        <div className="mb-4">
+                            <ViewManagementPanel
+                                views={orderedViews}
+                                activeViewId={resolvedActiveViewId}
+                                onSelectView={handleSelectView}
+                                onCreateView={handleCreateView}
+                                onRenameView={handleRenameView}
+                                onDeleteView={handleDeleteView}
+                                title={t("dashboard.tabs.overflow_title")}
+                                createLabel={t("dashboard.tabs.create_view")}
+                                renamePlaceholder={t(
+                                    "dashboard.tabs.rename_placeholder",
+                                )}
+                                deleteLabel={t("dashboard.tabs.delete_view")}
+                            />
+                        </div>
+                    )}
+
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-semibold">
                             {t("dashboard.view.title")}
@@ -1497,6 +1684,16 @@ export default function Dashboard() {
                                 </TooltipContent>
                             </Tooltip>
                             */}
+                            <button
+                                className="h-8 px-3 text-sm font-medium rounded-md border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                                onClick={() =>
+                                    setIsViewManagementOpen(
+                                        (current) => !current,
+                                    )
+                                }
+                            >
+                                {t("dashboard.tabs.manage_views")}
+                            </button>
                             <button
                                 className="h-8 px-3 flex items-center gap-1.5 text-sm font-medium rounded-md bg-brand-gradient text-white hover:opacity-90 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 shadow-sm"
                                 onClick={() => setIsAddDialogOpen(true)}
