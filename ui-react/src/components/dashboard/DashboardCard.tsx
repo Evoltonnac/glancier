@@ -1,7 +1,8 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useI18n } from "../../i18n";
 import { DashboardThumbnail } from "./DashboardThumbnail";
 import type { StoredView } from "../../types/config";
 
@@ -22,6 +23,7 @@ export function DashboardCard({
     onClick,
     className,
 }: DashboardCardProps) {
+    const { t } = useI18n();
     const {
         attributes,
         listeners,
@@ -55,58 +57,57 @@ export function DashboardCard({
             ref={setNodeRef}
             style={style}
             className={cn(
-                "group relative flex flex-col overflow-hidden rounded-xl border border-border/50 bg-surface shadow-sm transition-opacity",
-                isActive && "ring-2 ring-brand",
+                "group relative flex flex-col overflow-hidden rounded-xl border border-border bg-surface transition-colors duration-150 hover:border-foreground/20",
+                isActive && "border-brand/60",
                 isDragging && "opacity-50",
                 className,
             )}
         >
-            {/* Drag handle - top-left corner */}
             <div
                 {...attributes}
                 {...listeners}
-                className="absolute left-2 top-2 z-10 cursor-grab text-muted-foreground/40 hover:text-muted-foreground"
-                title="Drag to reorder"
+                className="qb-card-header flex cursor-grab items-center gap-3 border-b border-border px-4 py-3 active:cursor-grabbing"
+                title={t("dashboard.management.drag_handle_tooltip")}
             >
-                <GripVertical className="h-4 w-4" />
+                <span className="grid grid-cols-2 gap-0.5 text-muted-foreground/60">
+                    {Array.from({ length: 6 }).map((_, index) => (
+                        <span key={index} className="h-1 w-1 rounded-full bg-current" />
+                    ))}
+                </span>
+                <button
+                    type="button"
+                    onClick={handleCardClick}
+                    className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-foreground"
+                    title={view.name}
+                >
+                    {view.name}
+                </button>
             </div>
 
-            {/* Thumbnail area - clickable to enter dashboard */}
             <button
                 type="button"
                 onClick={handleCardClick}
-                className="mt-8 flex flex-col items-center px-2 pb-2 text-left hover:opacity-90"
+                className="px-4 pb-3 pt-3 text-left"
             >
                 <DashboardThumbnail view={view} className="w-full" />
             </button>
 
-            {/* Card title */}
-            <button
-                type="button"
-                onClick={handleCardClick}
-                className="line-clamp-1 px-3 pb-1 text-left text-sm font-semibold text-foreground hover:text-brand"
-                title={view.name}
-            >
-                {view.name}
-            </button>
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-1.5 px-3 pb-3">
+            <div className="flex items-center gap-2 px-4 pb-4 pt-1">
                 <button
                     type="button"
                     onClick={handleEditClick}
-                    className="flex items-center gap-1 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                     <Pencil className="h-3 w-3" />
-                    Edit
+                    {t("dashboard.management.edit")}
                 </button>
                 <button
                     type="button"
                     onClick={handleDeleteClick}
-                    className="flex items-center gap-1 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                     <Trash2 className="h-3 w-3" />
-                    Delete
+                    {t("dashboard.management.delete")}
                 </button>
             </div>
         </div>

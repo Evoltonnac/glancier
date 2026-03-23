@@ -1,4 +1,5 @@
 import { type DragEvent, useState } from "react";
+import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import type { StoredView } from "../../types/config";
 
@@ -6,9 +7,11 @@ interface ChromeTabProps {
     view: StoredView;
     isActive: boolean;
     isDragging?: boolean;
+    isFirst?: boolean;
     onSelect(): void;
     onRename(viewId: string, nextName: string): void;
     renamePlaceholder: string;
+    onClose?(viewId: string): void;
     onDragStart?(viewId: string, sourceZone: "visible" | "overflow"): void;
     onDragEnd?(): void;
 }
@@ -17,9 +20,11 @@ export function ChromeTab({
     view,
     isActive,
     isDragging = false,
+    isFirst = false,
     onSelect,
     onRename,
     renamePlaceholder,
+    onClose,
     onDragStart,
     onDragEnd,
 }: ChromeTabProps) {
@@ -50,17 +55,19 @@ export function ChromeTab({
                 setEditing(true);
             }}
             className={cn(
-                "group relative flex h-9 min-w-[100px] max-w-[200px] items-center gap-1.5 overflow-hidden rounded-t-md border px-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50",
+                "group relative flex h-9 min-w-[100px] max-w-[200px] items-center gap-1.5 overflow-hidden px-4 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50",
+                // Chrome-like overlap: all tabs have -ml-2 except the first one
+                !isFirst && "-ml-2",
                 // Inactive: muted background, subtle border
                 !isActive && [
-                    "border-border/60 bg-muted/50 text-muted-foreground",
-                    "hover:border-border hover:bg-muted/80 hover:text-foreground",
+                    "border-border/60 bg-muted/30 text-muted-foreground rounded-t-md border-t border-l border-r",
+                    "hover:bg-muted/50 hover:text-foreground",
                 ],
-                // Active: sits "above" the content area
+                // Active: sits "above" the content area with brand top border
                 isActive && [
-                    "z-10 -mb-px border-b-0 border-border bg-background text-foreground shadow-sm",
-                    // The angled top-left and top-right corners give the Chrome look
-                    "rounded-t-md",
+                    "z-10 -mb-px border-t-2 border-brand bg-surface text-foreground rounded-t-md border-l border-r border-b-0",
+                    // Always show close button on active tab
+                    "[&_.close-btn]:opacity-100",
                 ],
                 // Dragging: slight opacity reduction
                 isDragging && "opacity-60",
@@ -105,6 +112,24 @@ export function ChromeTab({
                     className="min-w-0 flex-1 truncate"
                 >
                     {view.name}
+                </span>
+            )}
+
+            {/* Close button */}
+            {onClose && (
+                <span
+                    className={cn(
+                        "close-btn flex h-4 w-4 shrink-0 items-center justify-center rounded-full opacity-0 transition-opacity duration-150 hover:bg-accent hover:text-accent-foreground",
+                        isActive ? "opacity-100" : "group-hover:opacity-100",
+                    )}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onClose(view.id);
+                    }}
+                    role="button"
+                    aria-label="Close tab"
+                >
+                    <X className="h-3 w-3" />
                 </span>
             )}
         </button>

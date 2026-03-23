@@ -1,4 +1,6 @@
-import { type DragEvent, useEffect, useState } from "react";
+import { type DragEvent, useEffect, useRef, useState } from "react";
+import { GripVertical, Pencil, Trash2 } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 import type { StoredView } from "../../types/config";
 
@@ -13,7 +15,6 @@ interface ViewManagementPanelProps {
     title: string;
     createLabel: string;
     renamePlaceholder: string;
-    deleteLabel: string;
     draggedViewId?: string | null;
     onDragStartView?(
         viewId: string,
@@ -34,13 +35,14 @@ export default function ViewManagementPanel({
     title,
     createLabel,
     renamePlaceholder,
-    deleteLabel,
     draggedViewId = null,
     onDragStartView,
     onDragEndView,
     onDropOverflowIndex,
 }: ViewManagementPanelProps) {
     const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const editingInputRef = useRef<HTMLInputElement>(null);
     const isDeleteBlocked = views.length <= 1;
     const overflowViewIdSet = new Set(overflowViewIds);
     const overflowViews = overflowViewIds
@@ -57,6 +59,14 @@ export default function ViewManagementPanel({
         });
     }, [views]);
 
+    // Auto-focus and select all text when entering edit mode
+    useEffect(() => {
+        if (editingId && editingInputRef.current) {
+            editingInputRef.current.focus();
+            editingInputRef.current.select();
+        }
+    }, [editingId]);
+
     const updateDraft = (viewId: string, value: string) => {
         setRenameDrafts((current) => ({
             ...current,
@@ -67,6 +77,15 @@ export default function ViewManagementPanel({
     const commitRename = (view: StoredView) => {
         const draft = renameDrafts[view.id] ?? view.name;
         onRenameView(view.id, draft);
+        setEditingId(null);
+    };
+
+    const startEditing = (view: StoredView) => {
+        setRenameDrafts((current) => ({
+            ...current,
+            [view.id]: view.name,
+        }));
+        setEditingId(view.id);
     };
 
     const handleDropTargetDragOver = (
@@ -86,19 +105,19 @@ export default function ViewManagementPanel({
     };
 
     return (
-        <section className="rounded-lg border border-border bg-surface/70 p-3">
-            <div className="mb-3 flex items-center justify-between gap-3">
+        <section className="rounded-lg border border-border bg-surface/70 p-2">
+            <div className="mb-2 flex items-center justify-between gap-3 px-2">
                 <h3 className="text-sm font-semibold">{title}</h3>
                 <button
                     type="button"
                     data-testid="dashboard-view-create"
-                    className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-muted"
+                    className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors duration-150"
                     onClick={onCreateView}
                 >
                     {createLabel}
                 </button>
             </div>
-            <div className="mb-3 space-y-1">
+            <div className="mb-2 space-y-1">
                 {Array.from({ length: overflowViews.length + 1 }, (_, index) => (
                     <div
                         key={`overflow-drop-${index}`}
@@ -119,16 +138,12 @@ export default function ViewManagementPanel({
                     />
                 ))}
             </div>
-            <ol className="space-y-2">
+            <ol className="flex flex-col gap-0.5">
                 {views.map((view) => (
                     <li
                         key={view.id}
                         data-testid={`dashboard-view-row-${view.id}`}
-                        className={`flex items-center gap-2 rounded-md border px-2 py-2 ${
-                            activeViewId === view.id
-                                ? "border-brand/60 bg-brand/5"
-                                : "border-border bg-background/60"
-                        }`}
+                        className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors duration-150"
                         draggable
                         onDragStart={(event) => {
                             event.dataTransfer.effectAllowed = "move";
@@ -140,43 +155,70 @@ export default function ViewManagementPanel({
                         }}
                         onDragEnd={() => onDragEndView?.()}
                     >
-                        <button
-                            type="button"
-                            className="max-w-[180px] shrink truncate text-left text-sm font-medium"
-                            title={view.name}
-                            onClick={() => onSelectView(view.id)}
-                        >
-                            {view.name}
-                        </button>
+                        {/* Drag handle */}
+                        <span className="w-4 h-4 text-muted-foreground/30 hover:text-foreground cursor-grab active:cursor-grabbing transition-colors flex-shrink-0">
+                            <GripVertical className="w-4 h-4" />
+                        </span>
+
+                        {/* Active indicator dot */}
+                        {activeViewId === view.id && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand flex-shrink-0" />
+                        )}
+
+                        {/* View name — always shows input for test compatibility, styled differently when not editing */}
                         <input
+                            ref={editingId === view.id ? editingInputRef : undefined}
                             type="text"
                             data-testid={`dashboard-view-rename-${view.id}`}
                             value={renameDrafts[view.id] ?? view.name}
                             onChange={(event) =>
                                 updateDraft(view.id, event.target.value)
                             }
-                            onBlur={() => commitRename(view)}
+                            onBlur={() => editingId === view.id && commitRename(view)}
                             onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                     event.preventDefault();
                                     commitRename(view);
                                 } else if (event.key === "Escape") {
                                     event.preventDefault();
+                                    setEditingId(null);
                                     updateDraft(view.id, view.name);
                                 }
                             }}
-                            className="h-8 min-w-0 flex-1 rounded border border-border bg-background px-2 text-sm"
+                            readOnly={editingId !== view.id}
+                            onClick={() => editingId !== view.id && onSelectView(view.id)}
+                            className={cn(
+                                "h-7 min-w-0 flex-1 rounded border px-2 text-sm transition-colors",
+                                editingId === view.id
+                                    ? "border-border bg-background focus-visible:ring-1 focus-visible:ring-brand"
+                                    : "border-transparent bg-transparent cursor-pointer truncate",
+                            )}
                             placeholder={renamePlaceholder}
                         />
-                        <button
-                            type="button"
-                            data-testid={`dashboard-view-delete-${view.id}`}
-                            className="rounded-md border border-border px-2 py-1 text-xs font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
-                            onClick={() => onDeleteView(view.id)}
-                            disabled={isDeleteBlocked}
-                        >
-                            {deleteLabel}
-                        </button>
+
+                        {/* Action buttons — reveal on hover */}
+                        <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+                            {editingId !== view.id && (
+                                <button
+                                    type="button"
+                                    className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+                                    onClick={() => startEditing(view)}
+                                    aria-label="Rename view"
+                                >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                data-testid={`dashboard-view-delete-${view.id}`}
+                                className="h-6 w-6 flex items-center justify-center rounded-md text-error hover:text-error hover:bg-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() => onDeleteView(view.id)}
+                                disabled={isDeleteBlocked}
+                                aria-label="Delete view"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                        </span>
                     </li>
                 ))}
             </ol>

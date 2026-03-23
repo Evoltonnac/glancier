@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -81,9 +82,12 @@ export function CreateDashboardDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('dashboard.management.edit_title')}</DialogTitle>
+      <DialogContent className="sm:max-w-md rounded-2xl border border-border bg-background p-6">
+        <DialogHeader className="space-y-2 text-left">
+          <DialogTitle>{t('dashboard.management.create_title')}</DialogTitle>
+          <DialogDescription>
+            {t('dashboard.management.create_description')}
+          </DialogDescription>
         </DialogHeader>
         <div className="py-4">
           <input
@@ -94,8 +98,8 @@ export function CreateDashboardDialog({
               if (error) setError(null);
             }}
             onKeyDown={handleKeyDown}
-            placeholder={t('dashboard.management.rename_placeholder')}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/50"
+            placeholder={t('dashboard.management.create_placeholder')}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand/50"
             autoFocus
             disabled={isCreating}
           />
@@ -105,17 +109,18 @@ export function CreateDashboardDialog({
         </div>
         <DialogFooter>
           <Button
-            variant="outline"
+            variant="secondary"
             onClick={() => handleOpenChange(false)}
             disabled={isCreating}
           >
             {t('common.cancel')}
           </Button>
           <Button
+            variant="outline"
             onClick={() => void handleCreate()}
             disabled={isCreating}
           >
-            {isCreating ? t('common.saving') : t('dashboard.management.create')}
+            {isCreating ? t('common.saving') : t('dashboard.management.create_submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { StoredView, ViewItem } from "../../types/config";
 import { cn } from "../../lib/utils";
 
@@ -194,31 +195,50 @@ function getSkeletonComponent(type: string) {
 }
 
 export function DashboardThumbnail({ view, className }: DashboardThumbnailProps) {
-    const { items } = view;
+    const items = useMemo(
+        () =>
+            [...(view.items ?? [])]
+                .sort((a, b) => (a.y - b.y) || (a.x - b.x))
+                .slice(0, 12),
+        [view.items],
+    );
 
-    // Empty state
-    if (!items || items.length === 0) {
+    if (items.length === 0) {
         return (
-            <div className={cn("relative overflow-hidden rounded-lg bg-[#f3f4f6] p-2", className)}>
+            <div
+                className={cn(
+                    "relative aspect-[16/10] overflow-hidden rounded-xl border border-border/60 bg-muted/40 p-2.5",
+                    className,
+                )}
+            >
                 <EmptySkeleton />
             </div>
         );
     }
 
-    // Determine unique widget types to display
-    const widgetTypes = items.slice(0, 3).map((item) => getWidgetType(item));
-
-    // If 1-2 widgets: show specific skeletons
-    // If 3+ widgets: show composition with up to 3 skeleton elements
     return (
-        <div className={cn("relative overflow-hidden rounded-lg bg-[#f3f4f6] p-2", className)}>
-            <div className="flex h-full flex-col gap-1.5">
-                {widgetTypes.map((type, index) => {
-                    const SkeletonComponent = getSkeletonComponent(type);
+        <div
+            className={cn(
+                "relative aspect-[16/10] overflow-hidden rounded-xl border border-border/60 bg-muted/30 p-2.5",
+                className,
+            )}
+        >
+            <div className="grid h-full w-full grid-cols-12 grid-rows-12 gap-1 rounded-lg bg-background/80 p-1">
+                {items.map((item) => {
+                    const SkeletonComponent = getSkeletonComponent(getWidgetType(item));
+                    const colStart = Math.min(item.x + 1, 12);
+                    const colSpan = Math.max(1, Math.min(item.w, 12 - item.x));
+                    const rowStart = Math.min(item.y + 1, 12);
+                    const rowSpan = Math.max(1, Math.min(item.h, 12 - item.y));
+
                     return (
                         <div
-                            key={index}
-                            className="flex h-full min-h-[32px] items-center justify-center"
+                            key={item.id}
+                            className="overflow-hidden rounded-md border border-border/40 bg-muted/70 p-1"
+                            style={{
+                                gridColumn: `${colStart} / span ${colSpan}`,
+                                gridRow: `${rowStart} / span ${rowSpan}`,
+                            }}
                         >
                             <SkeletonComponent />
                         </div>

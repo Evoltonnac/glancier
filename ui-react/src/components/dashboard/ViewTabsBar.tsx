@@ -13,6 +13,7 @@ interface ViewTabsBarProps {
     overflowViewIds: string[];
     onSelectView(viewId: string): void;
     onRenameView(viewId: string, nextName: string): void;
+    onCloseView?(viewId: string): void;
     onCreateView(): void;
     onAddWidget(): void;
     addWidgetLabel: string;
@@ -36,6 +37,7 @@ export default function ViewTabsBar({
     overflowViewIds,
     onSelectView,
     onRenameView,
+    onCloseView,
     onCreateView,
     onAddWidget,
     addWidgetLabel,
@@ -74,9 +76,9 @@ export default function ViewTabsBar({
     };
 
     return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-end gap-3">
             {/* Chrome tab strip — active tab sits at top of content area */}
-            <div className="flex items-center gap-1 flex-1 min-w-0">
+            <div className="flex items-end gap-1 flex-1 min-w-0">
                 <Tabs
                     value={activeViewId ?? undefined}
                     onValueChange={onSelectView}
@@ -88,7 +90,7 @@ export default function ViewTabsBar({
                                 {/* Drop zone between tabs */}
                                 <div
                                     data-testid={`dashboard-tab-drop-${index}`}
-                                    className={`h-8 w-1 shrink-0 rounded-sm ${
+                                    className={`h-8 w-1 shrink-0 rounded-sm transition-colors ${
                                         draggedViewId
                                             ? "bg-brand/20 hover:bg-brand/30"
                                             : "bg-transparent"
@@ -106,9 +108,11 @@ export default function ViewTabsBar({
                                     view={view}
                                     isActive={activeViewId === view.id}
                                     isDragging={draggedViewId === view.id}
+                                    isFirst={index === 0}
                                     onSelect={() => onSelectView(view.id)}
                                     onRename={onRenameView}
                                     renamePlaceholder={renamePlaceholder}
+                                    onClose={onCloseView}
                                     onDragStart={onDragStartView}
                                     onDragEnd={onDragEndView}
                                 />
@@ -117,7 +121,7 @@ export default function ViewTabsBar({
                         {/* Drop zone at the end of visible tabs */}
                         <div
                             data-testid={`dashboard-tab-drop-${visibleViews.length}`}
-                            className={`h-8 w-1 shrink-0 rounded-sm ${
+                            className={`h-8 w-1 shrink-0 rounded-sm transition-colors ${
                                 draggedViewId
                                     ? "bg-brand/20 hover:bg-brand/30"
                                     : "bg-transparent"
@@ -132,11 +136,11 @@ export default function ViewTabsBar({
                             }
                         />
 
-                        {/* New tab (+) button */}
+                        {/* New tab (+) button — Chrome-style compact rounded-md */}
                         <button
                             type="button"
                             data-testid="dashboard-tab-new"
-                            className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                            className="mb-px ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                             onClick={onCreateView}
                             title="New view"
                             aria-label="Create new view"
@@ -155,7 +159,7 @@ export default function ViewTabsBar({
                             <button
                                 type="button"
                                 data-testid="dashboard-tab-overflow-trigger"
-                                className="h-9 shrink-0 rounded-md border border-border/60 bg-muted/40 px-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                                className="mb-px h-9 shrink-0 rounded-md border border-border/60 bg-muted/40 px-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                                 title={overflowLabel}
                                 aria-label={overflowLabel}
                             >
@@ -178,7 +182,7 @@ export default function ViewTabsBar({
             <button
                 type="button"
                 data-testid="dashboard-add-widget"
-                className="shrink-0 h-9 px-3 flex items-center gap-1.5 text-sm font-medium rounded-md bg-brand-gradient text-white hover:opacity-90 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 shadow-sm"
+                className="shrink-0 h-8 px-3 flex items-center gap-1.5 text-xs uppercase tracking-wider font-semibold rounded-md bg-brand-gradient text-white hover:opacity-90 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 shadow-sm"
                 onClick={onAddWidget}
             >
                 <Plus className="w-4 h-4" />

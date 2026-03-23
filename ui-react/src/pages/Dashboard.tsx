@@ -64,8 +64,6 @@ import { BaseSourceCard } from "../components/BaseSourceCard";
 import { AddWidgetDialog } from "../components/AddWidgetDialog";
 import { ScraperStatusBanner } from "../components/ScraperStatusBanner";
 import { EmptyState } from "../components/EmptyState";
-import ViewManagementPanel from "../components/dashboard/ViewManagementPanel";
-import ViewTabsBar from "../components/dashboard/ViewTabsBar";
 import {
     DashboardGrid,
     DashboardSwiper,
@@ -82,13 +80,6 @@ import {
     mergeViewItemsWithGridNodes,
     sanitizeGridNodeLayout,
 } from "./dashboardLayout";
-import {
-    DASHBOARD_VISIBLE_TAB_CAP,
-    buildReorderedViewIds,
-    createIndexedViewName,
-    normalizeViewNameInput,
-    splitVisibleAndOverflowViewIds,
-} from "./dashboardViewTabs";
 import { parseCssLengthToPixels } from "./gridSizing";
 import { createViewSaveQueue } from "./viewSaveQueue";
 import { invoke } from "@tauri-apps/api/core";
@@ -435,13 +426,6 @@ export default function Dashboard() {
         }
         return ordered;
     }, [orderedViewIds, swrViews, viewsById]);
-    const { visibleViewIds, overflowViewIds } = useMemo(
-        () =>
-            splitVisibleAndOverflowViewIds(
-                orderedViews.map((view) => view.id),
-            ),
-        [orderedViews],
-    );
     const resolvedActiveViewId =
         activeViewId && viewsById.has(activeViewId)
             ? activeViewId
@@ -495,13 +479,6 @@ export default function Dashboard() {
     } = useScraper();
     const [errorSourceId, setErrorSourceId] = useState<string | null>(null);
     const [showErrorDetails, setShowErrorDetails] = useState(false);
-    const [dragSession, setDragSession] = useState<{
-        draggedViewId: string | null;
-        sourceZone: "visible" | "overflow" | null;
-    }>({
-        draggedViewId: null,
-        sourceZone: null,
-    });
 
     // Dialog state for dashboard management
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -509,12 +486,13 @@ export default function Dashboard() {
     const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
     const [deletingView, setDeletingView] = useState<StoredView | null>(null);
     const [renamingView, setRenamingView] = useState<StoredView | null>(null);
-    const [isCreating, setIsCreating] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
 
     // GridStack ref
-    const gridRef = useRef<HTMLDivElement>(null);
+    const [activeGridElement, setActiveGridElement] = useState<HTMLDivElement | null>(
+        null,
+    );
     const gsInstanceRef = useRef<GridStack | null>(null);
     const suppressGridChangeRef = useRef(false);
     const viewSaveQueueRef = useRef<ReturnType<typeof createViewSaveQueue> | null>(
@@ -544,6 +522,12 @@ export default function Dashboard() {
     useEffect(() => {
         viewConfigRef.current = viewConfig;
     }, [viewConfig]);
+
+    const setActiveGridRef = useCallback((element: HTMLDivElement | null) => {
+        setActiveGridElement((previous) =>
+            previous === element ? previous : element,
+        );
+    }, []);
 
     const applyOptimisticViewUpdate = useCallback(
         (nextView: StoredView) => {
@@ -582,153 +566,9 @@ export default function Dashboard() {
         return () => window.clearInterval(timer);
     }, []);
 
-    const handleSelectView = (viewId: string) => {
-        if (!viewId) {
-            return;
-        }
-        setActiveViewId(viewId);
-    };
-
-    const handleViewDragStart = useCallback(
-        (draggedViewId: string, sourceZone: "visible" | "overflow") => {
-            setDragSession({
-                draggedViewId,
-                sourceZone,
-            });
-        },
-        [],
-    );
-
-    const clearViewDragSession = useCallback(() => {
-        setDragSession({
-            draggedViewId: null,
-            sourceZone: null,
-        });
-    }, []);
-
-    const handleViewDrop = useCallback(
-        (
-            dropZone: "visible" | "overflow",
-            dropIndex: number,
-            dropTargetViewId: string | null,
-        ) => {
-            if (!dragSession.draggedViewId || !dragSession.sourceZone) {
-                return;
-            }
-
-            const nextOrderedIds = buildReorderedViewIds({
-                orderedViewIds: orderedViews.map((view) => view.id),
-                draggedViewId: dragSession.draggedViewId,
-                dropTargetViewId,
-                dropZone,
-                dropIndex,
-                cap: DASHBOARD_VISIBLE_TAB_CAP,
-            });
-            setOrderedViewIds(nextOrderedIds);
-            clearViewDragSession();
-        },
-        [
-            clearViewDragSession,
-            dragSession.draggedViewId,
-            dragSession.sourceZone,
-            orderedViews,
-            setOrderedViewIds,
-        ],
-    );
-
-    const handleCreateView = async () => {
-        const nextView: StoredView = {
-            id: `view-${Date.now()}`,
-            name: createIndexedViewName(
-                swrViews.map((view: StoredView) => view.name),
-                t("dashboard.tabs.new_view_base"),
-            ),
-            layout_columns: 12,
-            items: [],
-        };
-
-        try {
-            await api.createView(nextView);
-            await invalidateViews();
-        } catch (error) {
-            console.error("Failed to create view:", error);
-            showToast(t("common.retryLater"), "error");
-        }
-    };
-
-    const handleRenameView = async (viewId: string, rawName: string) => {
-        const currentView = swrViews.find(
-            (view: StoredView) => view.id === viewId,
-        );
-        if (!currentView) {
-            return;
-        }
-
-        const normalizedName = normalizeViewNameInput(rawName);
-        if (!normalizedName) {
-            showToast(t("dashboard.tabs.rename_empty"), "error");
-            return;
-        }
-
-        const duplicateExists = swrViews.some((view: StoredView) => {
-            if (view.id === viewId) {
-                return false;
-            }
-            return (
-                normalizeViewNameInput(view.name).toLocaleLowerCase() ===
-                normalizedName.toLocaleLowerCase()
-            );
-        });
-        if (duplicateExists) {
-            showToast(t("dashboard.tabs.rename_duplicate"), "error");
-            return;
-        }
-
-        if (normalizedName === currentView.name) {
-            return;
-        }
-
-        try {
-            await api.updateView(viewId, {
-                ...currentView,
-                name: normalizedName,
-            });
-            await invalidateViews();
-        } catch (error) {
-            console.error("Failed to rename view:", error);
-            showToast(t("common.retryLater"), "error");
-        }
-    };
-
-    const handleDeleteView = async (viewId: string) => {
-        if (swrViews.length <= 1) {
-            showToast(t("dashboard.tabs.delete_blocked_last"), "error");
-            return;
-        }
-
-        try {
-            await api.deleteView(viewId);
-
-            if (resolvedActiveViewId === viewId) {
-                const nextActiveView =
-                    orderedViews.find((view) => view.id !== viewId)?.id ??
-                    swrViews.find((view: StoredView) => view.id !== viewId)
-                        ?.id ??
-                    null;
-                setActiveViewId(nextActiveView);
-            }
-
-            await invalidateViews();
-        } catch (error) {
-            console.error("Failed to delete view:", error);
-            showToast(t("common.retryLater"), "error");
-        }
-    };
-
     // Dashboard management CRUD handlers
 
     const handleCreateDashboard = async (name: string) => {
-        setIsCreating(true);
         try {
             const nextView: StoredView = {
                 id: `view-${Date.now()}`,
@@ -737,17 +577,17 @@ export default function Dashboard() {
                 items: [],
             };
             await api.createView(nextView);
+            setActiveViewId(nextView.id);
+            setSelectedDashboardId(nextView.id);
+            setOrderedViewIds([...orderedViews.map((view) => view.id), nextView.id]);
             await invalidateViews();
             showToast(t("dashboard.management.create_success"), "success");
             setIsCreateDialogOpen(false);
-            // Enter the new dashboard in single view mode
-            setSelectedDashboardId(nextView.id);
             setViewMode("single");
         } catch (error) {
             console.error("Failed to create dashboard:", error);
             showToast(t("common.retryLater"), "error");
-        } finally {
-            setIsCreating(false);
+            throw error;
         }
     };
 
@@ -807,10 +647,6 @@ export default function Dashboard() {
 
     const handleEnterManagementMode = () => {
         setViewMode("management");
-    };
-
-    const handleExitManagementMode = () => {
-        setViewMode("single");
     };
 
     const handleAddWidget = async (
@@ -875,7 +711,7 @@ export default function Dashboard() {
         const gs = gsInstanceRef.current;
         if (gs) {
             suppressGridChangeRef.current = true;
-            const el = gridRef.current?.querySelector(`[gs-id="${itemId}"]`);
+            const el = activeGridElement?.querySelector(`[gs-id="${itemId}"]`);
             if (el) gs.removeWidget(el as HTMLElement, false);
             requestAnimationFrame(() => {
                 suppressGridChangeRef.current = false;
@@ -930,26 +766,27 @@ export default function Dashboard() {
     }, [applyOptimisticViewUpdate]);
 
     useEffect(() => {
-        const gs = gsInstanceRef.current;
         const hasRenderableGrid =
-            !!gridRef.current && !!viewConfig && viewConfig.items.length > 0;
+            !!activeGridElement && !!viewConfig && viewConfig.items.length > 0;
+
         if (!hasRenderableGrid) {
-            if (gs) {
-                gs.destroy(false);
+            if (gsInstanceRef.current) {
+                gsInstanceRef.current.destroy(false);
                 gsInstanceRef.current = null;
             }
             return;
         }
 
-        if (gs && gridRef.current && gs.el !== gridRef.current) {
-            gs.destroy(false);
+        const currentElement = activeGridElement;
+        const existing = gsInstanceRef.current;
+
+        if (existing && currentElement && existing.el !== currentElement) {
+            existing.destroy(false);
             gsInstanceRef.current = null;
         }
 
-        if (!gsInstanceRef.current) {
-            // Suppress change events during initial setup to avoid zeroing out coordinates
+        if (!gsInstanceRef.current && currentElement) {
             suppressGridChangeRef.current = true;
-
             const instance = GridStack.init(
                 {
                     column: viewConfig.layout_columns || 12,
@@ -960,37 +797,20 @@ export default function Dashboard() {
                     draggable: { handle: ".qb-card-header" },
                     resizable: { handles: "se" },
                 },
-                gridRef.current,
+                currentElement,
             );
             gsInstanceRef.current = instance;
             instance.on("change", handleGridChange);
+            instance.batchUpdate();
 
-            // Allow the layout to settle before enabling save
-            setTimeout(() => {
+            requestAnimationFrame(() => {
+                instance.batchUpdate(false);
+                instance.cellHeight(gridRowHeight);
+                instance.margin(gridGap);
                 suppressGridChangeRef.current = false;
-            }, 300);
-        } else {
-            // React re-renders (like data loading or new item addition) can strip
-            // GridStack classes and lose grid styles. Re-initialize items.
-            // Also handles tab switches: clear old items before adding current ones.
-            suppressGridChangeRef.current = true;
-            setTimeout(() => {
-                if (gridRef.current && gsInstanceRef.current) {
-                    const elements =
-                        gridRef.current.querySelectorAll(".grid-stack-item");
-                    // Remove all existing widgets first to handle tab switches cleanly
-                    gsInstanceRef.current.removeAll(false);
-                    // Re-add all current items
-                    elements.forEach((el) => {
-                        gsInstanceRef.current!.makeWidget(el as HTMLElement);
-                    });
-                }
-                requestAnimationFrame(() => {
-                    suppressGridChangeRef.current = false;
-                });
-            }, 0);
+            });
         }
-    }, [viewConfig?.items, dataMap, handleGridChange]);
+    }, [activeGridElement, gridGap, gridRowHeight, handleGridChange, viewConfig?.id, viewConfig?.items.length, viewConfig?.layout_columns]);
 
     useEffect(() => {
         return () => {
@@ -1842,165 +1662,224 @@ export default function Dashboard() {
                     )}
                 </aside>
 
-                <main className="flex-1 p-4 overflow-y-auto">
-                    <ViewTabsBar
-                        views={orderedViews}
-                        activeViewId={resolvedActiveViewId}
-                        visibleViewIds={visibleViewIds}
-                        overflowViewIds={overflowViewIds}
-                        onSelectView={handleSelectView}
-                        onRenameView={handleRenameView}
-                        onCreateView={handleCreateView}
-                        onAddWidget={() => setIsAddDialogOpen(true)}
-                        addWidgetLabel={t("dashboard.action.add_widget")}
-                        overflowLabel={t("dashboard.tabs.overflow_more", {
-                            count: overflowViewIds.length,
-                        })}
-                        renamePlaceholder={t(
-                            "dashboard.tabs.rename_placeholder",
-                        )}
-                        draggedViewId={dragSession.draggedViewId}
-                        onDragStartView={handleViewDragStart}
-                        onDragEndView={clearViewDragSession}
-                        onDropVisibleIndex={(dropIndex, dropTargetViewId) =>
-                            handleViewDrop(
-                                "visible",
-                                dropIndex,
-                                dropTargetViewId,
-                            )
-                        }
-                        overflowPanel={
-                            <ViewManagementPanel
+                <main
+                    className={cn(
+                        "flex-1 p-4",
+                        viewMode === "management"
+                            ? "overflow-y-auto"
+                            : "flex min-h-0 flex-col overflow-hidden",
+                    )}
+                >
+                    {/* Mode switcher: Management vs Single View */}
+                    {viewMode === "management" ? (
+                        /* Management Mode UI */
+                        <div className="space-y-6">
+                            {/* Header */}
+                            <div className="flex items-center justify-between">
+                                <h1 className="text-2xl font-bold">
+                                    {t("dashboard.management.title")}
+                                </h1>
+                                <Button
+                                    onClick={() => setIsCreateDialogOpen(true)}
+                                    variant="secondary"
+                                    size="sm"
+                                >
+                                    {t("dashboard.management.create_button")}
+                                </Button>
+                            </div>
+
+                            {/* Empty state */}
+                            {orderedViews.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-center">
+                                    <Database className="w-12 h-12 text-muted-foreground mb-4" />
+                                    <h2 className="text-lg font-semibold mb-2">
+                                        {t("dashboard.management.empty_title")}
+                                    </h2>
+                                    <p className="text-muted-foreground mb-6">
+                                        {t("dashboard.management.empty_description")}
+                                    </p>
+                                    <Button
+                                        onClick={() => setIsCreateDialogOpen(true)}
+                                        variant="secondary"
+                                        size="sm"
+                                    >
+                                        {t("dashboard.management.create_button")}
+                                    </Button>
+                                </div>
+                            ) : (
+                                /* Dashboard Grid with drag-drop */
+                                <DashboardGrid
+                                    views={orderedViews}
+                                    activeViewId={activeViewId}
+                                    onReorder={handleReorderDashboards}
+                                    onEdit={handleEditDashboard}
+                                    onDelete={(view) => {
+                                        setDeletingView(view);
+                                        setIsDeleteDialogOpen(true);
+                                    }}
+                                    onSelect={handleSelectDashboard}
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        /* Single View Mode UI */
+                        <>
+                            <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
+                                <h1
+                                    className="min-w-0 truncate text-2xl font-bold text-foreground"
+                                    title={viewConfig?.name ?? undefined}
+                                >
+                                    {viewConfig?.name ?? t("dashboard.management.empty_title")}
+                                </h1>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={handleEnterManagementMode}
+                                    >
+                                        {t("dashboard.management.all_dashboards")}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsAddDialogOpen(true)}
+                                    >
+                                        {t("dashboard.action.add_widget")}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Dashboard content with swiper for horizontal navigation */}
+                            <DashboardSwiper
+                                className="min-h-0 flex-1"
                                 views={orderedViews}
                                 activeViewId={resolvedActiveViewId}
-                                overflowViewIds={overflowViewIds}
-                                onSelectView={handleSelectView}
-                                onCreateView={handleCreateView}
-                                onRenameView={handleRenameView}
-                                onDeleteView={handleDeleteView}
-                                title={t("dashboard.tabs.overflow_title")}
-                                createLabel={t("dashboard.tabs.create_view")}
-                                renamePlaceholder={t(
-                                    "dashboard.tabs.rename_placeholder",
-                                )}
-                                deleteLabel={t("dashboard.tabs.delete_view")}
-                                draggedViewId={dragSession.draggedViewId}
-                                onDragStartView={handleViewDragStart}
-                                onDragEndView={clearViewDragSession}
-                                onDropOverflowIndex={(
-                                    dropIndex,
-                                    dropTargetViewId,
-                                ) =>
-                                    handleViewDrop(
-                                        "overflow",
-                                        dropIndex,
-                                        dropTargetViewId,
-                                    )
-                                }
-                            />
-                        }
-                    />
-
-                    {!viewConfig || viewConfig.items.length === 0 ? (
-                        <EmptyState
-                            icon={
-                                <Database className="h-8 w-8 text-muted-foreground" />
-                            }
-                            title={t("dashboard.empty.title")}
-                            description={t("dashboard.empty.description")}
-                            actionLabel={t("dashboard.empty.action")}
-                            onAction={() => setIsAddDialogOpen(true)}
-                            className="border border-dashed rounded-lg bg-surface/30 mx-4 mb-4"
-                        />
-                    ) : (
-                        <div
-                            ref={gridRef}
-                            className={`grid-stack grid-stack-${viewConfig.layout_columns || 12}`}
-                        >
-                            {viewConfig.items.map((item) => {
-                                const safeLayout = sanitizeGridNodeLayout(
-                                    {
-                                        id: item.id,
-                                        x: item.x,
-                                        y: item.y,
-                                        w: item.w,
-                                        h: item.h,
-                                    },
-                                    viewConfig.layout_columns || 12,
-                                );
-                                const sourceData = item.source_id
-                                    ? dataMap[item.source_id]
-                                    : null;
-                                const sourceSummary = item.source_id
-                                    ? sources.find(
-                                          (s) => s.id === item.source_id,
-                                      )
-                                    : undefined;
-                                const safeProps = toSafeViewProps(
-                                    item.id,
-                                    item.props,
-                                );
-                                const normalizedType = normalizeTemplateType(
-                                    item.id,
-                                    safeProps.type ?? item.template_id,
-                                );
-                                const normalizedLabel =
-                                    typeof safeProps.label === "string"
-                                        ? safeProps.label
-                                        : safeProps.ui?.title ||
-                                          item.template_id;
-                                const resetKey = [
-                                    item.id,
-                                    item.source_id || "",
-                                    normalizedType,
-                                    normalizedLabel,
-                                    Array.isArray(safeProps.widgets)
-                                        ? safeProps.widgets.length
-                                        : 0,
-                                ].join(":");
-
-                                const comp: ViewComponent = {
-                                    ...safeProps,
-                                    id: item.template_id,
-                                    type: normalizedType,
-                                    label: normalizedLabel,
-                                };
-
-                                return (
-                                    <div
-                                        key={item.id}
-                                        className="grid-stack-item"
-                                        gs-id={item.id}
-                                        gs-x={String(safeLayout.x)}
-                                        gs-y={String(safeLayout.y)}
-                                        gs-w={String(safeLayout.w)}
-                                        gs-h={String(safeLayout.h)}
-                                    >
-                                        <div className="grid-stack-item-content relative overflow-hidden group/card">
-                                            <DeleteBtn
-                                                onDelete={() =>
-                                                    handleDeleteWidget(item.id)
+                                onViewChange={(viewId) => {
+                                    setActiveViewId(viewId);
+                                    setSelectedDashboardId(viewId);
+                                }}
+                            >
+                                {(view) => {
+                                    const thisViewConfig = viewsById.get(view.id);
+                                    const isActiveView = view.id === resolvedActiveViewId;
+                                    if (!thisViewConfig || thisViewConfig.items.length === 0) {
+                                        return (
+                                            <div className="flex min-h-0 h-full flex-col">
+                                                <EmptyState
+                                                    icon={
+                                                        <Database className="h-8 w-8 text-muted-foreground" />
+                                                    }
+                                                    title={t("dashboard.empty.title")}
+                                                    description={t("dashboard.empty.description")}
+                                                    actionLabel={t("dashboard.empty.action")}
+                                                    onAction={() => setIsAddDialogOpen(true)}
+                                                    className="m-0 flex-1 rounded-xl border border-dashed bg-surface/30"
+                                                />
+                                            </div>
+                                        );
+                                    }
+                                    return (
+                                        <div className="min-h-0 h-full overflow-y-auto pr-1">
+                                            <div
+                                                key={`grid-${view.id}`}
+                                                ref={
+                                                    isActiveView
+                                                        ? setActiveGridRef
+                                                        : undefined
                                                 }
-                                            />
-                                            <div className="w-full h-full flex flex-col [&>*]:flex-1 [&>*]:min-h-0">
-                                                <WidgetFallbackBoundary
-                                                    itemId={item.id}
-                                                    resetKey={resetKey}
-                                                >
-                                                    {renderComponent(
-                                                        comp,
-                                                        sourceData,
-                                                        sourceSummary,
-                                                        setInteractSource,
-                                                        openErrorDialog,
-                                                    )}
-                                                </WidgetFallbackBoundary>
+                                                className={`grid-stack grid-stack-${thisViewConfig.layout_columns || 12}`}
+                                            >
+                                                {thisViewConfig.items.map((item) => {
+                                                    const safeLayout = sanitizeGridNodeLayout(
+                                                        {
+                                                            id: item.id,
+                                                            x: item.x,
+                                                            y: item.y,
+                                                            w: item.w,
+                                                            h: item.h,
+                                                        },
+                                                        thisViewConfig.layout_columns || 12,
+                                                    );
+                                                    const sourceData = item.source_id
+                                                        ? dataMap[item.source_id]
+                                                        : null;
+                                                    const sourceSummary = item.source_id
+                                                        ? sources.find(
+                                                              (s) => s.id === item.source_id,
+                                                          )
+                                                        : undefined;
+                                                    const safeProps = toSafeViewProps(
+                                                        item.id,
+                                                        item.props,
+                                                    );
+                                                    const normalizedType = normalizeTemplateType(
+                                                        item.id,
+                                                        safeProps.type ?? item.template_id,
+                                                    );
+                                                    const normalizedLabel =
+                                                        typeof safeProps.label === "string"
+                                                            ? safeProps.label
+                                                            : safeProps.ui?.title ||
+                                                              item.template_id;
+                                                    const resetKey = [
+                                                        item.id,
+                                                        item.source_id || "",
+                                                        normalizedType,
+                                                        normalizedLabel,
+                                                        Array.isArray(safeProps.widgets)
+                                                            ? safeProps.widgets.length
+                                                            : 0,
+                                                    ].join(":");
+
+                                                    const comp: ViewComponent = {
+                                                        ...safeProps,
+                                                        id: item.template_id,
+                                                        type: normalizedType,
+                                                        label: normalizedLabel,
+                                                    };
+
+                                                    return (
+                                                        <div
+                                                            key={item.id}
+                                                            className="grid-stack-item"
+                                                            gs-id={item.id}
+                                                            gs-x={String(safeLayout.x)}
+                                                            gs-y={String(safeLayout.y)}
+                                                            gs-w={String(safeLayout.w)}
+                                                            gs-h={String(safeLayout.h)}
+                                                        >
+                                                            <div className="grid-stack-item-content relative overflow-hidden group/card">
+                                                                <DeleteBtn
+                                                                    onDelete={() =>
+                                                                        handleDeleteWidget(item.id)
+                                                                    }
+                                                                />
+                                                                <div className="w-full h-full flex flex-col [&>*]:flex-1 [&>*]:min-h-0">
+                                                                    <WidgetFallbackBoundary
+                                                                        itemId={item.id}
+                                                                        resetKey={resetKey}
+                                                                    >
+                                                                        {renderComponent(
+                                                                            comp,
+                                                                            sourceData,
+                                                                            sourceSummary,
+                                                                            setInteractSource,
+                                                                            openErrorDialog,
+                                                                        )}
+                                                                    </WidgetFallbackBoundary>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    );
+                                }}
+                            </DashboardSwiper>
+                        </>
                     )}
                 </main>
 
@@ -2103,6 +1982,44 @@ export default function Dashboard() {
                     invalidateSources();
                 }}
                 onPushToQueue={handlePushToQueue}
+            />
+
+            {/* Dashboard Management Dialogs */}
+
+            {/* Create Dashboard Dialog */}
+            <CreateDashboardDialog
+                open={isCreateDialogOpen}
+                onOpenChange={setIsCreateDialogOpen}
+                onCreate={handleCreateDashboard}
+                existingNames={swrViews.map((v: StoredView) => v.name)}
+            />
+
+            {/* Delete Confirmation Dialog */}
+            <DeleteConfirmDialog
+                open={isDeleteDialogOpen}
+                onOpenChange={(open) => {
+                    setIsDeleteDialogOpen(open);
+                    if (!open) setDeletingView(null);
+                }}
+                view={deletingView}
+                onConfirm={handleDeleteDashboard}
+                isDeleting={isDeleting}
+            />
+
+            {/* Rename Dialog */}
+            <RenameDialog
+                open={isRenameDialogOpen}
+                onOpenChange={(open) => {
+                    setIsRenameDialogOpen(open);
+                    if (!open) setRenamingView(null);
+                }}
+                view={renamingView}
+                onRename={handleRenameDashboard}
+                existingNames={swrViews
+                    .filter((v: StoredView) => v.id !== renamingView?.id)
+                    .map((v: StoredView) => v.name)
+                }
+                isRenaming={isRenaming}
             />
         </TooltipProvider>
     );
