@@ -86,9 +86,11 @@ async def test_http_step_retries_connect_error(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.asyncio
 async def test_http_step_raises_after_retry_exhausted(monkeypatch: pytest.MonkeyPatch):
+    captured_client_kwargs: dict = {}
+
     class FakeAsyncClient:
         def __init__(self, **kwargs):
-            _ = kwargs
+            captured_client_kwargs.update(kwargs)
 
         async def __aenter__(self):
             return self
@@ -138,6 +140,8 @@ async def test_http_step_raises_after_retry_exhausted(monkeypatch: pytest.Monkey
             executor,
         )
     assert exc_info.value.code == "runtime.network_timeout"
+    assert captured_client_kwargs["trust_env"] is True
+    assert "proxy" not in captured_client_kwargs
 
 
 @pytest.mark.asyncio

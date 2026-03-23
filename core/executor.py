@@ -32,6 +32,7 @@ from core.config_loader import (
 )
 from core.auth.oauth_auth import OAuthAuth
 from core.error_formatter import format_runtime_error
+from core.network_proxy import resolve_proxy_url
 from jsonpath_ng import parse
 
 logger = logging.getLogger(__name__)
@@ -141,13 +142,7 @@ class Executor:
 
     def _get_proxy_url(self) -> str | None:
         """Read proxy URL from system settings; return None if unset."""
-        if self._settings_manager is None:
-            return None
-        try:
-            proxy = self._settings_manager.load_settings().proxy
-            return proxy if proxy else None
-        except Exception:
-            return None
+        return resolve_proxy_url(self._settings_manager)
 
     def get_source_state(self, source_id: str) -> SourceState:
         """Get runtime state for source."""
@@ -771,7 +766,12 @@ class Executor:
             return False
 
         auth_config = self._build_oauth_auth_config(recovery_step)
-        handler = OAuthAuth(auth_config, source.id, self._secrets)
+        handler = OAuthAuth(
+            auth_config,
+            source.id,
+            self._secrets,
+            settings_manager=self._settings_manager,
+        )
         try:
             refreshed = await handler.try_refresh_token(force=True)
         except Exception as exc:

@@ -93,7 +93,7 @@ const enMessages = {
   "settings.update.progress.unknown_total": "Downloaded {downloaded}",
   "settings.update.speed": "{speed}",
   "settings.proxy.label": "HTTP/HTTPS Proxy",
-  "settings.proxy.description": "Used by Python backend HTTP requests. Leave empty to disable.",
+  "settings.proxy.description": "Preferred by backend HTTP requests and desktop updater. Leave empty to fall back to system proxy.",
   "settings.scraper.timeout.label": "Scraper Timeout (seconds)",
   "settings.scraper.timeout.description": "Default is 10 seconds. Timed-out tasks are skipped automatically.",
   "settings.script.sandbox.label": "Enable script sandbox",

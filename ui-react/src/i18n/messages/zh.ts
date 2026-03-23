@@ -93,7 +93,7 @@ const zhMessages = {
   "settings.update.progress.unknown_total": "已下载 {downloaded}",
   "settings.update.speed": "{speed}",
   "settings.proxy.label": "HTTP/HTTPS 代理",
-  "settings.proxy.description": "适用于 Python 后端 HTTP 请求。留空表示不使用。",
+  "settings.proxy.description": "优先用于 Python 后端 HTTP 请求和桌面更新器。留空时回退到系统代理。",
   "settings.scraper.timeout.label": "抓取超时 (秒)",
   "settings.scraper.timeout.description": "默认 10 秒。超时后任务会自动跳过。",
   "settings.script.sandbox.label": "启用脚本沙箱",

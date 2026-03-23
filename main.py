@@ -224,7 +224,11 @@ def create_app() -> FastAPI:
     secrets_controller = SecretsController()
 
     # Authentication manager.
-    auth_manager = AuthManager(secrets_controller, app_config=config)
+    auth_manager = AuthManager(
+        secrets_controller,
+        app_config=config,
+        settings_manager=settings_manager,
+    )
 
     settings_file = getattr(
         settings_manager,

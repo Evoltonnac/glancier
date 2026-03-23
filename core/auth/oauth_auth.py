@@ -16,6 +16,7 @@ from authlib.integrations.httpx_client import AsyncOAuth2Client
 
 from core.config_loader import AuthConfig
 from core.log_redaction import redact_sensitive_fields, sanitize_log_reason
+from core.network_proxy import build_httpx_proxy_kwargs
 from core.secrets_controller import SecretsController
 from .oauth_types import CodeChallengeMethod, GrantType, OAuthParams, ResponseType
 from .pkce import PKCEUtils
@@ -29,12 +30,25 @@ JSON_STYLE_TOKEN_REQUEST_TYPES = {"json", "json_body", "json_request"}
 class OAuthAuth:
     """Unified OAuth flow handler with token persistence."""
 
-    def __init__(self, auth_config: AuthConfig, source_id: str, secrets_controller: SecretsController):
+    def __init__(
+        self,
+        auth_config: AuthConfig,
+        source_id: str,
+        secrets_controller: SecretsController,
+        settings_manager: Any | None = None,
+    ):
         self.config = auth_config
         self.source_id = source_id
         self.secrets = secrets_controller
+        self._settings_manager = settings_manager
         self._token_data: dict[str, Any] | None = None
         self._load_token()
+
+    def _httpx_client_kwargs(self, *, timeout: float | None = None) -> dict[str, Any]:
+        return build_httpx_proxy_kwargs(
+            settings_manager=self._settings_manager,
+            timeout=timeout,
+        )
 
     def _first_non_none(self, *values: Any) -> Any:
         for value in values:
@@ -323,6 +337,7 @@ class OAuthAuth:
             update_token=update_token,
             leeway=60,
             **metadata,
+            **self._httpx_client_kwargs(),
         )
 
     async def _fetch_token_json(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -343,7 +358,7 @@ class OAuthAuth:
             # Backward-compatible path: "json" keeps form payload but asks JSON response.
             request_kwargs = {"data": req_payload}
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**self._httpx_client_kwargs()) as client:
             response = await client.post(
                 self.config.token_url,
                 headers=headers,
@@ -479,7 +494,7 @@ class OAuthAuth:
             if client_secret and self.config.token_endpoint_auth_method.value == "client_secret_post":
                 payload[OAuthParams.CLIENT_SECRET] = client_secret
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(**self._httpx_client_kwargs()) as client:
                 logger.info(
                     "[%s] Posting to device URL: %s payload=%s",
                     self.source_id,
@@ -598,7 +613,7 @@ class OAuthAuth:
         if client_secret and self.config.token_endpoint_auth_method.value == "client_secret_post":
             payload[OAuthParams.CLIENT_SECRET] = client_secret
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**self._httpx_client_kwargs()) as client:
             response = await client.post(self.config.token_url, data=payload, headers={"Accept": "application/json"})
 
         response_payload = self._parse_oauth_payload(response)

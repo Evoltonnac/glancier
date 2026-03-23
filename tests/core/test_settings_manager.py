@@ -88,3 +88,12 @@ def test_save_settings_drops_legacy_master_key_field(tmp_path):
     saved_payload = manager.settings_file.read_text(encoding="utf-8")
 
     assert "master_key" not in saved_payload
+
+
+def test_proxy_value_is_trimmed_on_save_and_load(tmp_path):
+    manager = SettingsManager(settings_dir=tmp_path)
+
+    manager.save_settings(SystemSettings(proxy="  http://127.0.0.1:7890  "))
+    loaded = manager.load_settings()
+
+    assert loaded.proxy == "http://127.0.0.1:7890"

@@ -38,6 +38,15 @@ class SystemSettings(BaseModel):
     # UI language. English is default.
     language: Literal["en", "zh"] = "en"
 
+    @field_validator("proxy", mode="before")
+    @classmethod
+    def _normalize_proxy(cls, value):
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
     @field_validator("refresh_interval_minutes", mode="before")
     @classmethod
     def _validate_refresh_interval_minutes(cls, value):

@@ -384,7 +384,11 @@ export default function SettingsPage() {
         showToast(t("settings.toast.check_update_checking"), "info");
         try {
             const { check } = await import("@tauri-apps/plugin-updater");
-            const update = await check();
+            const updaterProxy = settings.proxy.trim();
+            const update = await check({
+                timeout: 15000,
+                ...(updaterProxy ? { proxy: updaterProxy } : {}),
+            });
             if (!update) {
                 setUpdateProgress(INITIAL_UPDATE_PROGRESS);
                 showToast(t("settings.about.up_to_date"), "info");

@@ -25,9 +25,15 @@ class AuthManager:
     Manage authentication handling for all sources.
     """
 
-    def __init__(self, secrets_controller: SecretsController, app_config: AppConfig | None = None):
+    def __init__(
+        self,
+        secrets_controller: SecretsController,
+        app_config: AppConfig | None = None,
+        settings_manager: Any | None = None,
+    ):
         self.secrets = secrets_controller
         self._app_config = app_config
+        self._settings_manager = settings_manager
         self._handlers: dict[str, Any] = {}
         self._source_errors: dict[str, str] = {}
 
@@ -146,7 +152,8 @@ class AuthManager:
                 self._handlers[source_id] = OAuthAuth(
                     auth_config,
                     source_id,
-                    self.secrets
+                    self.secrets,
+                    settings_manager=self._settings_manager,
                 )
                 logger.info("[%s] OAuth auth handler registered (from flow)", source_id)
                 return

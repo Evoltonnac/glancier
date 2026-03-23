@@ -97,6 +97,7 @@ The GitHub Actions release job is defined in `.github/workflows/ci.yml` as `rele
 ## Runtime Update Contract
 
 - In-app update check (Settings -> `Check Updates`) must use Tauri updater metadata (`latest.json`) instead of redirecting users to GitHub Releases.
+- Proxy policy for update checks/downloads: prefer app settings proxy (`SystemSettings.proxy`); when unset, fall back to system/env proxy resolution.
 - When an update is available, the client must call updater download/install flow to fetch signed updater artifacts (for macOS: `*.app.tar.gz` + `*.app.tar.gz.sig`).
 - After successful install, the desktop runtime must relaunch the app process so the replaced bundle is activated without a manual installer flow.
 

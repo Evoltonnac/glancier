@@ -101,13 +101,15 @@ async def execute_http_step(
 
     proxy_url = executor._get_proxy_url()
     client_kwargs: Dict[str, Any] = {
-        # Use app settings as the single source of proxy truth.
-        # Avoid inheriting shell proxy env unexpectedly.
-        "trust_env": False,
         "timeout": timeout_seconds,
     }
     if proxy_url:
+        # Explicit proxy in app settings has highest priority.
+        client_kwargs["trust_env"] = False
         client_kwargs["proxy"] = proxy_url
+    else:
+        # Fallback to system/env proxy settings when app proxy is unset.
+        client_kwargs["trust_env"] = True
 
     async with httpx.AsyncClient(**client_kwargs) as client:
         for attempt in range(retries + 1):
