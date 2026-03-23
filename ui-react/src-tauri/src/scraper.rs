@@ -839,20 +839,16 @@ pub async fn push_scraper_task(
                 }}
             }}
 
-            // Resource blocker
-            const blockExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.woff', '.woff2', '.ttf'];
-            
+            const interceptPattern = '{}';
+            const shouldIntercept = (reqUrl) =>
+                interceptPattern.length > 0 && reqUrl.includes(interceptPattern);
+
             const originalFetch = window.fetch;
             const patchedFetch = async function(...args) {{
                 const reqUrl = (typeof args[0] === 'string' ? args[0] : args[0]?.url) || '';
-                
-                // Block static resources
-                if (blockExtensions.some(ext => reqUrl.toLowerCase().includes(ext))) {{
-                    return new Response('', {{ status: 200, statusText: 'Blocked' }});
-                }}
-                
+
                 // Intercept Target API
-                if (reqUrl.includes('{}')) {{
+                if (shouldIntercept(reqUrl)) {{
                     try {{
                         const response = await originalFetch.apply(this, args);
                         if (response.status === 401 || response.status === 403) {{
@@ -891,7 +887,7 @@ pub async fn push_scraper_task(
             const originalXhrSend = XMLHttpRequest.prototype.send;
             const patchedXhrSend = function(body) {{
                 this.addEventListener('load', function() {{
-                    if (this._url && this._url.includes('{}')) {{
+                    if (this._url && shouldIntercept(this._url)) {{
                          if (this.status === 401 || this.status === 403) {{
                              window.__TAURI_INTERNALS__.invoke('handle_scraper_auth', {{ sourceId: '{}', taskId: '{}', targetUrl: this._url }});
                          }} else {{
@@ -912,27 +908,54 @@ pub async fn push_scraper_task(
             }};
             safeOverride(XMLHttpRequest.prototype, 'send', patchedXhrSend);
 
-            // DOM Blocker for Images
-            const observer = new MutationObserver(mutations => {{
-                for (const mutation of mutations) {{
-                    for (const node of mutation.addedNodes) {{
-                        if (node.tagName === 'IMG') {{
-                            try {{ node.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; }} catch(e) {{}}
-                        }} else if (node.querySelectorAll) {{
-                            const imgs = node.querySelectorAll('img');
-                            imgs.forEach(img => {{ try {{ img.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; }} catch(e) {{}} }});
-                        }}
-                    }}
+            const navigatePopupInPlace = (popupUrl) => {{
+                const nextUrl = typeof popupUrl === 'string' ? popupUrl : popupUrl?.toString?.() || '';
+                if (!nextUrl || nextUrl.startsWith('javascript:')) {{
+                    return window;
                 }}
+                try {{
+                    window.location.assign(nextUrl);
+                }} catch (err) {{
+                    window.location.href = nextUrl;
+                }}
+                return window;
+            }};
+            safeOverride(window, 'open', function(popupUrl) {{
+                return navigatePopupInPlace(popupUrl);
             }});
-            
-            // Start observing as soon as possible
-            if (document.documentElement) {{
-                observer.observe(document.documentElement, {{ childList: true, subtree: true }});
-            }} else {{
-                document.addEventListener('DOMContentLoaded', () => {{
-                    observer.observe(document.documentElement, {{ childList: true, subtree: true }});
-                }});
+            document.addEventListener('click', (event) => {{
+                const target = event.target;
+                const anchor = target && target.closest ? target.closest('a[target="_blank"]') : null;
+                if (!anchor) {{
+                    return;
+                }}
+                const href = anchor.getAttribute('href');
+                if (!href || href.startsWith('javascript:')) {{
+                    return;
+                }}
+                event.preventDefault();
+                navigatePopupInPlace(href);
+            }}, true);
+            const rewriteBlankFormTarget = (form) => {{
+                if (!form || typeof form.getAttribute !== 'function') {{
+                    return;
+                }}
+                const targetAttr = (form.getAttribute('target') || '').trim().toLowerCase();
+                if (targetAttr !== '_blank') {{
+                    return;
+                }}
+                form.setAttribute('target', '_self');
+            }};
+            document.addEventListener('submit', (event) => {{
+                rewriteBlankFormTarget(event.target);
+            }}, true);
+            if (window.HTMLFormElement && window.HTMLFormElement.prototype) {{
+                const originalFormSubmit = HTMLFormElement.prototype.submit;
+                const patchedFormSubmit = function(...args) {{
+                    rewriteBlankFormTarget(this);
+                    return originalFormSubmit.apply(this, args);
+                }};
+                safeOverride(HTMLFormElement.prototype, 'submit', patchedFormSubmit);
             }}
 
             // Expose a helper so injected script can emit DOM-scraped payload directly.
@@ -964,7 +987,6 @@ pub async fn push_scraper_task(
         source_id.as_str(),
         task_id.as_str(),
         secret_key.as_str(),
-        intercept_api,
         source_id.as_str(),
         task_id.as_str(),
         source_id.as_str(),
@@ -1206,15 +1228,14 @@ async fn start_claimed_scraper_task(
                 }}
             }}
 
-            const blockExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.woff', '.woff2', '.ttf'];
+            const interceptPattern = '{}';
+            const shouldIntercept = (reqUrl) =>
+                interceptPattern.length > 0 && reqUrl.includes(interceptPattern);
 
             const originalFetch = window.fetch;
             const patchedFetch = async function(...args) {{
                 const reqUrl = (typeof args[0] === 'string' ? args[0] : args[0]?.url) || '';
-                if (blockExtensions.some(ext => reqUrl.toLowerCase().includes(ext))) {{
-                    return new Response('', {{ status: 200, statusText: 'Blocked' }});
-                }}
-                if (reqUrl.includes('{}')) {{
+                if (shouldIntercept(reqUrl)) {{
                     try {{
                         const response = await originalFetch.apply(this, args);
                         if (response.status === 401 || response.status === 403) {{
@@ -1251,7 +1272,7 @@ async fn start_claimed_scraper_task(
             const originalXhrSend = XMLHttpRequest.prototype.send;
             const patchedXhrSend = function(body) {{
                 this.addEventListener('load', function() {{
-                    if (this._url && this._url.includes('{}')) {{
+                    if (this._url && shouldIntercept(this._url)) {{
                          if (this.status === 401 || this.status === 403) {{
                              window.__TAURI_INTERNALS__.invoke('handle_scraper_auth', {{ sourceId: '{}', taskId: '{}', targetUrl: this._url }});
                          }} else {{
@@ -1272,25 +1293,54 @@ async fn start_claimed_scraper_task(
             }};
             safeOverride(XMLHttpRequest.prototype, 'send', patchedXhrSend);
 
-            const observer = new MutationObserver(mutations => {{
-                for (const mutation of mutations) {{
-                    for (const node of mutation.addedNodes) {{
-                        if (node.tagName === 'IMG') {{
-                            try {{ node.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; }} catch(e) {{}}
-                        }} else if (node.querySelectorAll) {{
-                            const imgs = node.querySelectorAll('img');
-                            imgs.forEach(img => {{ try {{ img.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; }} catch(e) {{}} }});
-                        }}
-                    }}
+            const navigatePopupInPlace = (popupUrl) => {{
+                const nextUrl = typeof popupUrl === 'string' ? popupUrl : popupUrl?.toString?.() || '';
+                if (!nextUrl || nextUrl.startsWith('javascript:')) {{
+                    return window;
                 }}
+                try {{
+                    window.location.assign(nextUrl);
+                }} catch (err) {{
+                    window.location.href = nextUrl;
+                }}
+                return window;
+            }};
+            safeOverride(window, 'open', function(popupUrl) {{
+                return navigatePopupInPlace(popupUrl);
             }});
-
-            if (document.documentElement) {{
-                observer.observe(document.documentElement, {{ childList: true, subtree: true }});
-            }} else {{
-                document.addEventListener('DOMContentLoaded', () => {{
-                    observer.observe(document.documentElement, {{ childList: true, subtree: true }});
-                }});
+            document.addEventListener('click', (event) => {{
+                const target = event.target;
+                const anchor = target && target.closest ? target.closest('a[target="_blank"]') : null;
+                if (!anchor) {{
+                    return;
+                }}
+                const href = anchor.getAttribute('href');
+                if (!href || href.startsWith('javascript:')) {{
+                    return;
+                }}
+                event.preventDefault();
+                navigatePopupInPlace(href);
+            }}, true);
+            const rewriteBlankFormTarget = (form) => {{
+                if (!form || typeof form.getAttribute !== 'function') {{
+                    return;
+                }}
+                const targetAttr = (form.getAttribute('target') || '').trim().toLowerCase();
+                if (targetAttr !== '_blank') {{
+                    return;
+                }}
+                form.setAttribute('target', '_self');
+            }};
+            document.addEventListener('submit', (event) => {{
+                rewriteBlankFormTarget(event.target);
+            }}, true);
+            if (window.HTMLFormElement && window.HTMLFormElement.prototype) {{
+                const originalFormSubmit = HTMLFormElement.prototype.submit;
+                const patchedFormSubmit = function(...args) {{
+                    rewriteBlankFormTarget(this);
+                    return originalFormSubmit.apply(this, args);
+                }};
+                safeOverride(HTMLFormElement.prototype, 'submit', patchedFormSubmit);
             }}
 
             const emitScrapedData = (data) => {{
@@ -1320,7 +1370,6 @@ async fn start_claimed_scraper_task(
         source_id.as_str(),
         task_id.as_str(),
         secret_key.as_str(),
-        intercept_api,
         source_id.as_str(),
         task_id.as_str(),
         source_id.as_str(),
@@ -2003,5 +2052,35 @@ mod tests {
             push_task_body.contains("_webview.set_focus("),
             "Explicit foreground task start should still focus the window"
         );
+    }
+
+    #[test]
+    fn scraper_injection_keeps_images_and_bridges_popups_contract() {
+        let source = include_str!("scraper.rs");
+        let push_task_body = extract_function_body(source, "pub async fn push_scraper_task");
+        let daemon_body = extract_function_body(source, "async fn start_claimed_scraper_task");
+
+        for body in [&push_task_body, &daemon_body] {
+            assert!(
+                !body.contains("const blockExtensions"),
+                "Scraper injection must not hard-block image/font resources"
+            );
+            assert!(
+                !body.contains("data:image/gif;base64"),
+                "Scraper injection must not rewrite <img> into placeholder data URLs"
+            );
+            assert!(
+                body.contains("safeOverride(window, 'open'"),
+                "Scraper injection should patch window.open for popup fallback"
+            );
+            assert!(
+                body.contains("a[target=\"_blank\"]"),
+                "Scraper injection should handle target=_blank links"
+            );
+            assert!(
+                body.contains("rewriteBlankFormTarget"),
+                "Scraper injection should handle target=_blank forms"
+            );
+        }
     }
 }

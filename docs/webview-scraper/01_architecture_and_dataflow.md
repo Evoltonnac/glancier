@@ -20,7 +20,8 @@ to run low-overhead background capture.
 ## 3. Key Implementation Points
 
 - Single worker instance: only one `scraper_worker` at a time to avoid state contamination.
-- Resource interception: block non-essential static assets to reduce network/load overhead.
+- Resource interception: keep API payload interception (`fetch`/XHR) without suppressing page images/fonts so manual auth pages render correctly.
+- Popup fallback bridging: map `window.open`, `_blank` links, and `_blank` forms to same-window navigation in scraper WebView for third-party login compatibility.
 - Event bridging: frontend is observer/manual fallback, not automatic trigger owner.
 
 ## 4. Interaction Contract (Do Not Regress)
