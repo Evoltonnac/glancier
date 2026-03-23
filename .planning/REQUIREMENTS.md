@@ -61,33 +61,33 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SQL-01 | TBD | Pending |
-| SQL-02 | TBD | Pending |
-| SQL-03 | TBD | Pending |
-| SQL-04 | TBD | Pending |
-| SQL-05 | TBD | Pending |
-| SQL-06 | TBD | Pending |
-| DATA-01 | TBD | Pending |
-| DATA-02 | TBD | Pending |
-| DATA-03 | TBD | Pending |
-| DATA-04 | TBD | Pending |
-| CHART-01 | TBD | Pending |
-| CHART-02 | TBD | Pending |
-| CHART-03 | TBD | Pending |
-| CHART-04 | TBD | Pending |
-| CHART-05 | TBD | Pending |
-| CHART-06 | TBD | Pending |
-| CHART-07 | TBD | Pending |
-| UX-01 | TBD | Pending |
-| UX-02 | TBD | Pending |
-| UX-03 | TBD | Pending |
-| UX-04 | TBD | Pending |
+| SQL-01 | Phase 7 | Pending |
+| SQL-02 | Phase 7 | Pending |
+| SQL-03 | Phase 8 | Pending |
+| SQL-04 | Phase 7 | Pending |
+| SQL-05 | Phase 7 | Pending |
+| SQL-06 | Phase 7 | Pending |
+| DATA-01 | Phase 8 | Pending |
+| DATA-02 | Phase 8 | Pending |
+| DATA-03 | Phase 8 | Pending |
+| DATA-04 | Phase 8 | Pending |
+| CHART-01 | Phase 9 | Pending |
+| CHART-02 | Phase 9 | Pending |
+| CHART-03 | Phase 9 | Pending |
+| CHART-04 | Phase 9 | Pending |
+| CHART-05 | Phase 9 | Pending |
+| CHART-06 | Phase 9 | Pending |
+| CHART-07 | Phase 9 | Pending |
+| UX-01 | Phase 10 | Pending |
+| UX-02 | Phase 10 | Pending |
+| UX-03 | Phase 10 | Pending |
+| UX-04 | Phase 10 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21 ⚠️ (pending roadmap generation)
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after research-first milestone requirement scoping for v1.2*
+*Last updated: 2026-03-23 after v1.2 roadmap phase mapping (Phase 7-10)*
