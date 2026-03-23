@@ -577,6 +577,17 @@ export default function Dashboard() {
                 items: [],
             };
             await api.createView(nextView);
+            await mutate(
+                "views",
+                (existingViews?: StoredView[]) => {
+                    const baseViews = existingViews ?? swrViews;
+                    if (baseViews.some((view) => view.id === nextView.id)) {
+                        return baseViews;
+                    }
+                    return [...baseViews, nextView];
+                },
+                false,
+            );
             setActiveViewId(nextView.id);
             setSelectedDashboardId(nextView.id);
             setOrderedViewIds([...orderedViews.map((view) => view.id), nextView.id]);
