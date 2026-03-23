@@ -50,7 +50,7 @@
       }
     },
     "macOS": {
-      "bundleVersion": "1.0.0",
+      "bundleVersion": "1.0.9",
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-",
       "dmg": {
