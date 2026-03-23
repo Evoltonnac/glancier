@@ -22,6 +22,7 @@
 - **Local-first runtime**: Integration data, source configs, and secrets stay on your machine by default.
 - **Desktop scraping fallback**: WebView Scraper handles platforms without stable public APIs.
 - **Bento dashboard layout**: Flexible composition for Signals and Metrics in one glance.
+- **Dual-mode dashboard management**: Switch between single-view rendering and management mode for dashboard CRUD, reorder, and overflow operations.
 
 ## Quick Start
 
@@ -112,6 +113,8 @@ npx tauri signer generate --ci --write-keys src-tauri/gen/updater/tauri-update.k
 - Refresh scheduler + retry architecture: [`docs/flow/05_refresh_scheduler_and_retry.md`](docs/flow/05_refresh_scheduler_and_retry.md)
 - SDUI architecture: [`docs/sdui/`](docs/sdui/)
 - Frontend engineering guide: [`docs/frontend/01_engineering_guide.md`](docs/frontend/01_engineering_guide.md)
+- Dashboard management design + implementation summary: [`docs/dashboard_management_design.md`](docs/dashboard_management_design.md)
+- UI design system snapshot: [`docs/DESIGN.md`](docs/DESIGN.md)
 - WebView scraper docs: [`docs/webview-scraper/`](docs/webview-scraper/)
 - Testing/TDD policy: [`docs/testing_tdd.md`](docs/testing_tdd.md)
 - Build path contract: [`docs/build-path-contract.md`](docs/build-path-contract.md)

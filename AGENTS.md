@@ -59,6 +59,10 @@ Data and runtime:
   - Persist language preference through backend settings (`/api/settings`, `SystemSettings.language`), not ad-hoc frontend-only state.
   - For deterministic backend failures, define and keep stable standardized `error_code` values.
   - UI surfaces must preserve `error_code`-driven messaging/diagnostics; do not collapse to generic-only failure text.
+- Dashboard management state rules:
+  - `useViewTabsState` is the canonical owner for dashboard interaction state (`viewMode`, active/ordered ids, selected dashboard).
+  - Keep SWR -> Zustand synchronization idempotent; do not add duplicate write paths in `Dashboard.tsx` effects.
+  - Keep translation contracts stable for `dashboard.tabs.*` and `dashboard.management.*` keys.
 
 ## 5. Execution Boundaries
 
@@ -71,6 +75,9 @@ Data and runtime:
 
 - When architecture or command entrypoints change, sync relevant docs in the same delivery.
 - `.planning/` is owned by GSD workflows. Do not manually change planning document structure or content unless explicitly requested through GSD operations.
+- Keep dashboard-management documentation synchronized when behavior changes:
+  - `docs/dashboard_management_design.md`
+  - `docs/frontend/01_engineering_guide.md`
 
 ## 7. Minimum Validation Before Handoff
 

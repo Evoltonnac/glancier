@@ -104,6 +104,25 @@ Regression expectation:
 - Add tests that cover no-op sync when SWR emits same-content data with new references.
 - Verify no repeated render/update loops occur when views are empty or unchanged.
 
+## Dashboard Management (Phase 06) Rules
+
+Scope: `Dashboard.tsx`, `viewTabsState.ts`, dashboard management components.
+
+- Keep `useViewTabsState` as the single owner of dashboard interaction state:
+  - `viewMode`
+  - `activeViewId`
+  - `orderedViewIds`
+  - `selectedDashboardId`
+- Do not split dashboard ordering logic across multiple components. Reorder intent should funnel into store actions/helpers.
+- Keep `Dashboard` page effects thin. Effects should trigger sync/invalidation, not duplicate reconciliation logic.
+- Route dashboard layout persistence through `viewSaveQueue` and keep optimistic update + `invalidateViews()` reconciliation.
+- Treat keys under `dashboard.tabs.*` and `dashboard.management.*` as stable contracts in i18n catalogs.
+- Before shipping dashboard-management changes, run at least:
+  - `DashboardViewTabs.test.tsx`
+  - `DashboardViewOverflow.test.tsx`
+  - `DashboardViewReorder.test.tsx`
+  - `viewSaveQueue.test.ts`
+
 ## API Client Notes
 
 `ui-react/src/api/client.ts` owns backend calls and base URL resolution.

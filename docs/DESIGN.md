@@ -175,3 +175,13 @@ Dark mode inverts the palette with muted surfaces and higher contrast text:
 ### Background Accent
 
 Subtle radial gradient in bottom-right: `radial-gradient(circle at 85% 100%, hsl(40 100% 50% / 0.08), transparent 40%)`
+
+---
+
+## 8. Dashboard Management Surfaces (Phase 06)
+
+- `ChromeTab`: Browser-like tab visual language for dashboard switching, including drag handle and active state clarity.
+- `ViewTabsBar`: Unified action area for add-widget and overflow management interactions.
+- `ViewManagementPanel`: Compact overflow management with create/rename/delete actions.
+- `DashboardGrid` + `DashboardCard` + `DashboardThumbnail`: Management mode card system for overview, reorder, and dashboard lifecycle operations.
+- `CreateDashboardDialog` / `RenameDialog` / `DeleteConfirmDialog`: Canonical dialog set for dashboard CRUD.

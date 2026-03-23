@@ -1,53 +1,98 @@
-# 视图管理页面交互与视觉设计方案 (Dashboard Management Design)
+# Dashboard Management Design and Implementation Summary (Phase 06)
 
-## 1. 概述 (Overview)
-本方案详细定义了 glanceus 项目中“看板（视图）管理页面”的交互流程与视觉设计。该设计的核心目标是提供直观、流畅的多看板切换、预览与编辑体验，其整体交互对标智能手机的主屏幕管理。管理页面作为应用框架的一部分，支持与单看板模式之间的无缝切换。
+## Purpose
 
-## 2. 交互方案 (Interaction Scheme)
+This document records the finalized dashboard management design shipped in Phase 06, and the implementation choices used in `ui-react`.
 
-### 2.1 双模状态与无缝切换
-- **单看板模式 (Single View Mode)**：首页默认状态，在主内容区展示当前选中的看板内容。应用的全局导航栏（顶部）和状态栏（左侧 SOURCE STATUS）保持可见。
-- **视图管理模式 (Management Mode)**：当用户点击顶部导航的“All Dashboards”按钮后，主内容区平滑过渡至全局视图模式。此模式下展示“Manage Dashboards”标题以及所有已创建看板的缩略卡片网格。
-- **退出管理**：在管理页面中，用户只需点击任意一个看板卡片的缩略图或标题区域，系统即会放大并进入该看板的单看板模式。
+Goal:
+- Provide a clear, low-friction workflow for switching between dashboards, managing dashboard lifecycle, and preserving deterministic local state behavior.
 
-### 2.2 横向滑动浏览 (Swiper 机制)
-- **手势切换**：在“单看板模式”下，引入 Swiper 机制。用户可以通过左右滑动（或触控板横滑）在相邻的看板间快速切换，无需退回到管理页面即可浏览其他看板内容。
-- **页面指示器**：单看板模式底部可保留类似手机桌面的圆点指示器 (Pagination Dots)，清晰提示当前看板的总数及用户所处的位置。
+## User Experience Model
 
-### 2.3 视图管理功能操作
-- **新建看板**：页面右上角提供显眼的蓝色主按钮 “+ Create New Dashboard”，用于快速触发新建流程。
-- **拖拽排序**：每张看板卡片的左上角提供专门的拖拽手柄（六点图标 `::`）。用户拖拽该手柄即可实时调整看板的前后排列顺序，其他卡片会平滑地进行流式让位。
-- **重命名与配置**：卡片底部提供明确的“Edit”（带铅笔图标）按钮，点击进入该看板的详细配置或重命名流程。
-- **删除**：卡片底部提供“Delete”（带垃圾桶图标）按钮，点击后弹出轻量级的二次确认框，防止误操作。
+Phase 06 introduces a dual-mode dashboard experience:
 
-## 3. 视觉设计方案 (Visual Design)
+- `single` mode:
+  - The main dashboard canvas renders the active dashboard's widgets.
+  - Users can switch visible tabs directly and access overflowed dashboards from a management panel.
+- `management` mode:
+  - Users see all dashboards as cards for overview-level operations.
+  - Supports create, rename, delete, reorder, and jump-to-dashboard flows.
 
-### 3.1 页面空间与全局布局
-- **整体框架**：管理页面完美嵌入在标准的应用框架中，保留顶部的全局搜索框、设置图标和用户头像，以及左侧的侧边栏。
-- **内容区背景**：采用非常浅的灰白色（或微渐变）背景，使带有白色背景和轻微阴影的看板卡片能够清晰凸显，形成良好的层级感。
-- **网格布局 (Grid Layout)**：所有看板卡片以自适应网格形式排列。例如在桌面端大视窗下呈现 4 列布局，卡片间距均匀，视觉整洁。
+## Core Interaction Features
 
-### 3.2 看板卡片设计 (Card Design)
-每张卡片代表一个独立的看板，是管理模式的视觉核心。卡片采用带有圆角和轻微阴影的白色背景容器：
+1. Dashboard tab lifecycle:
+- Persisted active dashboard and ordered dashboard ids.
+- Deterministic name generation for new dashboards.
+- Rename validation (empty/duplicate constraints).
 
-1. **拖拽手柄区**
-   - 左上角常驻淡灰色的拖拽手柄图标，提示用户该卡片可被拖动。
-2. **动态具象化缩略图 (Illustrative Skeleton Preview)**
-   - **视觉呈现**：放置于浅灰色的圆角矩形底板上。缩略图不使用真实的页面截图，而是基于看板内微件（Widgets）的实际位置、大小和类型（如图表、列表、时间轴、地图等），渲染出的**具象化插画风格骨架**。
-   - **细节与色彩**：骨架图包含细微的阴影、深灰色线条以及低饱和度的色彩点缀（如红黄绿状态小圆点、蓝色进度条、深色的地图轮廓等）。这种设计既避免了真实截图的性能消耗和信息杂乱，又赋予了每个看板极高的业务辨识度与现代美感。
-3. **卡片标题区**
-   - 位于缩略图下方，左对齐展示看板的完整名称（如 "Overview Dashboard"）。采用加粗的深色字体，确保信息层级清晰易读。
-4. **操作按钮区**
-   - 卡片底部并排展示两个带圆角的浅灰色操作按钮：“Edit” 和 “Delete”。
-   - 按钮采用“线框图标 + 文字”的形式，视觉比重较轻，不会抢夺缩略图和标题的焦点，但操作触达路径明确且易于点击。
+2. Overflow and management entry:
+- Browser-like tab row (`ChromeTab`) with overflow popover.
+- Unified management actions exposed from `ViewTabsBar` + `ViewManagementPanel`.
 
-### 3.3 动画与微交互 (Motion & Micro-interactions)
-- **状态过渡**：在单看板模式与管理模式间切换时，主内容区使用平滑的缩放或淡入淡出过渡动画，构建“进入”与“退出”的空间层级感。
-- **悬浮态 (Hover)**：鼠标悬浮在卡片整体上时，卡片微微上浮并加深阴影 (Elevation)，给予明确的点击预期；悬浮在 Edit/Delete 按钮上时，按钮背景色稍微加深以提供即时反馈。
-- **拖拽反馈**：拖拽卡片时，被拖拽的卡片会有明显的浮起效果（增加投影范围和透明度），其他卡片则平滑地动画移动到新位置。
+3. Dashboard CRUD:
+- Create dashboard dialog.
+- Rename dialog.
+- Delete confirmation dialog.
+- Card-based management operations for quick maintenance.
 
-## 4. 技术实施建议 (Implementation Notes)
-1. **拖拽排序库**：推荐使用 `@dnd-kit/core`，它轻量且易于实现带有流畅动画效果的二维网格拖拽排序。
-2. **响应式布局**：使用 CSS Grid（例如 TailwindCSS 中的 `grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6`）来实现卡片的自适应排列。
-3. **滑动容器**：对于单看板模式下的左右滑动切换，可考虑使用 `Swiper.js` 的 React 版本或基于 `Framer Motion` 实现带手势支持的无缝轮播。
-4. **缩略图组件封装**：强烈建议封装一个 `DashboardThumbnail` 组件。该组件接收看板的布局数据（layout JSON）和组件类型映射表，通过纯 CSS 或 SVG 动态组合出对应的精美插画骨架效果。预设几种常见微件（图表、地图、列表）的 SVG 占位图，根据数据进行拼装，以完美还原设计稿的视觉品质。
+4. Reorder behavior:
+- Drag-drop reorder support in visible and overflow tab zones.
+- Dashboard card reorder support in management mode.
+
+## Architecture and State Contracts
+
+State ownership:
+- `useViews()` remains the canonical remote source.
+- `useViewTabsState` owns frontend tab/dashboard interaction state (`viewMode`, active id, ordered ids, selected dashboard id).
+
+Sync strategy:
+- SWR -> Zustand sync is idempotent and guarded to avoid update loops.
+- No-op branches must return previous state when derived data is semantically unchanged.
+
+Persistence strategy:
+- Dashboard layout updates are queued through `viewSaveQueue`.
+- Optimistic updates are applied for responsive UX, followed by `invalidateViews()` reconciliation.
+
+## Component Surface Added/Updated
+
+Primary components:
+- `DashboardThumbnail`
+- `DashboardCard`
+- `DashboardGrid`
+- `DashboardSwiper`
+- `ViewTabsBar`
+- `ViewManagementPanel`
+- `CreateDashboardDialog`
+- `RenameDialog`
+- `DeleteConfirmDialog`
+- `ChromeTab`
+
+Primary page/store files:
+- `ui-react/src/pages/Dashboard.tsx`
+- `ui-react/src/store/viewTabsState.ts`
+- `ui-react/src/pages/dashboardViewTabs.ts`
+
+## I18N and Copy Contracts
+
+Dashboard management copy uses stable translation keys under:
+- `dashboard.tabs.*`
+- `dashboard.management.*`
+
+Any future copy updates must keep `en` and `zh` catalogs synchronized.
+
+## Test Coverage Expectations
+
+Phase 06 adds and updates coverage for:
+- Tab helper contracts and persisted tab store behavior.
+- Dashboard tab lifecycle and overflow rendering.
+- Reorder and drag interaction paths.
+- UI tab behavior after chrome/overflow refactor.
+- View save queue behavior and SWR sync safety.
+
+## Maintenance Notes
+
+When extending dashboard management:
+- Keep reconciliation logic centralized in store actions.
+- Avoid adding secondary synchronization writes in page effects.
+- Preserve `error_code` and i18n key stability.
+- Keep docs and tests updated in the same delivery.
