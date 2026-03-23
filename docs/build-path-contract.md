@@ -94,6 +94,12 @@ The GitHub Actions release job is defined in `.github/workflows/ci.yml` as `rele
 - Manifest policy: upload `latest.json` as release asset `latest.json`; if Tauri does not output `latest.json`, CI generates it from the produced updater archive/signature and target mapping.
 - Signing inputs: set `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in GitHub repository secrets before running `release-tauri`.
 
+## Runtime Update Contract
+
+- In-app update check (Settings -> `Check Updates`) must use Tauri updater metadata (`latest.json`) instead of redirecting users to GitHub Releases.
+- When an update is available, the client must call updater download/install flow to fetch signed updater artifacts (for macOS: `*.app.tar.gz` + `*.app.tar.gz.sig`).
+- After successful install, the desktop runtime must relaunch the app process so the replaced bundle is activated without a manual installer flow.
+
 ## Script and npm Command Audit (2026-03-09)
 
 - Checked: `scripts/*.sh` shell syntax (`bash -n`) passed.

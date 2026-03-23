@@ -190,6 +190,15 @@ fn get_runtime_port_info(
     })
 }
 
+#[tauri::command]
+fn relaunch_app(window: tauri::Window, app: tauri::AppHandle) -> Result<(), String> {
+    ensure_command_window(&window, &["main"], "relaunch_app")?;
+    #[cfg(not(debug_assertions))]
+    terminate_backend_child(&app);
+    mark_quitting(&app);
+    app.restart();
+}
+
 fn resolve_log_dir(app: &tauri::AppHandle) -> PathBuf {
     if let Some(root) = resolve_data_root(app) {
         return root.join("logs");
@@ -1194,7 +1203,8 @@ pub fn run() {
             open_main_devtools,
             open_logs_folder,
             open_external_url,
-            get_runtime_port_info
+            get_runtime_port_info,
+            relaunch_app
         ])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build());

@@ -72,7 +72,6 @@ const MIN_REFRESH_INTERVAL_MINUTES = 1;
 const MAX_REFRESH_INTERVAL_MINUTES = 7 * 24 * 60;
 const BUG_REPORT_URL =
     "https://github.com/Evoltonnac/glanceus/issues/new/choose";
-const RELEASES_URL = "https://github.com/Evoltonnac/glanceus/releases";
 
 interface RuntimePortInfo {
     api_target_port: number;
@@ -345,7 +344,9 @@ export default function SettingsPage() {
                 }),
                 "info",
             );
-            void openExternalLink(RELEASES_URL);
+            await update.downloadAndInstall();
+            showToast(t("settings.toast.check_update_restarting"), "info");
+            await invoke("relaunch_app");
         } catch (err) {
             console.error("Failed to check updates:", err);
             showToast(
