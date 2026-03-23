@@ -169,6 +169,75 @@ def _validate_runtime_rows(connection: sqlite3.Connection, source_ids: list[str]
         raise StorageWriteError("startup migration validation failed for data.json chunk")
 
 
+def _read_existing_ids(
+    connection: sqlite3.Connection,
+    *,
+    table: str,
+    column: str,
+    candidate_ids: list[str],
+    operation: str,
+) -> set[str]:
+    if not candidate_ids:
+        return set()
+    placeholders = ",".join("?" for _ in candidate_ids)
+    try:
+        rows = connection.execute(
+            f"SELECT {column} AS value FROM {table} WHERE {column} IN ({placeholders})",
+            tuple(candidate_ids),
+        ).fetchall()
+    except sqlite3.Error as error:
+        raise map_sqlite_error(error, kind="read", operation=operation) from error
+    return {
+        str(row["value"]).strip()
+        for row in rows
+        if row is not None and isinstance(row["value"], str) and row["value"].strip()
+    }
+
+
+def _repair_deprecated_data_chunk_if_needed(
+    path: Path,
+    connection: sqlite3.Connection,
+    runtime_repo: SqliteRuntimeRepository,
+) -> None:
+    entries = _normalize_runtime_entries(_load_json_payload(path), chunk_name=path.name)
+    if not entries:
+        return
+
+    candidate_ids: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        source_id = str(entry.get("source_id", "")).strip()
+        if not source_id or source_id in seen:
+            continue
+        seen.add(source_id)
+        candidate_ids.append(source_id)
+
+    if not candidate_ids:
+        return
+
+    scoped_source_ids = _read_existing_ids(
+        connection,
+        table="stored_sources",
+        column="source_id",
+        candidate_ids=candidate_ids,
+        operation="migration.repair_data.read_sources",
+    )
+    target_ids = sorted(scoped_source_ids) if scoped_source_ids else candidate_ids
+
+    existing_runtime_ids = _read_existing_ids(
+        connection,
+        table="runtime_latest",
+        column="source_id",
+        candidate_ids=target_ids,
+        operation="migration.repair_data.read_runtime",
+    )
+    if len(existing_runtime_ids) == len(target_ids):
+        return
+
+    source_ids = runtime_repo.upsert_migration_latest(entries)
+    _validate_runtime_rows(connection, source_ids)
+
+
 def _validate_source_rows(connection: sqlite3.Connection, source_ids: list[str]) -> None:
     if not source_ids:
         return
@@ -304,13 +373,20 @@ def run_startup_migration(storage: StorageContract, *, data_dir: str | Path | No
     for chunk_name in _CHUNK_ORDER:
         chunk_path = resolved_dir / chunk_name
         deprecated_path = _deprecated_path(chunk_path)
-        if deprecated_path.exists():
+        if chunk_path.exists():
+            if deprecated_path.exists():
+                continue
+            _migrate_chunk(
+                chunk_path,
+                connection=connection,
+                runtime_repo=runtime_repo,
+                resource_repo=resource_repo,
+            )
             continue
-        if not chunk_path.exists():
-            continue
-        _migrate_chunk(
-            chunk_path,
-            connection=connection,
-            runtime_repo=runtime_repo,
-            resource_repo=resource_repo,
-        )
+
+        if chunk_name == "data.json" and deprecated_path.exists():
+            _repair_deprecated_data_chunk_if_needed(
+                deprecated_path,
+                connection=connection,
+                runtime_repo=runtime_repo,
+            )

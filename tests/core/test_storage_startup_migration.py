@@ -131,6 +131,57 @@ def test_run_startup_migration_imports_legacy_data_controller_payload_shape(tmp_
         connection.close()
 
 
+def test_run_startup_migration_repairs_runtime_from_deprecated_data_chunk(tmp_path: Path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_json(
+        data_dir / "data.deprecated.v1.json",
+        {
+            "latest_by_source": {
+                "source-alpha": {
+                    "data": {"value": 10},
+                    "updated_at": 300.0,
+                    "last_success_at": 299.0,
+                }
+            },
+            "history_by_source": {},
+        },
+    )
+
+    storage, connection = _build_storage(tmp_path)
+    source = StoredSource(
+        id="source-alpha",
+        integration_id="integration-alpha",
+        name="Alpha Source",
+        config={},
+        vars={},
+    )
+    storage.resources.save_source(source)
+    storage.runtime.upsert_migration_latest(
+        [
+            {
+                "source_id": "latest_by_source",
+                "data": None,
+                "updated_at": 1.0,
+            }
+        ]
+    )
+
+    try:
+        run_startup_migration(storage, data_dir=data_dir)
+        repaired = storage.runtime.get_latest("source-alpha")
+        assert repaired is not None
+        assert repaired["data"] == {"value": 10}
+
+        run_startup_migration(storage, data_dir=data_dir)
+        repaired_again = storage.runtime.get_latest("source-alpha")
+        assert repaired_again is not None
+        assert repaired_again["data"] == {"value": 10}
+    finally:
+        connection.close()
+
+
 def test_run_startup_migration_renames_only_after_successful_chunk_validation(tmp_path: Path):
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
