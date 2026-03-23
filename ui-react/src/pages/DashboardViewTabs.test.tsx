@@ -262,7 +262,6 @@ describe("tab bar and management panel", () => {
                         title="Manage views"
                         createLabel="Create view"
                         renamePlaceholder="Rename view"
-                        deleteLabel="Delete view"
                     />
                 }
             />,
