@@ -9,6 +9,7 @@ pydantic>=2.10.0
 pydantic-settings>=2.7.0
 httpx>=0.28.0
 authlib>=1.6.0
+sqlglot>=25.0.0
 jsonpath-ng>=1.7.0
 beautifulsoup4>=4.12.0
 pyyaml>=6.0.2

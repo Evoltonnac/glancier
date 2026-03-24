@@ -167,6 +167,7 @@ class StepType(str, Enum):
     EXTRACT = "extract"
     SCRIPT = "script"
     LOG = "log"
+    SQL = "sql"
     WEBVIEW = "webview"
 
 
@@ -324,6 +325,30 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
         "properties": {
             "message": {"type": "string"},
         },
+        "additionalProperties": True,
+    },
+    StepType.SQL.value: {
+        "type": "object",
+        "properties": {
+            "connector": {
+                "type": "object",
+                "properties": {
+                    "profile": {"type": "string", "minLength": 1},
+                    "options": {"type": "object", "additionalProperties": True},
+                },
+                "required": ["profile"],
+                "additionalProperties": True,
+            },
+            "credentials": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {"type": "string", "minLength": 1},
+            },
+            "query": {"type": "string", "minLength": 1},
+            "timeout": {"type": "number", "minimum": 1},
+            "max_rows": {"type": "integer", "minimum": 1},
+        },
+        "required": ["connector", "credentials", "query"],
         "additionalProperties": True,
     },
     StepType.WEBVIEW.value: {

@@ -28,6 +28,9 @@
           "$ref": "#/$defs/StepConfig_log"
         },
         {
+          "$ref": "#/$defs/StepConfig_sql"
+        },
+        {
           "$ref": "#/$defs/StepConfig_webview"
         }
       ]
@@ -42,6 +45,7 @@
         "extract",
         "script",
         "log",
+        "sql",
         "webview"
       ],
       "title": "StepType",
@@ -921,6 +925,106 @@
               "type": "string"
             }
           },
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "id",
+        "use"
+      ],
+      "additionalProperties": false
+    },
+    "StepConfig_sql": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context",
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secrets",
+          "type": "object"
+        },
+        "use": {
+          "type": "string",
+          "const": "sql",
+          "title": "Use"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "connector": {
+              "type": "object",
+              "properties": {
+                "profile": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "options": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "profile"
+              ],
+              "additionalProperties": true
+            },
+            "credentials": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1
+            },
+            "timeout": {
+              "type": "number",
+              "minimum": 1
+            },
+            "max_rows": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "connector",
+            "credentials",
+            "query"
+          ],
           "additionalProperties": true
         }
       },
