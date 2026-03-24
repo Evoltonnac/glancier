@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from core.config_loader import StepType
@@ -95,3 +97,43 @@ async def test_oauth_step_blocks_curl_until_authorized(executor, data_controller
     # Should not have started curl step yet
     assert "curl-step" not in (state.message or "")
     data_controller.upsert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sql_query_failure_uses_runtime_sql_query_failed_error_code(
+    executor,
+    data_controller,
+    tmp_path,
+):
+    db_path = tmp_path / "executor-sql-failure.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE metrics (id INTEGER PRIMARY KEY, value TEXT)")
+        conn.commit()
+
+    source = build_source_config(
+        source_id="sql-query-failure",
+        name="SQL Query Failure Source",
+        flow=[
+            build_step(
+                step_id="sql",
+                use=StepType.SQL,
+                args={
+                    "connector": {"profile": "sqlite"},
+                    "credentials": {"database": str(db_path)},
+                    "query": "SELECT * FROM missing_table",
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ERROR
+    error_calls = [
+        call.kwargs
+        for call in data_controller.set_state.call_args_list
+        if call.kwargs.get("status") == SourceStatus.ERROR.value
+    ]
+    assert error_calls
+    assert error_calls[-1]["error_code"] == "runtime.sql_query_failed"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -181,3 +182,193 @@ async def test_executor_sql_trust_gate_updates_suspended_state_with_sql_error_co
     ]
     assert suspended_calls
     assert suspended_calls[-1]["error_code"] == "runtime.sql_risk_operation_requires_trust"
+
+
+@pytest.mark.asyncio
+async def test_execute_sql_step_timeout_maps_to_runtime_sql_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _SlowCursor:
+        description = [("value",)]
+
+        def fetchmany(self, _size):
+            return [(1,)]
+
+    class _SlowConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            _ = (exc_type, exc, tb)
+            return False
+
+        def execute(self, _query: str):
+            time.sleep(0.2)
+            return _SlowCursor()
+
+        def commit(self):
+            return None
+
+        def close(self):
+            return None
+
+    import core.steps.sql_step as sql_step_module
+
+    monkeypatch.setattr(sql_step_module.sqlite3, "connect", lambda *_args, **_kwargs: _SlowConnection())
+
+    step = build_step(step_id="sql-step", use=StepType.SQL)
+    source = build_source_config(source_id="sql-timeout", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.ALLOW,
+                reason="source_rule",
+            )
+        )
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await execute_sql_step(
+            step,
+            source,
+            {
+                "connector": {"profile": "sqlite"},
+                "credentials": {"database": ":memory:"},
+                "query": "SELECT 1",
+                "timeout": 0.001,
+            },
+            {},
+            {},
+            executor,
+        )
+
+    assert getattr(exc_info.value, "code", None) == "runtime.sql_timeout"
+
+
+@pytest.mark.asyncio
+async def test_execute_sql_step_max_row_limit_maps_to_runtime_sql_row_limit_exceeded(
+    tmp_path: Path,
+):
+    db_path = tmp_path / "row-limit.db"
+    _seed_sqlite_db(db_path)
+
+    step = build_step(step_id="sql-step", use=StepType.SQL)
+    source = build_source_config(source_id="sql-row-limit", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.ALLOW,
+                reason="source_rule",
+            )
+        )
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await execute_sql_step(
+            step,
+            source,
+            {
+                "connector": {"profile": "sqlite"},
+                "credentials": {"database": str(db_path)},
+                "query": "SELECT id, value FROM metrics ORDER BY id",
+                "max_rows": 1,
+            },
+            {},
+            {},
+            executor,
+        )
+
+    assert getattr(exc_info.value, "code", None) == "runtime.sql_row_limit_exceeded"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "decision", "expected_code"),
+    [
+        ("DELETE FROM metrics", TrustDecision.DENY, "runtime.sql_risk_operation_denied"),
+        ("SELECT * FROM missing_table", TrustDecision.ALLOW, "runtime.sql_query_failed"),
+    ],
+)
+async def test_execute_sql_step_risk_denied_and_query_failures_use_stable_codes(
+    tmp_path: Path,
+    query: str,
+    decision: TrustDecision,
+    expected_code: str,
+):
+    db_path = tmp_path / "runtime-errors.db"
+    _seed_sqlite_db(db_path)
+
+    step = build_step(step_id="sql-step", use=StepType.SQL)
+    source = build_source_config(source_id="sql-runtime-errors", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=decision,
+                reason="source_rule",
+            )
+        )
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await execute_sql_step(
+            step,
+            source,
+            {
+                "connector": {"profile": "sqlite"},
+                "credentials": {"database": str(db_path)},
+                "query": query,
+            },
+            {},
+            {},
+            executor,
+        )
+
+    assert getattr(exc_info.value, "code", None) == expected_code
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error_text", "expected_code"),
+    [
+        ("unable to open database file", "runtime.sql_connect_failed"),
+        ("authentication failed for user demo", "runtime.sql_auth_failed"),
+    ],
+)
+async def test_execute_sql_step_connect_and_auth_failures_use_stable_codes(
+    monkeypatch: pytest.MonkeyPatch,
+    error_text: str,
+    expected_code: str,
+):
+    import core.steps.sql_step as sql_step_module
+
+    def _raise_connect_failure(*_args, **_kwargs):
+        raise sqlite3.OperationalError(error_text)
+
+    monkeypatch.setattr(sql_step_module.sqlite3, "connect", _raise_connect_failure)
+
+    step = build_step(step_id="sql-step", use=StepType.SQL)
+    source = build_source_config(source_id="sql-connect-errors", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.ALLOW,
+                reason="source_rule",
+            )
+        )
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await execute_sql_step(
+            step,
+            source,
+            {
+                "connector": {"profile": "sqlite"},
+                "credentials": {"database": ":memory:"},
+                "query": "SELECT 1",
+            },
+            {},
+            {},
+            executor,
+        )
+
+    assert getattr(exc_info.value, "code", None) == expected_code
