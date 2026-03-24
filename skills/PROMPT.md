@@ -107,6 +107,8 @@ Rules:
 - map credentials/tokens only to `secrets`
 - map UI-facing values to `outputs`
 - keep short-lived intermediates in `context`
+- for non-blocking steps (`http`, `extract`, `script`, `log`), default intermediate artifacts to `context`; use `outputs` only when persistence is required
+- avoid mapping unfiltered large payloads directly to `outputs`; extract/clean first, then persist only minimal durable/display fields
 
 ### Variable Resolution Priority
 
@@ -216,7 +218,7 @@ flow:
       headers:
         Authorization: "Bearer {api_key}"
         Accept: "application/json"
-    outputs:
+    context:
       metrics_payload: "http_response"
 
   - id: parse_metrics
@@ -251,7 +253,7 @@ flow:
       method: "GET"
       headers:
         Authorization: "Bearer {oauth_secrets.access_token}"
-    outputs:
+    context:
       profile_payload: "http_response"
 ```
 
@@ -264,7 +266,7 @@ flow:
     args:
       url: "https://console.example.com"
       intercept_api: "/dashboard"
-    outputs:
+    context:
       dashboard_payload: "webview_data"
 
   - id: parse_dashboard
@@ -396,7 +398,7 @@ flow:
       headers:
         Authorization: "Bearer {api_key}"
         Accept: "application/json"
-    outputs:
+    context:
       usage_payload: "http_response"
 
   - id: parse_usage

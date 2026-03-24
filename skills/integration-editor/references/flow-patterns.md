@@ -18,6 +18,8 @@ Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, 
 - `secrets`: persistent + encrypted (credentials, tokens)
 - `outputs`: persistent + plaintext (UI data)
 - `context`: in-memory only (intermediates)
+- For non-blocking steps (`http`, `extract`, `script`, `log`), default intermediate artifacts to `context`.
+- Avoid persisting unfiltered large payloads in `outputs`; persist cleaned/minimal fields instead.
 
 ## Variable Resolution
 
@@ -63,7 +65,7 @@ Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, 
 - Purpose: start desktop webview scraping when API auth cannot be completed directly.
 - Args: `url` (required), `script` (optional), `intercept_api` (optional).
 - Runtime output envelope: `webview_data`; if object-like, top-level keys are also flattened into the output envelope.
-- Typical mapping: `outputs: { payload: "webview_data" }`.
+- Typical mapping: `context: { payload: "webview_data" }`.
 
 ## `http`
 - Purpose: execute an HTTP request.
@@ -115,7 +117,7 @@ flow:
       url: "https://api.example.com/v1/data"
       headers:
         Authorization: "Bearer {api_key}"
-    outputs:
+    context:
       data: "http_response"
 
   - id: parse_data
@@ -137,7 +139,7 @@ flow:
       url: "https://example.com/config"
       headers:
         User-Agent: "App/1.0"
-    outputs:
+    context:
       content: "raw_data"
 
   - id: parse_file

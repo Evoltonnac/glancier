@@ -125,7 +125,7 @@ flow:
       headers:
         Authorization: "Bearer {api_key}"
         Accept: "application/json"
-    outputs:
+    context:
       usage_payload: "http_response"
 
   - id: parse_usage
