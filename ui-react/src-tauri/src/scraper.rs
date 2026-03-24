@@ -21,6 +21,39 @@ const WINDOW_SCRAPER_FOREGROUND: &str = "scraper_foreground";
 const SCRAPER_DAEMON_INTERVAL: Duration = Duration::from_secs(2);
 const SCRAPER_DAEMON_LEASE_SECONDS: u64 = 20;
 
+fn apply_webview_proxy(
+    app: &AppHandle,
+    mut builder: tauri::WebviewWindowBuilder<'_, tauri::Wry, AppHandle>,
+    source_id: &str,
+    task_id: &str,
+) -> tauri::WebviewWindowBuilder<'_, tauri::Wry, AppHandle> {
+    if let Some(proxy_url) = crate::resolve_webview_proxy_url(app) {
+        emit_lifecycle_log(
+            app,
+            ScraperLifecycleLog::new(
+                source_id.to_string(),
+                task_id.to_string(),
+                "proxy_applied",
+                "info",
+                "Applying app proxy for webview scraper".to_string(),
+            ),
+        );
+        builder = builder.proxy_url(proxy_url);
+    } else {
+        emit_lifecycle_log(
+            app,
+            ScraperLifecycleLog::new(
+                source_id.to_string(),
+                task_id.to_string(),
+                "proxy_fallback_system",
+                "debug",
+                "No app proxy configured; falling back to system proxy".to_string(),
+            ),
+        );
+    }
+    builder
+}
+
 fn ensure_invoker_window(
     window: &Window,
     allowed_labels: &[&str],
@@ -1040,6 +1073,7 @@ pub async fn push_scraper_task(
         "Background Worker"
     })
     .initialization_script(&final_script);
+    builder = apply_webview_proxy(&app, builder, &source_id, &task_id);
 
     if foreground {
         emit_lifecycle_log(
@@ -1401,6 +1435,7 @@ async fn start_claimed_scraper_task(
     .inner_size(1.0, 1.0)
     .position(0.0, 0.0)
     .skip_taskbar(true);
+    let builder = apply_webview_proxy(app, builder, &source_id, &task_id);
 
     #[cfg(target_os = "macos")]
     {
@@ -2082,5 +2117,24 @@ mod tests {
                 "Scraper injection should handle target=_blank forms"
             );
         }
+    }
+
+    #[test]
+    fn webview_builder_applies_app_proxy_or_falls_back_to_system_contract() {
+        let source = include_str!("scraper.rs");
+        let body = extract_function_body(source, "fn apply_webview_proxy");
+
+        assert!(
+            body.contains("resolve_webview_proxy_url(app)"),
+            "WebView scraper should resolve proxy from app settings"
+        );
+        assert!(
+            body.contains("builder.proxy_url(proxy_url)"),
+            "WebView scraper should apply app-level proxy when configured"
+        );
+        assert!(
+            body.contains("No app proxy configured; falling back to system proxy"),
+            "WebView scraper should explicitly keep system proxy fallback when app proxy is unset"
+        );
     }
 }

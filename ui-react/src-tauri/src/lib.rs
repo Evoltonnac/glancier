@@ -79,6 +79,7 @@ const CURRENT_TARGET_TRIPLE: &str = "aarch64-pc-windows-msvc";
 #[derive(Debug, Deserialize)]
 struct PersistedSystemSettings {
     debug_logging_enabled: Option<bool>,
+    proxy: Option<String>,
 }
 
 #[derive(Default)]
@@ -259,6 +260,43 @@ fn read_debug_logging_enabled(data_root: Option<&PathBuf>) -> bool {
         .ok()
         .and_then(|settings| settings.debug_logging_enabled)
         .unwrap_or(false)
+}
+
+fn read_proxy_override(data_root: Option<&PathBuf>) -> Option<String> {
+    let root = data_root?;
+    let settings_file = root.join("data").join("settings.json");
+    let content = fs::read_to_string(settings_file).ok()?;
+    let settings = serde_json::from_str::<PersistedSystemSettings>(&content).ok()?;
+    let raw_proxy = settings.proxy?;
+    let normalized = raw_proxy.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+    Some(normalized.to_string())
+}
+
+pub(crate) fn resolve_webview_proxy_url(app: &tauri::AppHandle) -> Option<tauri::Url> {
+    let data_root = resolve_data_root(app);
+    let proxy = read_proxy_override(data_root.as_ref())?;
+
+    let url = match tauri::Url::parse(&proxy) {
+        Ok(url) => url,
+        Err(err) => {
+            log::warn!("Ignoring invalid app proxy for webview: {}", err);
+            return None;
+        }
+    };
+
+    match url.scheme() {
+        "http" | "socks5" => Some(url),
+        unsupported => {
+            log::warn!(
+                "Ignoring unsupported proxy scheme '{}' for webview; expected http or socks5",
+                unsupported
+            );
+            None
+        }
+    }
 }
 
 fn should_allow_devtools(app: &tauri::AppHandle) -> bool {
