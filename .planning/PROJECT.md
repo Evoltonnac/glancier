@@ -20,7 +20,8 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 - **Shipped v1.0**：完成品牌与术语重塑、代码语义统一、测试体系加固与稳定版交付。
 - **Post-v1.0 completed phases**：已完成 Phase 1/2（WebView Scraper reliability + usability/i18n/defaults hardening），并收敛归档到 v1.0 milestone context。
 - **Shipped v1.1**: Completed Phase 3-6 scope (security hardening, WebView stability, storage contract refactor, dashboard management workflows).
-- **Current focus (v1.2 active)**: Deliver SQL database query steps, chart widgets, and usability improvements through milestone-scoped requirements and roadmap execution.
+- **Phase 8 completed (2026-03-24)**: SQL step contracts, SQLGlot risk classification, trust-gated high-risk operations, deterministic SQL guardrails/error codes, and settings/docs/authoring-policy sync are shipped.
+- **Current focus (v1.2 active)**: Plan and execute Phase 9 SQL runtime connector parity and Integration Data normalization.
 
 ## 4. 全局目标 (Source of Truth 提炼)
 
@@ -154,4 +155,4 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 - [ ] Define usability scope (where UX friction is highest and what deterministic improvements are required in this milestone).
 
 ---
-*Last updated: 2026-03-23 after starting milestone v1.2 (SQL steps + chart widgets + usability enhancements)*
+*Last updated: 2026-03-24 after Phase 8 completion and transition to Phase 9 planning*
