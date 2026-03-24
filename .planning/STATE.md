@@ -1,19 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.2
-milestone_name: SQL Data Access and Visualization Expansion
-current_phase: 8
-current_plan: 3
+milestone_name: milestone
 status: executing
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-03-24T08:21:09.466Z"
-last_activity: 2026-03-24 - completed 08-02 SQL runtime integration with guardrails and redaction
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-03-24T08:40:03.859Z"
+last_activity: 2026-03-24 - completed 08-03 SQL settings/docs/policy synchronization
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -22,38 +20,39 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Users can complete auth -> fetch -> parse -> render through config-only integrations without backend hardcoding.
-**Current focus:** Execute Phase 8 SQL step contracts and safety guardrails using planned wave sequence (SQLGlot AST risk checks + trust-gated risky SQL operations).
+**Current focus:** Begin Phase 9 SQL runtime and Integration Data normalization after completing Phase 8 contracts.
 
 ## Current Position
 Milestone: v1.2 SQL Data Access and Visualization Expansion
-Phase: 8 of 11 (SQL Step Contracts and Safety Guardrails)
-Plan: 3 of 3 (08-03 next; 08-02 completed)
-Status: Executing
-Last activity: 2026-03-24 - completed 08-02 SQL runtime integration with guardrails and redaction
+Phase: 9 of 11 (SQL Runtime and Integration Data Normalization)
+Plan: 1 of TBD (phase 9 planning/execution pending)
+Status: Ready to execute
+Last activity: 2026-03-24 - completed 08-03 SQL settings/docs/policy synchronization
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: ~31 min
-- Total execution time: ~1.6 hours
+- Total plans completed: 5
+- Average duration: ~27 min
+- Total execution time: ~2.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 7 | 2 completed | 2 planned | ~42 min |
-| 8 | 2 completed | 3 planned | ~12 min |
-| 9 | 0 | - | - |
+| 8 | 3 completed | 3 planned | ~12 min |
+| 9 | 0 completed | TBD planned | - |
 | 10 | 0 | - | - |
 | 11 | 0 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 07-01 (pass), 07-02 (pass), 08-01 (pass), 08-02 (pass)
+- Last 5 plans: 07-01 (pass), 07-02 (pass), 08-01 (pass), 08-02 (pass), 08-03 (pass)
 - Trend: Stable
 | Phase 08-sql-step-contracts-and-safety-guardrails P02 | 15min | 3 tasks | 6 files |
+| Phase 08 P03 | 11min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -75,11 +74,15 @@ Progress: [████████░░] 80%
 - [Phase 08]: SQL runtime failures now emit explicit runtime.sql_* codes via SqlStepRuntimeError mapping.
 - [Phase 08]: High-risk SQL statements are gated with confirm interaction using capability=sql trust policy evaluation.
 - [Phase 08]: Executor skips raw traceback persistence for runtime.sql_* failures to reduce credential leakage risk.
+- [Phase 08]: Expose SQL timeout/max-row guardrails as stable system settings fields with legacy normalization.
+- [Phase 08]: Enforce SQL guardrail precedence as args override > system defaults > runtime built-ins with regression coverage.
+- [Phase 08]: Keep SQL write/mutation authoring trust-gated by default and extend connector parity notes for Mongo/GraphQL.
 
 ### Roadmap Evolution
 - Phase 7 added: Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor (inserted as v1.2 first phase; previous phases shifted by +1)
 - Phase 7 executed: `07-01` and `07-02` completed on 2026-03-24
-- Phase 8 planned: `08-01`, `08-02`, and `08-03` created on 2026-03-24
+- Phase 8 completed: `08-01`, `08-02`, and `08-03` executed on 2026-03-24
+- Next focus: Phase 9 planning/execution for SQL connector parity and normalized Integration Data output.
 
 ### Pending Todos
 None yet.
@@ -88,6 +91,6 @@ None yet.
 None currently.
 
 ## Session Continuity
-Last session: 2026-03-24T08:21:09.464Z
-Stopped at: Completed 08-02-PLAN.md
+Last session: 2026-03-24T08:40:03.857Z
+Stopped at: Completed 08-03-PLAN.md
 Resume file: None
