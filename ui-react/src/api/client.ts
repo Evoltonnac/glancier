@@ -405,7 +405,9 @@ class ApiClient {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || `Interaction failed for ${sourceId}`);
+      throw new Error(
+        err.detail || err.message || `Interaction failed for ${sourceId}`,
+      );
     }
   }
 

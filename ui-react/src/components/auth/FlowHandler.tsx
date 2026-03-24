@@ -34,6 +34,17 @@ interface RuntimePortInfo {
     web_mode_port?: number | null;
 }
 
+type TrustScope = "source" | "global";
+
+interface NetworkTrustInteractionData {
+    confirm_kind: "network_trust";
+    target_key?: string;
+    target_value?: string;
+    target_type?: string;
+    target_class?: string;
+    available_scopes?: TrustScope[];
+}
+
 export function FlowHandler({
     source,
     isOpen,
@@ -53,6 +64,7 @@ export function FlowHandler({
     const [deviceStatus, setDeviceStatus] = useState<
         "idle" | "pending" | "authorized" | "expired" | "error"
     >("idle");
+    const [trustScope, setTrustScope] = useState<TrustScope>("source");
     const [verifying, setVerifying] = useState(false);
     const authStatusPollInFlightRef = useRef(false);
 
@@ -64,6 +76,15 @@ export function FlowHandler({
     const isErrorState = source?.status === "error";
     const isSuspendedState = source?.status === "suspended";
     const sourceErrorCopy = getErrorCopyByCode(source?.error_code);
+    const networkTrustData: NetworkTrustInteractionData | null =
+        interaction?.type === "confirm" &&
+        interaction.data?.confirm_kind === "network_trust"
+            ? (interaction.data as NetworkTrustInteractionData)
+            : null;
+    const availableTrustScopes = Array.isArray(networkTrustData?.available_scopes)
+        ? networkTrustData.available_scopes
+        : ["source", "global"];
+    const supportsGlobalTrustScope = availableTrustScopes.includes("global");
 
     const handleInputChange = (key: string, value: string) => {
         setFormData((prev) => ({ ...prev, [key]: value }));
@@ -154,6 +175,7 @@ export function FlowHandler({
     useEffect(() => {
         setFormData({});
         resetFlowState();
+        setTrustScope("source");
     }, [sourceId, resetFlowState]);
 
     // Track initial source ID and step ID when source changes
@@ -332,6 +354,46 @@ export function FlowHandler({
             setLoading(false);
         }
     };
+
+    const submitTrustDecision = useCallback(
+        async (decision: "allow_once" | "allow_always" | "deny") => {
+            if (!source || !interaction || !networkTrustData) return;
+
+            const targetKey =
+                networkTrustData.target_key || networkTrustData.target_value;
+            if (!targetKey) {
+                setError(t("flow.error.interaction_failed"));
+                return;
+            }
+
+            setLoading(true);
+            setError(null);
+            try {
+                await api.interact(source.id, {
+                    type: "confirm",
+                    decision,
+                    scope: supportsGlobalTrustScope ? trustScope : "source",
+                    target_key: targetKey,
+                });
+                onInteractSuccess?.();
+                handleClose();
+            } catch (err: any) {
+                setError(err.message || t("flow.error.interaction_failed"));
+            } finally {
+                setLoading(false);
+            }
+        },
+        [
+            handleClose,
+            interaction,
+            networkTrustData,
+            onInteractSuccess,
+            source,
+            supportsGlobalTrustScope,
+            t,
+            trustScope,
+        ],
+    );
 
     const pollDeviceToken = useCallback(async () => {
         if (!sourceId) return;
@@ -612,6 +674,69 @@ export function FlowHandler({
                 );
 
             case "confirm":
+                if (networkTrustData?.confirm_kind === "network_trust") {
+                    return (
+                        <div className="py-4 space-y-4 text-sm">
+                            <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                                <div className="font-medium">
+                                    {t("flow.network_trust.prompt")}
+                                </div>
+                                <div className="mt-1 text-muted-foreground">
+                                    {t("flow.network_trust.target", {
+                                        target:
+                                            networkTrustData.target_key ||
+                                            networkTrustData.target_value ||
+                                            "",
+                                    })}
+                                </div>
+                                {networkTrustData.target_class && (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                        {t("flow.network_trust.classification", {
+                                            classification:
+                                                networkTrustData.target_class,
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {supportsGlobalTrustScope && (
+                                <div className="space-y-2">
+                                    <div className="text-xs text-muted-foreground">
+                                        {t("flow.network_trust.scope.label")}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "source"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("source")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.source")}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "global"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("global")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.global")}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
                 return (
                     <div className="py-4 text-sm text-center">
                         {t("flow.confirm.message", { name: source.name })}
@@ -755,7 +880,37 @@ export function FlowHandler({
                 {renderContent()}
 
                 <DialogFooter>
-                    {interaction.type !== "oauth_start" &&
+                    {interaction.type === "confirm" &&
+                        networkTrustData?.confirm_kind === "network_trust" && (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void submitTrustDecision("deny")}
+                                    disabled={loading}
+                                >
+                                    {t("flow.network_trust.action.deny")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void submitTrustDecision("allow_once")}
+                                    disabled={loading}
+                                >
+                                    {t("flow.network_trust.action.allow_once")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={() => void submitTrustDecision("allow_always")}
+                                    disabled={loading}
+                                >
+                                    {t("flow.network_trust.action.allow_always")}
+                                </Button>
+                            </>
+                        )}
+                    {!(interaction.type === "confirm" &&
+                        networkTrustData?.confirm_kind === "network_trust") &&
+                        interaction.type !== "oauth_start" &&
                         interaction.type !== "oauth_device_flow" &&
                         interaction.type !== "webview_scrape" && (
                             <Button

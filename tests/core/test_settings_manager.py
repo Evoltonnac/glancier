@@ -14,6 +14,7 @@ def test_load_settings_defaults_include_scraper_timeout(tmp_path):
     assert settings.refresh_interval_minutes == 30
     assert settings.encryption_enabled is True
     assert settings.language == "en"
+    assert settings.http_private_target_policy_default == "prompt"
 
 
 def test_save_and_reload_scraper_timeout(tmp_path):
@@ -25,6 +26,7 @@ def test_save_and_reload_scraper_timeout(tmp_path):
         debug_logging_enabled=True,
         refresh_interval_minutes=30,
         language="zh",
+        http_private_target_policy_default="allow",
     )
 
     manager.save_settings(expected)
@@ -36,6 +38,7 @@ def test_save_and_reload_scraper_timeout(tmp_path):
     assert loaded.debug_logging_enabled is True
     assert loaded.refresh_interval_minutes == 30
     assert loaded.language == "zh"
+    assert loaded.http_private_target_policy_default == "allow"
 
 
 def test_load_settings_invalid_language_falls_back_to_en(tmp_path):
@@ -101,7 +104,6 @@ def test_proxy_value_is_trimmed_on_save_and_load(tmp_path):
 
     assert loaded.proxy == "http://127.0.0.1:7890"
 
-
 def test_load_settings_enhanced_scraping_defaults_false_on_invalid_value(tmp_path):
     manager = SettingsManager(settings_dir=tmp_path)
     manager.settings_file.write_text(
@@ -112,3 +114,15 @@ def test_load_settings_enhanced_scraping_defaults_false_on_invalid_value(tmp_pat
     loaded = manager.load_settings()
 
     assert loaded.enhanced_scraping is False
+
+
+def test_load_settings_invalid_http_private_target_policy_falls_back_to_prompt(tmp_path):
+    manager = SettingsManager(settings_dir=tmp_path)
+    manager.settings_file.write_text(
+        '{"http_private_target_policy_default":"always_allow","encryption_enabled":true}',
+        encoding="utf-8",
+    )
+
+    loaded = manager.load_settings()
+
+    assert loaded.http_private_target_policy_default == "prompt"

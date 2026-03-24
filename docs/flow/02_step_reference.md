@@ -215,6 +215,25 @@ Runtime output envelope:
 - `raw_data` (raw response text)
 - `headers` (response headers)
 
+Runtime trust-gate behavior:
+- URL scheme must be `http` or `https`; invalid target emits `runtime.network_target_invalid`.
+- Public targets continue as normal.
+- Private/loopback targets are evaluated by trust policy:
+  - No matching trust decision -> suspend with interaction (`confirm`) and `runtime.network_trust_required`.
+  - Explicit deny -> fail with `runtime.network_target_denied`.
+  - Allow (persisted or one-time) -> request proceeds.
+
+Trust interaction submit contract (`/api/sources/{source_id}/interact`):
+
+```json
+{
+  "type": "confirm",
+  "decision": "allow_once | allow_always | deny",
+  "scope": "source | global",
+  "target_key": "<normalized-host-or-host_port>"
+}
+```
+
 Typical mapping:
 
 ```yaml

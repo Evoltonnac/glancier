@@ -248,6 +248,90 @@ describe("FlowHandler", () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it("submits network trust allow_once decision with source scope by default", async () => {
+        const onClose = vi.fn();
+        const onInteractSuccess = vi.fn();
+
+        render(
+            <FlowHandler
+                source={buildSource({
+                    type: "confirm",
+                    message: "Network trust required",
+                    fields: [],
+                    data: {
+                        confirm_kind: "network_trust",
+                        target_key: "127.0.0.1",
+                        target_class: "loopback",
+                        available_scopes: ["source", "global"],
+                    },
+                })}
+                isOpen={true}
+                onClose={onClose}
+                onInteractSuccess={onInteractSuccess}
+            />,
+        );
+
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: /Allow Once|仅允许本次/,
+            }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(apiMock.interact).toHaveBeenCalledWith("source-1", {
+            type: "confirm",
+            decision: "allow_once",
+            scope: "source",
+            target_key: "127.0.0.1",
+        });
+        expect(onInteractSuccess).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("submits network trust allow_always decision with global scope", async () => {
+        render(
+            <FlowHandler
+                source={buildSource({
+                    type: "confirm",
+                    message: "Network trust required",
+                    fields: [],
+                    data: {
+                        confirm_kind: "network_trust",
+                        target_key: "127.0.0.1",
+                        target_class: "loopback",
+                        available_scopes: ["source", "global"],
+                    },
+                })}
+                isOpen={true}
+                onClose={vi.fn()}
+                onInteractSuccess={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: /Global|全局/,
+            }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: /Allow Always|始终允许/,
+            }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(apiMock.interact).toHaveBeenCalledWith("source-1", {
+            type: "confirm",
+            decision: "allow_always",
+            scope: "global",
+            target_key: "127.0.0.1",
+        });
+    });
+
     it("prefers error code copy over interaction message in dialog title/description", async () => {
         render(
             <FlowHandler

@@ -32,6 +32,11 @@ from core.config_loader import (
 )
 from core.auth.oauth_auth import OAuthAuth
 from core.error_formatter import format_runtime_error
+from core.network_trust.models import (
+    NetworkTargetDeniedError,
+    NetworkTargetInvalidError,
+    NetworkTrustRequiredError,
+)
 from core.network_proxy import resolve_proxy_url
 from jsonpath_ng import parse
 
@@ -70,11 +75,13 @@ class Executor:
         settings_manager=None,
         max_concurrent_fetches: int | None = None,
         scraper_task_store=None,
+        network_trust_policy=None,
     ):
         self._data_controller = data_controller
         self._secrets = secrets_controller
         self._settings_manager = settings_manager
         self._scraper_tasks = scraper_task_store
+        self._network_trust_policy = network_trust_policy
         # source_id -> SourceState
         self._states: Dict[str, SourceState] = {}
         resolved_max_concurrency = self._resolve_max_concurrent_fetches(max_concurrent_fetches)
@@ -375,6 +382,9 @@ class Executor:
                         NetworkTimeoutError,
                         WebScraperBlockedError,
                         RetryRequiredRuntimeError,
+                        NetworkTrustRequiredError,
+                        NetworkTargetDeniedError,
+                        NetworkTargetInvalidError,
                     ),
                 ) or getattr(step_error, "code", None) in {
                     "script_timeout_exceeded",
@@ -559,6 +569,9 @@ class Executor:
                 NetworkTimeoutError,
                 WebScraperBlockedError,
                 RetryRequiredRuntimeError,
+                NetworkTrustRequiredError,
+                NetworkTargetDeniedError,
+                NetworkTargetInvalidError,
             ),
         ):
             return error
@@ -1015,6 +1028,21 @@ class Executor:
                 step_id=error.step_id or (webview_step.id if webview_step else "webview"),
                 source_id=source.id,
                 title="Manual Action Required",
+                message=error.message,
+                fields=[],
+                data=interaction_data,
+            )
+
+        if isinstance(error, NetworkTrustRequiredError):
+            interaction_data = dict(error.data or {})
+            interaction_data.setdefault("confirm_kind", "network_trust")
+            interaction_data.setdefault("actions", ["allow_once", "allow_always", "deny"])
+            interaction_data.setdefault("available_scopes", ["source", "global"])
+            return InteractionRequest(
+                type=InteractionType.CONFIRM,
+                step_id=error.step_id or "http",
+                source_id=source.id,
+                title="Network Trust Required",
                 message=error.message,
                 fields=[],
                 data=interaction_data,

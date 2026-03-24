@@ -92,7 +92,6 @@ DEFAULT_PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "prese
 router = APIRouter(prefix="/api")
 
 # These global references are injected from main.py.
-# These global references are injected from main.py.
 _executor = None
 _data_controller = None
 _config = None
@@ -104,6 +103,8 @@ _settings_manager = None
 _master_key_provider = None
 _scraper_task_store = None
 _source_update_bus = None
+_trust_rule_repo = None
+_network_trust_policy = None
 
 
 def init_api(
@@ -118,9 +119,11 @@ def init_api(
     master_key_provider=None,
     scraper_task_store=None,
     source_update_bus: SourceUpdateEventBus | None = None,
+    trust_rule_repo=None,
+    network_trust_policy=None,
 ):
     """Inject global dependencies (called by main.py)."""
-    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _master_key_provider, _scraper_task_store, _source_update_bus
+    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _master_key_provider, _scraper_task_store, _source_update_bus, _trust_rule_repo, _network_trust_policy
     _executor = executor
     _data_controller = data_controller
     _config = config
@@ -132,6 +135,8 @@ def init_api(
     _master_key_provider = master_key_provider
     _scraper_task_store = scraper_task_store
     _source_update_bus = source_update_bus
+    _trust_rule_repo = trust_rule_repo
+    _network_trust_policy = network_trust_policy
 
 
 def get_runtime_config():
@@ -287,6 +292,10 @@ def _infer_error_code_from_interaction(interaction: dict[str, Any] | None) -> st
     if not isinstance(interaction, dict):
         return None
     interaction_type = interaction.get("type")
+    if interaction_type == "confirm":
+        data = interaction.get("data")
+        if isinstance(data, dict) and data.get("confirm_kind") == "network_trust":
+            return "runtime.network_trust_required"
     mapping = {
         "oauth_start": "auth.authorization_required",
         "oauth_device_flow": "auth.authorization_required",
@@ -728,6 +737,15 @@ def _resolve_webview_interaction_secret_key(
         if isinstance(secret_key, str) and secret_key.strip():
             return secret_key.strip()
     return "webview_data"
+
+
+def _extract_network_trust_binding_data(interaction: InteractionRequest | Any) -> dict[str, Any] | None:
+    data = getattr(interaction, "data", None)
+    if not isinstance(data, dict):
+        return None
+    if data.get("confirm_kind") != "network_trust":
+        return None
+    return data
 
 
 def create_stored_source_record(
@@ -1470,7 +1488,77 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
 
         background_tasks.add_task(_executor.fetch_source, source)
         return {"message": "OAuth Token 已保存", "source_id": source_id}
-    
+
+    if interaction_type == InteractionType.CONFIRM.value:
+        binding = _validate_interaction_source_binding(
+            source_id,
+            pending_interaction,
+            expected_interaction_types={InteractionType.CONFIRM.value},
+            request_interaction_type=interaction_type,
+            request_source_id=request_source_id,
+        )
+        trust_binding = _extract_network_trust_binding_data(binding)
+        if trust_binding is not None:
+            _validate_interaction_payload_keys(
+                data,
+                binding,
+                allowed_protocol_keys={
+                    "type",
+                    "interaction_type",
+                    "source_id",
+                    "decision",
+                    "scope",
+                    "target_key",
+                },
+            )
+            decision = str(data.get("decision") or "").strip().lower()
+            scope = str(data.get("scope") or "").strip().lower()
+            target_key = str(data.get("target_key") or "").strip().lower()
+            if decision not in {"allow_once", "allow_always", "deny"}:
+                raise HTTPException(400, "interaction_payload_invalid")
+            if scope not in {"source", "global"}:
+                raise HTTPException(400, "interaction_payload_invalid")
+            if not target_key:
+                raise HTTPException(400, "interaction_payload_invalid")
+
+            capability = str(trust_binding.get("capability") or "http").strip().lower()
+            target_type = str(trust_binding.get("target_type") or "host").strip().lower()
+            target_value = str(trust_binding.get("target_value") or "").strip().lower()
+            expected_key = str(trust_binding.get("target_key") or target_value).strip().lower()
+            if not target_value or expected_key != target_key:
+                raise HTTPException(400, "interaction_payload_invalid")
+
+            if decision == "allow_once":
+                if _network_trust_policy is None or not hasattr(_network_trust_policy, "grant_allow_once"):
+                    raise HTTPException(503, "network_trust_policy_unavailable")
+                _network_trust_policy.grant_allow_once(
+                    capability=capability,
+                    source_id=source_id,
+                    target_type=target_type,
+                    target_value=target_value,
+                )
+            else:
+                if _trust_rule_repo is None or not hasattr(_trust_rule_repo, "upsert_rule"):
+                    raise HTTPException(503, "network_trust_rule_store_unavailable")
+                persisted_decision = "allow" if decision == "allow_always" else "deny"
+                persisted_source_id = source_id if scope == "source" else None
+                _trust_rule_repo.upsert_rule(
+                    capability=capability,
+                    scope_type=scope,
+                    source_id=persisted_source_id,
+                    target_type=target_type,
+                    target_value=target_value,
+                    decision=persisted_decision,
+                    metadata={
+                        "via": "interaction",
+                        "decision": decision,
+                    },
+                )
+
+            _executor._update_state(source_id, SourceStatus.REFRESHING, "Processing interaction results...")
+            background_tasks.add_task(_executor.fetch_source, source)
+            return {"message": "Trust decision recorded, retrying source.", "source_id": source_id}
+
     binding = _validate_interaction_source_binding(
         source_id,
         pending_interaction,

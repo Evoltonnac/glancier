@@ -31,6 +31,7 @@ from core.master_key_provider import MasterKeyProvider
 from core.settings_manager import SettingsManager
 from core.refresh_scheduler import RefreshScheduler
 from core.scraper_task_store import ScraperTaskStore
+from core.network_trust.policy import NetworkTrustPolicy
 from core.storage.contract import StorageContract
 from core.storage.settings_adapter import SettingsAdapter
 from core.storage.migration import run_startup_migration
@@ -38,6 +39,7 @@ from core.storage.sqlite_connection import create_sqlite_connection
 from core.storage.sqlite_resource_repo import SqliteResourceRepository
 from core.storage.sqlite_runtime_repo import SqliteRuntimeRepository
 from core.source_update_events import SourceUpdateEventBus
+from core.storage.sqlite_trust_rule_repo import SqliteTrustRuleRepository
 from core import api
 
 
@@ -111,6 +113,22 @@ def ensure_startup_encryption_key(settings_manager: object, master_key_provider:
         logger.info("provisioned encryption master key during startup")
     except Exception as exc:
         logger.warning("failed to provision startup master key: %s", exc)
+
+
+def resolve_default_http_private_target_policy(settings_manager: object) -> str:
+    load_settings = getattr(settings_manager, "load_settings", None)
+    if not callable(load_settings):
+        return "prompt"
+    try:
+        settings = load_settings()
+    except Exception:
+        return "prompt"
+
+    value = getattr(settings, "http_private_target_policy_default", "prompt")
+    if isinstance(value, str) and value in {"prompt", "allow", "deny"}:
+        return value
+    return "prompt"
+
 
 # Logging setup.
 logging.basicConfig(
@@ -196,10 +214,16 @@ def create_app() -> FastAPI:
 
     # Shared storage contract for runtime/resources/settings boundary.
     storage_connection = create_sqlite_connection()
+    trust_rule_repo = SqliteTrustRuleRepository(storage_connection)
+    network_trust_policy = NetworkTrustPolicy(
+        rule_repository=trust_rule_repo,
+        default_policy_resolver=lambda: resolve_default_http_private_target_policy(settings_manager),
+    )
     storage_contract = StorageContract(
         runtime=SqliteRuntimeRepository(storage_connection),
         resources=SqliteResourceRepository(storage_connection),
         settings=SettingsAdapter(settings_manager),
+        trust_rules=trust_rule_repo,
     )
     run_startup_migration(storage_contract)
 
@@ -251,6 +275,7 @@ def create_app() -> FastAPI:
         secrets_controller,
         settings_manager,
         scraper_task_store=scraper_task_store,
+        network_trust_policy=network_trust_policy,
     )
 
     # Inject SettingsManager and MasterKeyProvider into SecretsController.
@@ -284,6 +309,8 @@ def create_app() -> FastAPI:
         master_key_provider=master_key_provider,
         scraper_task_store=scraper_task_store,
         source_update_bus=source_update_bus,
+        trust_rule_repo=trust_rule_repo,
+        network_trust_policy=network_trust_policy,
     )
 
     # Register API routes.
@@ -307,6 +334,8 @@ def create_app() -> FastAPI:
     app.state.resource_manager = resource_manager
     app.state.storage_contract = storage_contract
     app.state.storage_connection = storage_connection
+    app.state.trust_rule_repo = trust_rule_repo
+    app.state.network_trust_policy = network_trust_policy
     app.state.startup_background_tasks = startup_background_tasks
     app.state.refresh_scheduler = refresh_scheduler
 

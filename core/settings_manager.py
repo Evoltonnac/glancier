@@ -39,6 +39,8 @@ class SystemSettings(BaseModel):
     density: str = "normal"
     # UI language. English is default.
     language: Literal["en", "zh"] = "en"
+    # Default policy when private/loopback HTTP target has no explicit trust rule.
+    http_private_target_policy_default: Literal["prompt", "allow", "deny"] = "prompt"
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -103,6 +105,8 @@ class SettingsManager:
                     data["refresh_interval_minutes"] = normalized_refresh
                 if data.get("language") not in {"en", "zh"}:
                     data["language"] = "en"
+                if data.get("http_private_target_policy_default") not in {"prompt", "allow", "deny"}:
+                    data["http_private_target_policy_default"] = "prompt"
                 raw_script_timeout = data.get("script_timeout_seconds")
                 if "script_timeout_seconds" not in data:
                     data["script_timeout_seconds"] = 10

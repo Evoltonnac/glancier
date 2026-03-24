@@ -166,14 +166,17 @@ def test_update_settings_persists_script_sandbox_and_timeout():
     payload = settings_manager.load_settings().model_dump()
     payload["script_sandbox_enabled"] = True
     payload["script_timeout_seconds"] = 25
+    payload["http_private_target_policy_default"] = "deny"
     response = client.put("/api/settings", json=payload)
 
     assert response.status_code == 200
     updated = response.json()
     assert updated["script_sandbox_enabled"] is True
     assert updated["script_timeout_seconds"] == 25
+    assert updated["http_private_target_policy_default"] == "deny"
     assert settings_manager.saved[-1].script_sandbox_enabled is True
     assert settings_manager.saved[-1].script_timeout_seconds == 25
+    assert settings_manager.saved[-1].http_private_target_policy_default == "deny"
 
 
 def test_update_settings_persists_enhanced_scraping_flag():

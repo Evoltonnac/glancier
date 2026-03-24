@@ -51,6 +51,8 @@ def _build_client(runtime: dict):
         runtime["resource_manager"],
         runtime["integration_manager"],
         runtime["settings_manager"],
+        trust_rule_repo=runtime.get("trust_rule_repo"),
+        network_trust_policy=runtime.get("network_trust_policy"),
     )
     app = FastAPI()
     app.include_router(api_module.router)
@@ -466,3 +468,134 @@ def test_oauth_callback_interact_rejects_unknown_state():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "oauth_state_invalid"
+
+
+def _build_network_trust_pending_state(source_id: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        interaction=SimpleNamespace(
+            type=InteractionType.CONFIRM,
+            source_id=source_id,
+            fields=[],
+            data={
+                "confirm_kind": "network_trust",
+                "capability": "http",
+                "target_type": "host",
+                "target_value": "127.0.0.1",
+                "target_key": "127.0.0.1",
+            },
+        ),
+    )
+
+
+def test_interact_network_trust_allow_once_bypasses_secrets_and_grants_ephemeral():
+    source = make_stored_source("oauth-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["network_trust_policy"] = SimpleNamespace(grant_allow_once=MagicMock())
+    runtime["trust_rule_repo"] = SimpleNamespace(upsert_rule=MagicMock())
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: _build_network_trust_pending_state("oauth-source"),
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/oauth-source/interact",
+        json={
+            "type": "confirm",
+            "decision": "allow_once",
+            "scope": "source",
+            "target_key": "127.0.0.1",
+        },
+    )
+
+    assert response.status_code == 200
+    runtime["network_trust_policy"].grant_allow_once.assert_called_once_with(
+        capability="http",
+        source_id="oauth-source",
+        target_type="host",
+        target_value="127.0.0.1",
+    )
+    runtime["trust_rule_repo"].upsert_rule.assert_not_called()
+    runtime["secrets_controller"].set_secrets.assert_not_called()
+    runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_interact_network_trust_allow_always_persists_rule():
+    source = make_stored_source("oauth-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["network_trust_policy"] = SimpleNamespace(grant_allow_once=MagicMock())
+    runtime["trust_rule_repo"] = SimpleNamespace(upsert_rule=MagicMock())
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: _build_network_trust_pending_state("oauth-source"),
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/oauth-source/interact",
+        json={
+            "type": "confirm",
+            "decision": "allow_always",
+            "scope": "global",
+            "target_key": "127.0.0.1",
+        },
+    )
+
+    assert response.status_code == 200
+    runtime["network_trust_policy"].grant_allow_once.assert_not_called()
+    runtime["trust_rule_repo"].upsert_rule.assert_called_once()
+    call_kwargs = runtime["trust_rule_repo"].upsert_rule.call_args.kwargs
+    assert call_kwargs["capability"] == "http"
+    assert call_kwargs["scope_type"] == "global"
+    assert call_kwargs["source_id"] is None
+    assert call_kwargs["target_type"] == "host"
+    assert call_kwargs["target_value"] == "127.0.0.1"
+    assert call_kwargs["decision"] == "allow"
+    runtime["secrets_controller"].set_secrets.assert_not_called()
+
+
+def test_interact_network_trust_rejects_malformed_payload():
+    source = make_stored_source("oauth-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["network_trust_policy"] = SimpleNamespace(grant_allow_once=MagicMock())
+    runtime["trust_rule_repo"] = SimpleNamespace(upsert_rule=MagicMock())
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: _build_network_trust_pending_state("oauth-source"),
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/oauth-source/interact",
+        json={
+            "type": "confirm",
+            "decision": "allow_once",
+            "scope": "source",
+            "target_key": "127.0.0.1",
+            "extra": "not-allowed",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "interaction_payload_invalid"
+    runtime["network_trust_policy"].grant_allow_once.assert_not_called()
+    runtime["trust_rule_repo"].upsert_rule.assert_not_called()
+    runtime["secrets_controller"].set_secrets.assert_not_called()
