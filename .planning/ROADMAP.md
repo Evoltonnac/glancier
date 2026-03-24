@@ -48,7 +48,11 @@ This roadmap covers milestone v1.2 only: risk-operation trust authorization and 
   2. User can receive normalized SQL Integration Data with `rows` plus typed field metadata that is consistent across supported connectors.
   3. User can rely on deterministic serialization of SQL-native values (`decimal`, `datetime`, `null`, `bytes`) before template/chart consumption.
   4. User can access SQL execution metadata (`row_count`, `duration_ms`, truncation flag) and reference SQL outputs through existing template expression channels.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 09-01-PLAN.md — Add canonical SQL normalization contracts and deterministic value serialization tests.
+- [ ] 09-02-PLAN.md — Implement sqlite/postgresql runtime adapter parity and canonical metadata envelope wiring.
+- [ ] 09-03-PLAN.md — Verify output-channel compatibility and synchronize SQL flow/failure documentation.
 
 ### Phase 10: SQL Chart Widgets and SDUI Rendering
 **Goal**: Users can visualize normalized SQL Integration Data in Bento Cards through chart widgets with deterministic validation and fallbacks.
@@ -77,6 +81,6 @@ This roadmap covers milestone v1.2 only: risk-operation trust authorization and 
 |-------|----------------|--------|-----------|
 | 7. Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor | 2/2 | Completed | 2026-03-24 |
 | 8. SQL Step Contracts and Safety Guardrails | 3/3 | Completed | 2026-03-24 |
-| 9. SQL Runtime and Integration Data Normalization | 0/TBD | Not started | - |
+| 9. SQL Runtime and Integration Data Normalization | 0/3 | Not started | - |
 | 10. SQL Chart Widgets and SDUI Rendering | 0/TBD | Not started | - |
 | 11. Authoring Usability and Diagnostics Hardening | 0/TBD | Not started | - |
