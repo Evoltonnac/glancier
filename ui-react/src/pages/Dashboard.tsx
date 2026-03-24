@@ -10,7 +10,7 @@ import {
 import { GridStack } from "gridstack";
 import { useNavigate } from "react-router-dom";
 import "gridstack/dist/gridstack.min.css";
-import { api } from "../api/client";
+import { api, type SourceUpdateStreamPayload } from "../api/client";
 import type {
     SourceSummary,
     DataResponse,
@@ -28,6 +28,7 @@ import {
     invalidateViews,
     optimisticRemoveSource,
     optimisticUpdateSourceStatus,
+    updateSourcesSnapshot,
     mutate,
     useSettings,
 } from "../hooks/useSWR";
@@ -83,6 +84,7 @@ import {
 } from "./dashboardLayout";
 import { parseCssLengthToPixels } from "./gridSizing";
 import { createViewSaveQueue } from "./viewSaveQueue";
+import { SourceUpdateCoordinator } from "./sourceUpdateCoordinator";
 import { invoke } from "@tauri-apps/api/core";
 import {
     Play,
@@ -361,10 +363,6 @@ export default function Dashboard() {
     const {
         viewConfig: storeViewConfig,
         setViewConfig,
-        sources: storeSources,
-        setSources,
-        dataMap: storeDataMap,
-        setDataMap: setStoreDataMap,
         interactSource,
         setInteractSource,
         isAddDialogOpen,
@@ -394,20 +392,13 @@ export default function Dashboard() {
     ];
 
     // Use SWR for data fetching - handles dedup, caching, and StrictMode automatically
-    const {
-        sources: swrSources,
-        dataMap: swrDataMap,
-        isLoading: swrLoading,
-    } = useSources();
+    const { sources: swrSources, dataMap, isLoading: swrLoading } = useSources();
     const { views: fetchedViews } = useViews();
     const swrViews =
         fetchedViews.length === 0 ? EMPTY_DASHBOARD_VIEWS : fetchedViews;
 
     // Use SWR data, fallback to store data during initial load
-    const sources: SourceSummary[] =
-        swrSources.length > 0 ? swrSources : storeSources;
-    const dataMap =
-        Object.keys(swrDataMap).length > 0 ? swrDataMap : storeDataMap;
+    const sources: SourceSummary[] = swrSources;
     const viewsById = useMemo(() => {
         const lookup = new Map<string, StoredView>();
         for (const view of swrViews) {
@@ -434,8 +425,18 @@ export default function Dashboard() {
     const viewConfig: StoredView | null = resolvedActiveViewId
         ? (viewsById.get(resolvedActiveViewId) ?? null)
         : storeViewConfig;
-    const isDataLoading = swrLoading && storeSources.length === 0;
-    const pollingDataMapRef = useRef<Record<string, DataResponse>>(dataMap);
+    const isDataLoading = swrLoading && swrSources.length === 0;
+    const sourcesSnapshotRef = useRef<{
+        sources: SourceSummary[];
+        dataMap: Record<string, DataResponse>;
+    }>({
+        sources,
+        dataMap,
+    });
+    const coordinatorRef = useRef<SourceUpdateCoordinator | null>(null);
+    const sourceUpdatesSocketRef = useRef<WebSocket | null>(null);
+    const sourceUpdatesSeqRef = useRef(0);
+    const sourceUpdatesReconnectRef = useRef<number | null>(null);
 
     // Density settings
     const { settings } = useSettings();
@@ -453,20 +454,12 @@ export default function Dashboard() {
     }, [currentDensity]);
 
     useEffect(() => {
-        if (swrLoading) {
-            return;
-        }
-        setSources(swrSources);
-        setStoreDataMap(swrDataMap);
-    }, [setSources, setStoreDataMap, swrDataMap, swrLoading, swrSources]);
-
-    useEffect(() => {
         syncWithViews(swrViews);
     }, [swrViews, syncWithViews]);
 
     useEffect(() => {
-        pollingDataMapRef.current = dataMap;
-    }, [dataMap]);
+        sourcesSnapshotRef.current = { sources, dataMap };
+    }, [sources, dataMap]);
 
     const { sidebarCollapsed, toggleSidebar } = useSidebar();
     const {
@@ -508,7 +501,6 @@ export default function Dashboard() {
         }
         return viewConfig.items.map((item) => item.id).join("|");
     }, [viewConfig]);
-
     if (!viewSaveQueueRef.current) {
         viewSaveQueueRef.current = createViewSaveQueue(
             async (nextView) => {
@@ -929,81 +921,174 @@ export default function Dashboard() {
         gs.cellHeight(newGridRowHeight);
     }, [currentDensity]);
 
-    // Poll for status updates continuously when page is visible.
-    // Trigger one request immediately when polling starts so dashboard data does not wait for the first interval tick.
     useEffect(() => {
-        let stopped = false;
+        coordinatorRef.current = new SourceUpdateCoordinator({
+            maxConcurrency: 4,
+            pollIntervalMs: 3000,
+            fetchSources: () => api.getSources(),
+            fetchSourceData: (sourceId) => api.getSourceData(sourceId),
+            getSnapshot: () => sourcesSnapshotRef.current,
+            updateSnapshot: (updater) => {
+                updateSourcesSnapshot(updater);
+            },
+            onError: (error, context) => {
+                console.error(`Source update coordinator failed (${context}):`, error);
+            },
+        });
+        coordinatorRef.current.start();
+        return () => {
+            coordinatorRef.current?.stop();
+            coordinatorRef.current = null;
+            if (sourceUpdatesReconnectRef.current !== null) {
+                window.clearTimeout(sourceUpdatesReconnectRef.current);
+                sourceUpdatesReconnectRef.current = null;
+            }
+            sourceUpdatesSocketRef.current?.close();
+            sourceUpdatesSocketRef.current = null;
+        };
+    }, []);
 
-        const pollSources = async () => {
-            if (stopped || document.hidden) {
+    useEffect(() => {
+        const activeSourceIds = new Set<string>();
+        const otherSourceIds = new Set<string>();
+        const activeView = resolvedActiveViewId
+            ? viewsById.get(resolvedActiveViewId) ?? null
+            : null;
+        if (activeView) {
+            for (const item of activeView.items) {
+                if (item.source_id && !activeSourceIds.has(item.source_id)) {
+                    activeSourceIds.add(item.source_id);
+                }
+            }
+        }
+        for (const view of orderedViews) {
+            if (view.id === activeView?.id) {
+                continue;
+            }
+            for (const item of view.items) {
+                const sourceId = item.source_id;
+                if (!sourceId || activeSourceIds.has(sourceId) || otherSourceIds.has(sourceId)) {
+                    continue;
+                }
+                otherSourceIds.add(sourceId);
+            }
+        }
+        coordinatorRef.current?.setPriorityContext({
+            activeDashboardSourceIds: Array.from(activeSourceIds),
+            otherDashboardSourceIds: Array.from(otherSourceIds),
+        });
+    }, [orderedViews, resolvedActiveViewId, viewsById]);
+
+    useEffect(() => {
+        coordinatorRef.current?.submitSources(
+            sources.map((source) => source.id),
+            "view_change",
+        );
+    }, [activeItemIdsKey]);
+
+    useEffect(() => {
+        let closed = false;
+        let reconnectAttempts = 0;
+
+        const scheduleReconnect = () => {
+            if (closed || sourceUpdatesReconnectRef.current !== null) {
+                return;
+            }
+            const delayMs = Math.min(5000, 500 * 2 ** reconnectAttempts);
+            reconnectAttempts += 1;
+            sourceUpdatesReconnectRef.current = window.setTimeout(() => {
+                sourceUpdatesReconnectRef.current = null;
+                void connectSocket();
+            }, delayMs);
+        };
+
+        const connectSocket = async () => {
+            if (closed) {
                 return;
             }
             try {
-                const updatedSources = await api.getSources();
-                if (stopped) {
+                const socket = await api.connectSourceUpdates({
+                    sinceSeq: sourceUpdatesSeqRef.current || undefined,
+                });
+                if (closed) {
+                    socket.close();
                     return;
                 }
+                sourceUpdatesSocketRef.current = socket;
 
-                const cachedDataMap = pollingDataMapRef.current;
-
-                // Optimization: fetch details only for sources with changed updated_at
-                const needsUpdate = (source: SourceSummary): boolean => {
-                    const cachedData = cachedDataMap[source.id];
-                    if (!cachedData) return true;
-                    if (!source.updated_at) return true;
-                    if (!cachedData.updated_at) return true;
-                    return source.updated_at > cachedData.updated_at;
+                socket.onopen = () => {
+                    reconnectAttempts = 0;
                 };
 
-                const sourcesToFetch = updatedSources.filter(needsUpdate);
-                const sourcesNeedingNoFetch = updatedSources.filter(
-                    (s) => !needsUpdate(s),
-                );
-
-                // Fetch details only for sources that need updates
-                const dataPromises = sourcesToFetch.map((s) =>
-                    api
-                        .getSourceData(s.id)
-                        .then((data) => ({ id: s.id, data })),
-                );
-                const results = await Promise.all(dataPromises);
-
-                const newDataMap: Record<string, DataResponse> = {};
-
-                // Add sources that were freshly fetched
-                results.forEach(({ id, data }) => {
-                    newDataMap[id] = data;
-                });
-
-                // Use cached data for sources that do not need updates
-                sourcesNeedingNoFetch.forEach((s) => {
-                    if (cachedDataMap[s.id]) {
-                        newDataMap[s.id] = cachedDataMap[s.id];
+                socket.onmessage = (message) => {
+                    let payload: SourceUpdateStreamPayload | null = null;
+                    try {
+                        payload = JSON.parse(message.data) as SourceUpdateStreamPayload;
+                    } catch {
+                        return;
                     }
-                });
+                    if (!payload || typeof payload !== "object" || !("event" in payload)) {
+                        return;
+                    }
+                    if (payload.event === "source.stream.ready") {
+                        sourceUpdatesSeqRef.current = Math.max(
+                            sourceUpdatesSeqRef.current,
+                            payload.latest_seq || 0,
+                        );
+                        if (payload.sync_required) {
+                            void coordinatorRef.current?.pollNow({
+                                trigger: "websocket",
+                                forceAll: false,
+                            });
+                        }
+                        return;
+                    }
+                    if (payload.event === "source.sync_required") {
+                        sourceUpdatesSeqRef.current = Math.max(
+                            sourceUpdatesSeqRef.current,
+                            payload.latest_seq || 0,
+                        );
+                        void coordinatorRef.current?.pollNow({
+                            trigger: "websocket",
+                            forceAll: false,
+                        });
+                        return;
+                    }
+                    if (payload.event === "source.updated") {
+                        sourceUpdatesSeqRef.current = Math.max(
+                            sourceUpdatesSeqRef.current,
+                            payload.seq || 0,
+                        );
+                        coordinatorRef.current?.handleWebSocketEvent(payload);
+                    }
+                };
 
-                // Update SWR cache
-                mutate(
-                    "sources-with-data",
-                    {
-                        sources: updatedSources,
-                        dataMap: newDataMap,
-                    },
-                    false,
-                );
+                socket.onclose = () => {
+                    if (sourceUpdatesSocketRef.current === socket) {
+                        sourceUpdatesSocketRef.current = null;
+                    }
+                    scheduleReconnect();
+                };
+
+                socket.onerror = () => {
+                    scheduleReconnect();
+                };
             } catch (error) {
-                console.error("Dashboard polling failed:", error);
+                console.error("Failed to connect source update websocket:", error);
+                scheduleReconnect();
             }
         };
 
-        void pollSources();
-        const interval = window.setInterval(() => {
-            void pollSources();
-        }, 3000);
+        void connectSocket();
 
         return () => {
-            stopped = true;
-            window.clearInterval(interval);
+            closed = true;
+            if (sourceUpdatesReconnectRef.current !== null) {
+                window.clearTimeout(sourceUpdatesReconnectRef.current);
+                sourceUpdatesReconnectRef.current = null;
+            }
+            sourceUpdatesSocketRef.current?.close();
+            sourceUpdatesSocketRef.current = null;
         };
     }, []);
 
@@ -1018,14 +1103,20 @@ export default function Dashboard() {
             }
         }
 
-        setSources(sources.map((s) => ({ ...s, status: "refreshing" })));
+        updateSourcesSnapshot((snapshot) => ({
+            ...snapshot,
+            sources: snapshot.sources.map((source) => ({
+                ...source,
+                status: "refreshing",
+            })),
+        }));
         setSkippedScrapers(new Set());
         useStore.getState().setActiveScraper(null);
 
         await api
             .refreshAll()
             .catch((e) => console.error("Refresh all failed:", e));
-    }, [setSkippedScrapers, setSources, sources]);
+    }, [setSkippedScrapers]);
 
     useEffect(() => {
         const onRefresh = async () => {
@@ -1034,6 +1125,20 @@ export default function Dashboard() {
         window.addEventListener("app:refresh_data", onRefresh);
         return () => window.removeEventListener("app:refresh_data", onRefresh);
     }, [runGlobalRefresh]);
+
+    useEffect(() => {
+        const onVisibilityChange = () => {
+            if (!document.hidden) {
+                void coordinatorRef.current?.pollNow({
+                    trigger: "view_change",
+                    forceAll: false,
+                });
+            }
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () =>
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+    }, []);
 
     const handleRefreshSource = useCallback(
         async (sourceId: string) => {
@@ -1059,10 +1164,17 @@ export default function Dashboard() {
 
             try {
                 await api.refreshSource(sourceId);
+                coordinatorRef.current?.submitSources([sourceId], "manual", {
+                    force: true,
+                    manualBoost: true,
+                });
             } catch (error) {
                 console.error(`Failed to refresh source ${sourceId}:`, error);
                 // Rollback by re-fetching
-                invalidateSources();
+                void coordinatorRef.current?.pollNow({
+                    trigger: "manual",
+                    forceAll: false,
+                });
             }
         },
         [setSkippedScrapers],
@@ -1075,7 +1187,10 @@ export default function Dashboard() {
                     sourceId,
                     intervalMinutes,
                 );
-                await invalidateSources();
+                await coordinatorRef.current?.pollNow({
+                    trigger: "manual",
+                    forceAll: false,
+                });
             } catch (error) {
                 console.error(`Failed to update auto-refresh interval for ${sourceId}:`, error);
             }
@@ -2078,7 +2193,10 @@ export default function Dashboard() {
                 isOpen={!!interactSource}
                 onClose={() => setInteractSource(null)}
                 onInteractSuccess={() => {
-                    invalidateSources();
+                    void coordinatorRef.current?.pollNow({
+                        trigger: "manual",
+                        forceAll: false,
+                    });
                 }}
                 onPushToQueue={handlePushToQueue}
             />

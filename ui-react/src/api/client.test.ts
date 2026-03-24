@@ -168,4 +168,23 @@ describe("api client", () => {
             ],
         });
     });
+
+    it("builds websocket URL for source updates with since_seq", async () => {
+        const webSocketCtor = vi.fn();
+        vi.stubGlobal("WebSocket", webSocketCtor as unknown as typeof WebSocket);
+
+        const { api } = await import("./client");
+        const fetchMock = vi.mocked(fetch);
+        fetchMock.mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: vi.fn(),
+        } as unknown as Response);
+
+        await api.connectSourceUpdates({ sinceSeq: 12 });
+
+        expect(webSocketCtor).toHaveBeenCalledWith(
+            "ws://localhost:3000/api/ws/source-updates?since_seq=12",
+        );
+    });
 });

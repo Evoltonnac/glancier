@@ -42,12 +42,26 @@ const fetcher = async (key: string) => {
 // Fetcher that gets sources AND their data (with optimized fetching based on updated_at)
 // cachedData is passed from the useSources hook via closure
 const sourcesWithDataFetcher = async (
-  cachedData?: { sources: SourceSummary[]; dataMap: Record<string, DataResponse> }
+  cachedData?: { sources: SourceSummary[]; dataMap: Record<string, DataResponse> },
+  options?: { hydrateDetails?: boolean }
 ): Promise<{
   sources: SourceSummary[];
   dataMap: Record<string, DataResponse>;
 }> => {
   const sourcesData = await api.getSources();
+  const hydrateDetails = options?.hydrateDetails === true;
+
+  if (!hydrateDetails) {
+    const sourceIds = new Set(sourcesData.map((source) => source.id));
+    const cachedMap = cachedData?.dataMap ?? {};
+    const nextDataMap: Record<string, DataResponse> = {};
+    for (const [sourceId, sourceData] of Object.entries(cachedMap)) {
+      if (sourceIds.has(sourceId)) {
+        nextDataMap[sourceId] = sourceData;
+      }
+    }
+    return { sources: sourcesData, dataMap: nextDataMap };
+  }
 
   // If cache is empty, fetch details for all sources
   if (!cachedData) {
@@ -58,7 +72,9 @@ const sourcesWithDataFetcher = async (
 
     const dataMap: Record<string, DataResponse> = {};
     results.forEach(({ id, data }) => {
-      dataMap[id] = data;
+      if (data) {
+        dataMap[id] = data;
+      }
     });
 
     return { sources: sourcesData, dataMap };
@@ -87,7 +103,9 @@ const sourcesWithDataFetcher = async (
 
   // Insert freshly fetched sources first
   results.forEach(({ id, data }) => {
-    dataMap[id] = data;
+    if (data) {
+      dataMap[id] = data;
+    }
   });
 
   // Then add unchanged sources from cache
@@ -102,7 +120,7 @@ const sourcesWithDataFetcher = async (
 
 // --- Dashboard Hooks ---
 
-export function useSources() {
+export function useSources(options?: { withDetails?: boolean }) {
   const { cache } = useSWRConfig();
 
   // Use a getter so each fetcher run sees the latest cache
@@ -113,7 +131,10 @@ export function useSources() {
 
   const { data, error, isLoading, mutate: mutateSources } = useSWR(
     CACHE_KEY,
-    () => sourcesWithDataFetcher(getCachedData()),
+    () =>
+      sourcesWithDataFetcher(getCachedData(), {
+        hydrateDetails: options?.withDetails === true,
+      }),
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
@@ -278,6 +299,21 @@ export async function optimisticUpdateSources(
     async (currentData) => {
       if (!currentData) return currentData;
       return updateFn(currentData);
+    },
+    false
+  );
+}
+
+export function updateSourcesSnapshot(
+  updateFn: (
+    data: { sources: SourceSummary[]; dataMap: Record<string, DataResponse> }
+  ) => { sources: SourceSummary[]; dataMap: Record<string, DataResponse> }
+) {
+  mutate(
+    CACHE_KEY,
+    (currentData?: { sources: SourceSummary[]; dataMap: Record<string, DataResponse> }) => {
+      const base = currentData ?? { sources: [], dataMap: {} };
+      return updateFn(base);
     },
     false
   );

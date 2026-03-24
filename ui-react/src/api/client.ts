@@ -205,6 +205,39 @@ export interface SourceDeleteResponse {
   cleanup?: SourceDeleteCleanup;
 }
 
+export interface SourceUpdateEventPayload {
+  event: "source.updated";
+  seq: number;
+  source_id: string;
+  event_type: string;
+  updated_at: number;
+  status?: string;
+  error_code?: string;
+}
+
+export interface SourceUpdateStreamReadyPayload {
+  event: "source.stream.ready";
+  latest_seq: number;
+  sync_required: boolean;
+}
+
+export interface SourceUpdateSyncRequiredPayload {
+  event: "source.sync_required";
+  latest_seq: number;
+  reason: string;
+}
+
+export interface SourceUpdateStreamUnavailablePayload {
+  event: "source.stream.unavailable";
+  reason: string;
+}
+
+export type SourceUpdateStreamPayload =
+  | SourceUpdateEventPayload
+  | SourceUpdateStreamReadyPayload
+  | SourceUpdateSyncRequiredPayload
+  | SourceUpdateStreamUnavailablePayload;
+
 class ApiClient {
   async waitForBackendReady(timeoutMs = 20_000): Promise<void> {
     await ensureBackendReady({ timeoutMs });
@@ -247,6 +280,33 @@ class ApiClient {
       throw new Error(`Failed to fetch data for ${sourceId}`);
     }
     return res.json();
+  }
+
+  async connectSourceUpdates(params?: { sinceSeq?: number }): Promise<WebSocket> {
+    const baseUrl = await resolveApiBaseUrl();
+    const path = "/ws/source-updates";
+    let wsUrl = "";
+
+    if (baseUrl.startsWith("http://")) {
+      wsUrl = `ws://${baseUrl.slice("http://".length)}${path}`;
+    } else if (baseUrl.startsWith("https://")) {
+      wsUrl = `wss://${baseUrl.slice("https://".length)}${path}`;
+    } else if (baseUrl.startsWith("/")) {
+      if (typeof window === "undefined") {
+        throw new Error("WebSocket URL resolution requires browser runtime");
+      }
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl = `${protocol}//${window.location.host}${baseUrl}${path}`;
+    } else {
+      throw new Error(`Unsupported API base URL for websocket: ${baseUrl}`);
+    }
+
+    const sinceSeq = params?.sinceSeq;
+    if (typeof sinceSeq === "number" && Number.isFinite(sinceSeq) && sinceSeq >= 0) {
+      const separator = wsUrl.includes("?") ? "&" : "?";
+      wsUrl = `${wsUrl}${separator}since_seq=${Math.floor(sinceSeq)}`;
+    }
+    return new WebSocket(wsUrl);
   }
 
   async getHistory(sourceId: string, limit = 100): Promise<any[]> {

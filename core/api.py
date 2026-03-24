@@ -9,7 +9,14 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel
@@ -29,6 +36,7 @@ from core.refresh_policy import (
     resolve_refresh_interval_minutes,
 )
 import yaml
+from core.source_update_events import SourceUpdateEventBus
 
 class FileContentRequest(BaseModel):
     content: str
@@ -95,6 +103,7 @@ _integration_manager = None
 _settings_manager = None
 _master_key_provider = None
 _scraper_task_store = None
+_source_update_bus = None
 
 
 def init_api(
@@ -108,9 +117,10 @@ def init_api(
     settings_manager=None,
     master_key_provider=None,
     scraper_task_store=None,
+    source_update_bus: SourceUpdateEventBus | None = None,
 ):
     """Inject global dependencies (called by main.py)."""
-    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _master_key_provider, _scraper_task_store
+    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _master_key_provider, _scraper_task_store, _source_update_bus
     _executor = executor
     _data_controller = data_controller
     _config = config
@@ -121,6 +131,7 @@ def init_api(
     _settings_manager = settings_manager
     _master_key_provider = master_key_provider
     _scraper_task_store = scraper_task_store
+    _source_update_bus = source_update_bus
 
 
 def get_runtime_config():
@@ -286,6 +297,72 @@ def _infer_error_code_from_interaction(interaction: dict[str, Any] | None) -> st
         "retry": "runtime.retry_required",
     }
     return mapping.get(interaction_type)
+
+
+def _normalize_since_seq(raw: int | None) -> int | None:
+    if raw is None:
+        return None
+    if raw < 0:
+        return 0
+    return raw
+
+
+@router.websocket("/ws/source-updates")
+async def source_updates_stream(
+    websocket: WebSocket,
+    since_seq: int | None = None,
+) -> None:
+    """
+    Source update websocket stream.
+
+    Message semantics:
+    - Push lightweight source update events only (no detail payloads).
+    - Client must fetch detail via HTTP and can use polling as reconciliation fallback.
+    """
+    await websocket.accept()
+    if _source_update_bus is None:
+        await websocket.send_json(
+            {
+                "event": "source.stream.unavailable",
+                "reason": "event_bus_not_ready",
+            },
+        )
+        await websocket.close(code=1013)
+        return
+
+    normalized_since_seq = _normalize_since_seq(since_seq)
+    queue = _source_update_bus.subscribe()
+    try:
+        sync_required, replay_events, latest_seq = _source_update_bus.replay_since(
+            normalized_since_seq,
+        )
+        await websocket.send_json(
+            {
+                "event": "source.stream.ready",
+                "latest_seq": latest_seq,
+                "sync_required": sync_required,
+            },
+        )
+
+        if sync_required:
+            await websocket.send_json(
+                {
+                    "event": "source.sync_required",
+                    "latest_seq": latest_seq,
+                    "reason": "history_gap",
+                },
+            )
+        else:
+            for event in replay_events:
+                await websocket.send_json(event)
+
+        while True:
+            event = await queue.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        return
+    finally:
+        _source_update_bus.unsubscribe(queue)
 
 
 # ── Source Listing ────────────────────────────────────

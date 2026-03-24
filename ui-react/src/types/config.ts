@@ -100,9 +100,12 @@ export interface DataResponse {
     source_id: string;
     data: Record<string, unknown> | null;
     updated_at?: number;
+    status?: SourceStatus;
     error?: string;
     error_code?: string;
     message?: string;
+    interaction?: InteractionRequest;
+    last_success_at?: number | null;
 }
 
 export interface HistoryRecord {
