@@ -57,9 +57,16 @@ async def test_execute_sql_step_select_returns_deterministic_envelope(tmp_path: 
         {"id": 2, "value": "beta"},
     ]
     assert sql_response["columns"] == ["id", "value"]
+    assert sql_response["fields"] == [
+        {"name": "id", "type": "integer"},
+        {"name": "value", "type": "string"},
+    ]
     assert sql_response["row_count"] == 2
     assert sql_response["statement_types"] == ["select"]
     assert sql_response["risk_reasons"] == []
+    assert sql_response["duration_ms"] >= 0
+    assert isinstance(sql_response["truncated"], bool)
+    assert sql_response["execution_ms"] == sql_response["duration_ms"]
 
 
 @pytest.mark.asyncio
@@ -328,7 +335,7 @@ async def test_execute_sql_step_timeout_maps_to_runtime_sql_timeout(
 
 
 @pytest.mark.asyncio
-async def test_execute_sql_step_max_row_limit_maps_to_runtime_sql_row_limit_exceeded(
+async def test_execute_sql_step_max_row_limit_truncates_response(
     tmp_path: Path,
 ):
     db_path = tmp_path / "row-limit.db"
@@ -345,22 +352,25 @@ async def test_execute_sql_step_max_row_limit_maps_to_runtime_sql_row_limit_exce
         )
     )
 
-    with pytest.raises(Exception) as exc_info:
-        await execute_sql_step(
-            step,
-            source,
-            {
-                "connector": {"profile": "sqlite"},
-                "credentials": {"database": str(db_path)},
-                "query": "SELECT id, value FROM metrics ORDER BY id",
-                "max_rows": 1,
-            },
-            {},
-            {},
-            executor,
-        )
+    result = await execute_sql_step(
+        step,
+        source,
+        {
+            "connector": {"profile": "sqlite"},
+            "credentials": {"database": str(db_path)},
+            "query": "SELECT id, value FROM metrics ORDER BY id",
+            "max_rows": 1,
+        },
+        {},
+        {},
+        executor,
+    )
 
-    assert getattr(exc_info.value, "code", None) == "runtime.sql_row_limit_exceeded"
+    sql_response = result["sql_response"]
+    assert sql_response["row_count"] == 1
+    assert sql_response["truncated"] is True
+    assert sql_response["duration_ms"] >= 0
+    assert sql_response["execution_ms"] == sql_response["duration_ms"]
 
 
 @pytest.mark.asyncio
