@@ -11,6 +11,7 @@ from .script_step import execute_script_step
 from .sql_step import (
     SqlRiskOperationDeniedError,
     SqlRiskOperationTrustRequiredError,
+    SqlStepRuntimeError,
     execute_sql_step,
 )
 
@@ -21,6 +22,7 @@ __all__ = [
     "execute_extract_step",
     "execute_script_step",
     "execute_sql_step",
+    "SqlStepRuntimeError",
     "SqlRiskOperationTrustRequiredError",
     "SqlRiskOperationDeniedError",
 ]

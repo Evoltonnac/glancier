@@ -329,8 +329,7 @@ class Executor:
                     execute_extract_step,
                     execute_script_step,
                     execute_sql_step,
-                    SqlRiskOperationDeniedError,
-                    SqlRiskOperationTrustRequiredError,
+                    SqlStepRuntimeError,
                 )
 
                 if step.use in (StepType.API_KEY, StepType.FORM, StepType.CURL, StepType.OAUTH):
@@ -390,8 +389,7 @@ class Executor:
                         NetworkTrustRequiredError,
                         NetworkTargetDeniedError,
                         NetworkTargetInvalidError,
-                        SqlRiskOperationTrustRequiredError,
-                        SqlRiskOperationDeniedError,
+                        SqlStepRuntimeError,
                     ),
                 ) or getattr(step_error, "code", None) in {
                     "script_timeout_exceeded",
@@ -569,8 +567,7 @@ class Executor:
         error: Exception,
     ) -> Exception:
         from core.steps.sql_step import (
-            SqlRiskOperationDeniedError,
-            SqlRiskOperationTrustRequiredError,
+            SqlStepRuntimeError,
         )
 
         if isinstance(
@@ -584,8 +581,7 @@ class Executor:
                 NetworkTrustRequiredError,
                 NetworkTargetDeniedError,
                 NetworkTargetInvalidError,
-                SqlRiskOperationTrustRequiredError,
-                SqlRiskOperationDeniedError,
+                SqlStepRuntimeError,
             ),
         ):
             return error

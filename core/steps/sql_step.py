@@ -1,23 +1,27 @@
-"""
-SQL step runtime execution.
-"""
+"""SQL step runtime execution."""
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from core.log_redaction import sanitize_log_reason
 from core.network_trust.models import TrustDecision, TrustResolution
-from core.sql.contracts import classify_sql_contract
+from core.sql.contracts import SqlContractValidationError, classify_sql_contract
 
 if TYPE_CHECKING:
     from core.config_loader import SourceConfig, StepConfig
     from core.executor import Executor
 
 
-_SQL_RISK_REQUIRES_TRUST_CODE = "runtime.sql_risk_operation_requires_trust"
-_SQL_RISK_DENIED_CODE = "runtime.sql_risk_operation_denied"
+_DEFAULT_SQL_TIMEOUT_SECONDS = 30.0
+_DEFAULT_SQL_MAX_ROWS = 500
+_MIN_SQL_TIMEOUT_SECONDS = 0.1
+_MIN_SQL_MAX_ROWS = 1
+_MAX_QUERY_PREVIEW_LENGTH = 120
 
 
 @dataclass(slots=True)
@@ -28,30 +32,57 @@ class _SqlTrustBinding:
     decision_source: str
 
 
-class SqlRiskOperationTrustRequiredError(RuntimeError):
-    def __init__(self, *, source_id: str, step_id: str, data: dict[str, Any]):
-        message = "SQL risk operation requires trust confirmation."
-        super().__init__(message)
+class SqlStepRuntimeError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        source_id: str,
+        step_id: str,
+        code: str,
+        summary: str,
+        details: str,
+        data: dict[str, Any] | None = None,
+    ):
+        super().__init__(summary)
         self.source_id = source_id
         self.step_id = step_id
-        self.code = _SQL_RISK_REQUIRES_TRUST_CODE
-        self.message = message
-        self.summary = message
-        self.details = message
-        self.data = data
+        self.code = code
+        self.message = summary
+        self.summary = summary
+        self.details = details
+        self.data = data or {}
 
 
-class SqlRiskOperationDeniedError(RuntimeError):
-    def __init__(self, *, source_id: str, step_id: str, data: dict[str, Any]):
-        message = "SQL risk operation denied by trust policy."
-        super().__init__(message)
-        self.source_id = source_id
-        self.step_id = step_id
-        self.code = _SQL_RISK_DENIED_CODE
-        self.message = message
-        self.summary = message
-        self.details = message
-        self.data = data
+class SqlInvalidContractError(SqlStepRuntimeError):
+    pass
+
+
+class SqlRiskOperationTrustRequiredError(SqlStepRuntimeError):
+    pass
+
+
+class SqlRiskOperationDeniedError(SqlStepRuntimeError):
+    pass
+
+
+class SqlConnectFailedError(SqlStepRuntimeError):
+    pass
+
+
+class SqlAuthFailedError(SqlStepRuntimeError):
+    pass
+
+
+class SqlQueryFailedError(SqlStepRuntimeError):
+    pass
+
+
+class SqlTimeoutError(SqlStepRuntimeError):
+    pass
+
+
+class SqlRowLimitExceededError(SqlStepRuntimeError):
+    pass
 
 
 def _normalize_connector_profile(args: dict[str, Any]) -> str:
@@ -61,15 +92,56 @@ def _normalize_connector_profile(args: dict[str, Any]) -> str:
     return str(connector.get("profile") or "").strip().lower()
 
 
+def _resolve_sql_dialect(args: dict[str, Any]) -> str | None:
+    connector = args.get("connector")
+    if not isinstance(connector, dict):
+        return None
+    options = connector.get("options")
+    if not isinstance(options, dict):
+        return None
+    dialect = options.get("dialect")
+    if not isinstance(dialect, str):
+        return None
+    normalized = dialect.strip().lower()
+    return normalized or None
+
+
 def _resolve_sqlite_database_path(args: dict[str, Any]) -> str:
     credentials = args.get("credentials")
     if not isinstance(credentials, dict):
         return ""
-    for key in ("database", "path"):
+    for key in ("database", "path", "dsn"):
         value = credentials.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
+        if not isinstance(value, str) or not value.strip():
+            continue
+        normalized = value.strip()
+        if key == "dsn" and normalized.startswith("sqlite:///"):
+            return normalized[len("sqlite:///") :]
+        return normalized
     return ""
+
+
+def _resolve_sql_timeout(args: dict[str, Any]) -> float:
+    raw_value = args.get("timeout", _DEFAULT_SQL_TIMEOUT_SECONDS)
+    try:
+        timeout_seconds = float(raw_value)
+    except (TypeError, ValueError):
+        return _DEFAULT_SQL_TIMEOUT_SECONDS
+    return max(timeout_seconds, _MIN_SQL_TIMEOUT_SECONDS)
+
+
+def _resolve_sql_max_rows(args: dict[str, Any]) -> int:
+    raw_value = args.get("max_rows", _DEFAULT_SQL_MAX_ROWS)
+    try:
+        max_rows = int(raw_value)
+    except (TypeError, ValueError):
+        return _DEFAULT_SQL_MAX_ROWS
+    return max(max_rows, _MIN_SQL_MAX_ROWS)
+
+
+def _is_auth_failure_message(message: str) -> bool:
+    lowered = message.lower()
+    return any(token in lowered for token in ("auth", "password", "credential", "permission denied"))
 
 
 def _evaluate_risk_operation_policy(
@@ -80,7 +152,6 @@ def _evaluate_risk_operation_policy(
 ) -> _SqlTrustBinding:
     target_type = "connector_profile"
     target_value = profile or "unknown"
-
     trust_policy = getattr(executor, "_network_trust_policy", None)
     if trust_policy is None or not hasattr(trust_policy, "evaluate"):
         return _SqlTrustBinding(
@@ -119,8 +190,8 @@ def _build_risk_interaction_data(
     risk_reasons: list[str],
 ) -> dict[str, Any]:
     preview = " ".join(str(query_text).split())
-    if len(preview) > 120:
-        preview = f"{preview[:120]}..."
+    if len(preview) > _MAX_QUERY_PREVIEW_LENGTH:
+        preview = f"{preview[:_MAX_QUERY_PREVIEW_LENGTH]}..."
     return {
         "confirm_kind": "network_trust",
         "capability": "sql",
@@ -136,15 +207,108 @@ def _build_risk_interaction_data(
     }
 
 
-def _rows_from_cursor(cursor: sqlite3.Cursor) -> tuple[list[str], list[dict[str, Any]]]:
+def _rows_from_cursor(cursor: sqlite3.Cursor, *, max_rows: int) -> tuple[list[str], list[dict[str, Any]], bool]:
     if not cursor.description:
-        return [], []
+        return [], [], False
 
     columns = [str(meta[0]) for meta in cursor.description]
-    rows: list[dict[str, Any]] = []
-    for row in cursor.fetchall():
-        rows.append(dict(zip(columns, row)))
-    return columns, rows
+    fetched = cursor.fetchmany(max_rows + 1)
+    has_more_rows = len(fetched) > max_rows
+    candidate_rows = fetched[:max_rows]
+    rows = [dict(zip(columns, row)) for row in candidate_rows]
+    return columns, rows, has_more_rows
+
+
+def _execute_sqlite_query(
+    *,
+    source_id: str,
+    step_id: str,
+    database_path: str,
+    query_text: str,
+    max_rows: int,
+) -> tuple[list[str], list[dict[str, Any]], bool]:
+    try:
+        connection = sqlite3.connect(database_path)
+    except sqlite3.OperationalError as error:
+        raise _map_connect_error(
+            source_id=source_id,
+            step_id=step_id,
+            reason=error,
+        ) from error
+    except sqlite3.DatabaseError as error:
+        raise _map_connect_error(
+            source_id=source_id,
+            step_id=step_id,
+            reason=error,
+        ) from error
+
+    try:
+        try:
+            cursor = connection.execute(query_text)
+        except sqlite3.OperationalError as error:
+            reason_text = sanitize_log_reason(error)
+            if _is_auth_failure_message(reason_text):
+                raise _map_connect_error(
+                    source_id=source_id,
+                    step_id=step_id,
+                    reason=error,
+                ) from error
+            raise _map_query_error(
+                source_id=source_id,
+                step_id=step_id,
+                reason=error,
+            ) from error
+        except sqlite3.DatabaseError as error:
+            raise _map_query_error(
+                source_id=source_id,
+                step_id=step_id,
+                reason=error,
+            ) from error
+
+        columns, rows, has_more_rows = _rows_from_cursor(cursor, max_rows=max_rows)
+        connection.commit()
+        return columns, rows, has_more_rows
+    finally:
+        connection.close()
+
+
+def _map_connect_error(
+    *,
+    source_id: str,
+    step_id: str,
+    reason: Exception,
+) -> SqlStepRuntimeError:
+    reason_text = sanitize_log_reason(reason)
+    if _is_auth_failure_message(reason_text):
+        return SqlAuthFailedError(
+            source_id=source_id,
+            step_id=step_id,
+            code="runtime.sql_auth_failed",
+            summary="SQL authentication failed.",
+            details=reason_text,
+        )
+    return SqlConnectFailedError(
+        source_id=source_id,
+        step_id=step_id,
+        code="runtime.sql_connect_failed",
+        summary="SQL connection failed.",
+        details=reason_text,
+    )
+
+
+def _map_query_error(
+    *,
+    source_id: str,
+    step_id: str,
+    reason: Exception,
+) -> SqlQueryFailedError:
+    return SqlQueryFailedError(
+        source_id=source_id,
+        step_id=step_id,
+        code="runtime.sql_query_failed",
+        summary="SQL query execution failed.",
+        details=sanitize_log_reason(reason),
+    )
 
 
 async def execute_sql_step(
@@ -157,11 +321,21 @@ async def execute_sql_step(
 ) -> dict[str, Any]:
     _ = (context, outputs)
     query_text = str(args.get("query") or "")
-    classification = classify_sql_contract(query_text)
+    dialect = _resolve_sql_dialect(args)
+    try:
+        classification = classify_sql_contract(query_text, dialect=dialect)
+    except SqlContractValidationError as error:
+        raise SqlInvalidContractError(
+            source_id=source.id,
+            step_id=step.id,
+            code=error.code,
+            summary=error.summary,
+            details=error.details,
+        ) from error
+
     statement_types = list(classification.statement_types)
     risk_reasons = list(classification.risk_reasons)
     profile = _normalize_connector_profile(args)
-
     if classification.requires_trust:
         binding = _evaluate_risk_operation_policy(
             profile=profile,
@@ -178,27 +352,76 @@ async def execute_sql_step(
             raise SqlRiskOperationTrustRequiredError(
                 source_id=source.id,
                 step_id=step.id,
+                code="runtime.sql_risk_operation_requires_trust",
+                summary="SQL risk operation requires trust confirmation.",
+                details="Confirm this high-risk SQL operation before execution.",
                 data=interaction_data,
             )
         if binding.decision == TrustDecision.DENY:
             raise SqlRiskOperationDeniedError(
                 source_id=source.id,
                 step_id=step.id,
+                code="runtime.sql_risk_operation_denied",
+                summary="SQL risk operation denied by trust policy.",
+                details="Trust policy denied this high-risk SQL operation.",
                 data=interaction_data,
             )
 
     if profile != "sqlite":
-        raise RuntimeError(f"Unsupported SQL connector profile: {profile or 'unknown'}")
+        raise SqlConnectFailedError(
+            source_id=source.id,
+            step_id=step.id,
+            code="runtime.sql_connect_failed",
+            summary="SQL connection failed.",
+            details=f"Unsupported SQL connector profile: {profile or 'unknown'}",
+        )
 
     database_path = _resolve_sqlite_database_path(args)
     if not database_path:
-        raise RuntimeError("Missing SQL credential field: credentials.database")
+        raise SqlConnectFailedError(
+            source_id=source.id,
+            step_id=step.id,
+            code="runtime.sql_connect_failed",
+            summary="SQL connection failed.",
+            details="Missing SQL credential field: credentials.database",
+        )
 
-    with sqlite3.connect(database_path) as connection:
-        cursor = connection.execute(query_text)
-        columns, rows = _rows_from_cursor(cursor)
-        connection.commit()
+    timeout_seconds = _resolve_sql_timeout(args)
+    max_rows = _resolve_sql_max_rows(args)
+    started_at = time.monotonic()
+    try:
+        columns, rows, has_more_rows = await asyncio.wait_for(
+            asyncio.to_thread(
+                _execute_sqlite_query,
+                source_id=source.id,
+                step_id=step.id,
+                database_path=database_path,
+                query_text=query_text,
+                max_rows=max_rows,
+            ),
+            timeout=timeout_seconds,
+        )
+    except asyncio.TimeoutError as error:
+        raise SqlTimeoutError(
+            source_id=source.id,
+            step_id=step.id,
+            code="runtime.sql_timeout",
+            summary="SQL query timed out.",
+            details=f"Query exceeded timeout limit of {timeout_seconds:.3f} second(s).",
+        ) from error
+    except SqlStepRuntimeError:
+        raise
 
+    if has_more_rows:
+        raise SqlRowLimitExceededError(
+            source_id=source.id,
+            step_id=step.id,
+            code="runtime.sql_row_limit_exceeded",
+            summary="SQL query row limit exceeded.",
+            details=f"SQL step max_rows={max_rows} exceeded.",
+        )
+
+    execution_ms = int((time.monotonic() - started_at) * 1000)
     return {
         "sql_response": {
             "rows": rows,
@@ -208,5 +431,8 @@ async def execute_sql_step(
             "statement_types": statement_types,
             "is_high_risk": classification.is_high_risk,
             "risk_reasons": risk_reasons,
+            "execution_ms": execution_ms,
+            "timeout_seconds": timeout_seconds,
+            "max_rows": max_rows,
         }
     }
