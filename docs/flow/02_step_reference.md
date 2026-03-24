@@ -22,7 +22,7 @@ Field semantics:
 | Field | Required | Type | Meaning |
 | --- | --- | --- | --- |
 | `id` | Yes | `string` | Unique step identifier in the flow. |
-| `use` | Yes | `StepType` | One of: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `log`, `webview`. |
+| `use` | Yes | `StepType` | One of: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `sql`, `log`, `webview`. |
 | `run` | No | `string \| null` | Reserved field (not currently used by executor logic). |
 | `args` | No | `object` | Step-specific input arguments after `{var}` substitution. |
 | `outputs` | No | `map<string,string>` | Persist/display mappings (`target: source_path`). |
@@ -49,13 +49,15 @@ Blocking (can suspend flow and request interaction):
 3. `oauth`
 4. `curl`
 5. `webview`
+6. `sql` (only for high-risk SQL operations when trust decision is `prompt`)
 
 Non-blocking runtime steps:
 
 1. `http`
 2. `extract`
 3. `script`
-4. `log` (schema-defined; see status note below)
+4. `sql` (normal query path when trust check is already resolved)
+5. `log` (schema-defined; see status note below)
 
 ## 3. Step Catalog
 
@@ -302,6 +304,70 @@ Typical mapping:
   outputs:
     usage_ratio: "ratio"
     usage_signal: "signal"
+```
+
+### `sql`
+
+Purpose:
+- Execute a SQL query through the backend-owned connector runtime and return deterministic query output envelopes.
+
+Required `args`:
+- `connector.profile`
+- `credentials` (secret-backed connection fields)
+- `query`
+
+Optional `args`:
+- `connector.options.dialect` (used for SQLGlot parser dialect hints)
+- `timeout` (seconds)
+- `max_rows`
+
+Runtime contract:
+- Final SQL text is classified with SQLGlot AST before execution.
+- High-risk or non-query statements require trust policy evaluation (`capability=sql`):
+  - no trust decision -> suspend with `runtime.sql_risk_operation_requires_trust`
+  - explicit deny -> fail with `runtime.sql_risk_operation_denied`
+  - allow -> execute
+- For timeout and row-limit guardrails, precedence is:
+  1. source override (resolved `args.timeout` / `args.max_rows`, including source-variable substitution)
+  2. system defaults (`sql_default_timeout_seconds`, `sql_default_max_rows`)
+  3. step built-ins (`30s`, `500 rows`)
+- Deterministic runtime SQL failure codes:
+  - `runtime.sql_invalid_contract`
+  - `runtime.sql_connect_failed`
+  - `runtime.sql_auth_failed`
+  - `runtime.sql_query_failed`
+  - `runtime.sql_timeout`
+  - `runtime.sql_row_limit_exceeded`
+
+Runtime output envelope:
+- `sql_response.rows`
+- `sql_response.columns`
+- `sql_response.row_count`
+- `sql_response.statement_count`
+- `sql_response.statement_types`
+- `sql_response.is_high_risk`
+- `sql_response.risk_reasons`
+- `sql_response.execution_ms`
+- `sql_response.timeout_seconds`
+- `sql_response.max_rows`
+
+Typical mapping:
+
+```yaml
+- id: query_usage
+  use: sql
+  args:
+    connector:
+      profile: sqlite
+      options:
+        dialect: sqlite
+    credentials:
+      database: "{db_path}"
+    query: "SELECT value FROM metrics ORDER BY id"
+    timeout: "{sql_timeout_override}"
+    max_rows: "{sql_max_rows_override}"
+  outputs:
+    sql_rows: "sql_response.rows"
 ```
 
 ### `log`

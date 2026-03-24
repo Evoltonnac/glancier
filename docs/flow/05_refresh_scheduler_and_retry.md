@@ -107,3 +107,18 @@ When diagnosing retry-loop regressions, verify:
 - Flow architecture: [01_architecture_and_orchestration.md](01_architecture_and_orchestration.md)
 - Failure scenario inputs: [04_step_failure_test_inputs.md](04_step_failure_test_inputs.md)
 - WebView runtime fallback (high-level): [../webview-scraper/02_runtime_and_fallback.md](../webview-scraper/02_runtime_and_fallback.md)
+
+## 11. SQL Guardrail Runtime Contract
+
+SQL step execution has deterministic timeout and row-limit guardrails. Threshold resolution order is:
+1. Source override (`args.timeout` / `args.max_rows`, including source-variable substitution)
+2. System settings defaults (`sql_default_timeout_seconds`, `sql_default_max_rows`)
+3. SQL runtime built-ins (`30s`, `500 rows`)
+
+Runtime outcomes:
+- timeout breach -> `runtime.sql_timeout`
+- row-limit breach -> `runtime.sql_row_limit_exceeded`
+
+Retry policy note:
+- SQL timeout/row-limit failures are deterministic guardrail failures, not transient transport failures.
+- They are intentionally not included in the automatic retry signature allowlist in Section 4.

@@ -62,3 +62,40 @@ These inputs are for fast regression on recoverability after auth failures.
 
 WebView runtime details: [../webview-scraper/02_runtime_and_fallback.md](../webview-scraper/02_runtime_and_fallback.md)
 Refresh scheduler retry architecture: [05_refresh_scheduler_and_retry.md](05_refresh_scheduler_and_retry.md)
+
+## 6. `test_fail_step_sql.yaml`
+
+- Goal: validate deterministic SQL contract/runtime/trust failures for `use: sql`
+- Input baseline:
+  - connector profile + credentials reference
+  - user-authored SQL query text
+  - optional `timeout` / `max_rows` overrides
+- Expected SQL failure classes and `error_code` contracts:
+  - invalid SQL contract or parse failure: `runtime.sql_invalid_contract`
+  - high-risk SQL trust prompt path: `runtime.sql_risk_operation_requires_trust`
+  - high-risk SQL denied by trust policy: `runtime.sql_risk_operation_denied`
+  - SQL connect failure: `runtime.sql_connect_failed`
+  - SQL authentication failure: `runtime.sql_auth_failed`
+  - SQL query execution failure: `runtime.sql_query_failed`
+  - SQL timeout guardrail hit: `runtime.sql_timeout`
+  - SQL row-limit guardrail hit: `runtime.sql_row_limit_exceeded`
+
+### 6.1 SQL Failure Input Matrix
+
+| Case | Minimal Input Pattern | Expected Result |
+| --- | --- | --- |
+| Invalid contract | `query: ""` or parse-invalid SQL text | source status `error`, `error_code=runtime.sql_invalid_contract` |
+| Trust required | risk-class SQL (for example `DELETE`) with no allow decision | source status `suspended`, interaction `confirm`, `error_code=runtime.sql_risk_operation_requires_trust` |
+| Trust denied | risk-class SQL with deny decision | source status `error`, `error_code=runtime.sql_risk_operation_denied` |
+| Connect failure | bad DSN/path/host | source status `error`, `error_code=runtime.sql_connect_failed` |
+| Auth failure | invalid credential payload | source status `error`, `error_code=runtime.sql_auth_failed` |
+| Query failure | syntactically valid but runtime-invalid query | source status `error`, `error_code=runtime.sql_query_failed` |
+| Timeout | low timeout against slow query | source status `error`, `error_code=runtime.sql_timeout` |
+| Row-limit exceeded | `max_rows` lower than result cardinality | source status `error`, `error_code=runtime.sql_row_limit_exceeded` |
+
+### 6.2 Guardrail Precedence Reminder (SQL)
+
+For timeout and row-limit deterministic tests, resolve expected thresholds in this order:
+1. source override (`args.timeout` / `args.max_rows`, including source-variable substitution)
+2. system settings defaults (`sql_default_timeout_seconds`, `sql_default_max_rows`)
+3. SQL runtime built-ins (`30s`, `500 rows`)
