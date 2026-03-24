@@ -21,6 +21,8 @@ _DEFAULT_SQL_TIMEOUT_SECONDS = 30.0
 _DEFAULT_SQL_MAX_ROWS = 500
 _MIN_SQL_TIMEOUT_SECONDS = 0.1
 _MIN_SQL_MAX_ROWS = 1
+_MAX_SQL_TIMEOUT_SECONDS = 300.0
+_MAX_SQL_MAX_ROWS = 10000
 _MAX_QUERY_PREVIEW_LENGTH = 120
 
 
@@ -121,21 +123,56 @@ def _resolve_sqlite_database_path(args: dict[str, Any]) -> str:
     return ""
 
 
-def _resolve_sql_timeout(args: dict[str, Any]) -> float:
-    raw_value = args.get("timeout", _DEFAULT_SQL_TIMEOUT_SECONDS)
+def _resolve_sql_runtime_defaults(executor: "Executor") -> tuple[float, int]:
+    settings_manager = getattr(executor, "_settings_manager", None)
+    if settings_manager is None:
+        return _DEFAULT_SQL_TIMEOUT_SECONDS, _DEFAULT_SQL_MAX_ROWS
+    try:
+        settings = settings_manager.load_settings()
+    except Exception:
+        return _DEFAULT_SQL_TIMEOUT_SECONDS, _DEFAULT_SQL_MAX_ROWS
+
+    raw_timeout = getattr(settings, "sql_default_timeout_seconds", _DEFAULT_SQL_TIMEOUT_SECONDS)
+    raw_max_rows = getattr(settings, "sql_default_max_rows", _DEFAULT_SQL_MAX_ROWS)
+
+    try:
+        timeout_seconds = float(raw_timeout)
+    except (TypeError, ValueError):
+        timeout_seconds = _DEFAULT_SQL_TIMEOUT_SECONDS
+    if timeout_seconds < _MIN_SQL_TIMEOUT_SECONDS or timeout_seconds > _MAX_SQL_TIMEOUT_SECONDS:
+        timeout_seconds = _DEFAULT_SQL_TIMEOUT_SECONDS
+
+    try:
+        max_rows = int(raw_max_rows)
+    except (TypeError, ValueError):
+        max_rows = _DEFAULT_SQL_MAX_ROWS
+    if max_rows < _MIN_SQL_MAX_ROWS or max_rows > _MAX_SQL_MAX_ROWS:
+        max_rows = _DEFAULT_SQL_MAX_ROWS
+
+    return timeout_seconds, max_rows
+
+
+def _resolve_sql_timeout(args: dict[str, Any], *, default_timeout_seconds: float) -> float:
+    if "timeout" not in args or args.get("timeout") is None:
+        raw_value = default_timeout_seconds
+    else:
+        raw_value = args.get("timeout")
     try:
         timeout_seconds = float(raw_value)
     except (TypeError, ValueError):
-        return _DEFAULT_SQL_TIMEOUT_SECONDS
+        return default_timeout_seconds
     return max(timeout_seconds, _MIN_SQL_TIMEOUT_SECONDS)
 
 
-def _resolve_sql_max_rows(args: dict[str, Any]) -> int:
-    raw_value = args.get("max_rows", _DEFAULT_SQL_MAX_ROWS)
+def _resolve_sql_max_rows(args: dict[str, Any], *, default_max_rows: int) -> int:
+    if "max_rows" not in args or args.get("max_rows") is None:
+        raw_value = default_max_rows
+    else:
+        raw_value = args.get("max_rows")
     try:
         max_rows = int(raw_value)
     except (TypeError, ValueError):
-        return _DEFAULT_SQL_MAX_ROWS
+        return default_max_rows
     return max(max_rows, _MIN_SQL_MAX_ROWS)
 
 
@@ -386,8 +423,9 @@ async def execute_sql_step(
             details="Missing SQL credential field: credentials.database",
         )
 
-    timeout_seconds = _resolve_sql_timeout(args)
-    max_rows = _resolve_sql_max_rows(args)
+    default_timeout_seconds, default_max_rows = _resolve_sql_runtime_defaults(executor)
+    timeout_seconds = _resolve_sql_timeout(args, default_timeout_seconds=default_timeout_seconds)
+    max_rows = _resolve_sql_max_rows(args, default_max_rows=default_max_rows)
     started_at = time.monotonic()
     try:
         columns, rows, has_more_rows = await asyncio.wait_for(

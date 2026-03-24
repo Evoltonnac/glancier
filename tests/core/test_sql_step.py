@@ -63,6 +63,88 @@ async def test_execute_sql_step_select_returns_deterministic_envelope(tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_execute_sql_step_uses_system_sql_guardrail_defaults_when_args_missing(tmp_path: Path):
+    db_path = tmp_path / "metrics-defaults.db"
+    _seed_sqlite_db(db_path)
+
+    step = build_step(step_id="sql-step", use=StepType.SQL)
+    source = build_source_config(source_id="sql-defaults", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.ALLOW,
+                reason="source_rule",
+            )
+        ),
+        _settings_manager=SimpleNamespace(
+            load_settings=lambda: SimpleNamespace(
+                sql_default_timeout_seconds=12,
+                sql_default_max_rows=2,
+            )
+        ),
+    )
+
+    result = await execute_sql_step(
+        step,
+        source,
+        {
+            "connector": {"profile": "sqlite"},
+            "credentials": {"database": str(db_path)},
+            "query": "SELECT id, value FROM metrics ORDER BY id",
+        },
+        {},
+        {},
+        executor,
+    )
+
+    sql_response = result["sql_response"]
+    assert sql_response["timeout_seconds"] == 12
+    assert sql_response["max_rows"] == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_sql_step_args_override_system_sql_guardrail_defaults(tmp_path: Path):
+    db_path = tmp_path / "metrics-override.db"
+    _seed_sqlite_db(db_path)
+
+    step = build_step(step_id="sql-step", use=StepType.SQL)
+    source = build_source_config(source_id="sql-overrides", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.ALLOW,
+                reason="source_rule",
+            )
+        ),
+        _settings_manager=SimpleNamespace(
+            load_settings=lambda: SimpleNamespace(
+                sql_default_timeout_seconds=20,
+                sql_default_max_rows=10,
+            )
+        ),
+    )
+
+    result = await execute_sql_step(
+        step,
+        source,
+        {
+            "connector": {"profile": "sqlite"},
+            "credentials": {"database": str(db_path)},
+            "query": "SELECT id, value FROM metrics ORDER BY id",
+            "timeout": 3,
+            "max_rows": 2,
+        },
+        {},
+        {},
+        executor,
+    )
+
+    sql_response = result["sql_response"]
+    assert sql_response["timeout_seconds"] == 3
+    assert sql_response["max_rows"] == 2
+
+
+@pytest.mark.asyncio
 async def test_execute_sql_step_high_risk_query_requires_trust_before_execution(
     monkeypatch: pytest.MonkeyPatch,
 ):
