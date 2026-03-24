@@ -29,6 +29,11 @@ Field semantics:
 | `context` | No | `map<string,string>` | In-memory mappings for downstream steps (`target: source_path`). |
 | `secrets` | No | `map<string,string>` | Encrypted secret mappings (`secret_name: source_path`). |
 
+Channel usage rules:
+
+- For non-blocking steps (`http`, `extract`, `script`, `log`), default intermediate artifacts to `context`; use `outputs` only when persistence is required.
+- Avoid mapping unfiltered large payloads directly into `outputs`; extract/clean first and persist only minimal durable/display fields.
+
 Output path formats accepted in `outputs` / `context` / `secrets`:
 
 1. Direct key: `http_response`
@@ -190,7 +195,7 @@ Typical mapping:
   args:
     url: "https://console.example.com/"
     intercept_api: "/dashboard"
-  outputs:
+  context:
     dashboard_payload: "webview_data"
 ```
 
@@ -219,7 +224,7 @@ Typical mapping:
     url: "https://api.example.com/v1/usage"
     headers:
       Authorization: "Bearer {oauth_secrets.access_token}"
-  outputs:
+  context:
     usage_payload: "http_response"
 ```
 

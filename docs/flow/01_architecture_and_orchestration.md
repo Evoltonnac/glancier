@@ -42,6 +42,8 @@ Each `flow` step supports three output channels to map execution results to diff
 4.  **Risk of Context Loss during Interaction**: When a step triggers `NeedsInteraction` (e.g., OAuth authorization, CAPTCHA), the flow execution is suspended.
     - **Risk**: `context` variables exist only in memory and are **not persisted** during the suspension.
     - **Mitigation**: The flow usually restarts from the beginning upon resumption. Ensure steps are idempotent or map critical non-sensitive intermediate variables to `outputs` if they must survive the interaction.
+5.  **Prefer `context` for intermediate artifacts by default**: For non-blocking steps (for example `http`, `extract`, `script`, `log`), map intermediate payloads/results to `context` unless persistence is strictly necessary.
+6.  **Avoid persisting unfiltered large payloads in `outputs`**: Do not map raw or oversized response blobs directly to `outputs` unless there is a clear requirement. Prefer extracting/cleaning fields first, then persist only the minimal display/durable subset.
 
 ### Mapping Example
 
