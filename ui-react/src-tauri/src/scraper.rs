@@ -54,6 +54,61 @@ fn apply_webview_proxy(
     builder
 }
 
+fn enhanced_scrape_patches_script(enabled: bool) -> String {
+    if !enabled {
+        return String::new();
+    }
+    r#"
+            // Enhanced scraping mode:
+            // Patch visibility/intersection/rAF heuristics for JS-heavy sites under background throttling.
+            try {
+                Object.defineProperty(document, 'visibilityState', {
+                    configurable: true,
+                    get: function() { return 'visible'; }
+                });
+                Object.defineProperty(document, 'hidden', {
+                    configurable: true,
+                    get: function() { return false; }
+                });
+            } catch (_err) {}
+
+            try {
+                const NativeIntersectionObserver = window.IntersectionObserver;
+                if (typeof NativeIntersectionObserver === 'function') {
+                    const PatchedIntersectionObserver = class extends NativeIntersectionObserver {
+                        constructor(callback, options) {
+                            const wrapped = (entries, observer) => {
+                                const fakeEntries = entries.map((entry) => ({
+                                    ...entry,
+                                    isIntersecting: true,
+                                    intersectionRatio: 1
+                                }));
+                                callback(fakeEntries, observer);
+                            };
+                            super(wrapped, options);
+                        }
+                    };
+                    safeOverride(window, 'IntersectionObserver', PatchedIntersectionObserver);
+                }
+            } catch (_err) {}
+
+            try {
+                const patchedRaf = function(callback) {
+                    if (typeof callback !== 'function') {
+                        return setTimeout(() => {}, 16);
+                    }
+                    return setTimeout(() => callback(performance.now()), 16);
+                };
+                safeOverride(window, 'requestAnimationFrame', patchedRaf);
+            } catch (_err) {}
+"#
+    .to_string()
+}
+
+fn resolve_enhanced_scraping_enabled(app: &AppHandle) -> bool {
+    crate::is_enhanced_scraping_enabled(app)
+}
+
 fn ensure_invoker_window(
     window: &Window,
     allowed_labels: &[&str],
@@ -848,6 +903,21 @@ pub async fn push_scraper_task(
         handled.remove(&task_id);
     }
 
+    let enhanced_scraping_enabled = resolve_enhanced_scraping_enabled(&app);
+    let enhanced_patches = enhanced_scrape_patches_script(enhanced_scraping_enabled);
+    if enhanced_scraping_enabled {
+        emit_lifecycle_log(
+            app,
+            ScraperLifecycleLog::new(
+                source_id.clone(),
+                task_id.clone(),
+                "visibility_patch_applied",
+                "debug",
+                "Enhanced scraping hooks enabled".to_string(),
+            ),
+        );
+    }
+
     let final_script = format!(
         r#"
         (function() {{
@@ -1006,6 +1076,8 @@ pub async fn push_scraper_task(
             }};
             safeOverride(window, '__GLANCEUS_EMIT_SCRAPED_DATA', emitScrapedData);
 
+            {}
+
             // User Injected Script
             try {{
                 {}
@@ -1028,6 +1100,7 @@ pub async fn push_scraper_task(
         source_id.as_str(),
         task_id.as_str(),
         secret_key.as_str(),
+        enhanced_patches,
         inject_script
     );
 
@@ -1245,6 +1318,21 @@ async fn start_claimed_scraper_task(
         handled.remove(&task_id);
     }
 
+    let enhanced_scraping_enabled = resolve_enhanced_scraping_enabled(app);
+    let enhanced_patches = enhanced_scrape_patches_script(enhanced_scraping_enabled);
+    if enhanced_scraping_enabled {
+        emit_lifecycle_log(
+            app,
+            ScraperLifecycleLog::new(
+                source_id.clone(),
+                task_id.clone(),
+                "visibility_patch_applied",
+                "debug",
+                "Enhanced scraping hooks enabled".to_string(),
+            ),
+        );
+    }
+
     let final_script = format!(
         r#"
         (function() {{
@@ -1396,6 +1484,8 @@ async fn start_claimed_scraper_task(
             }};
             safeOverride(window, '__GLANCEUS_EMIT_SCRAPED_DATA', emitScrapedData);
 
+            {}
+
             try {{
                 {}
             }} catch(e) {{
@@ -1417,6 +1507,7 @@ async fn start_claimed_scraper_task(
         source_id.as_str(),
         task_id.as_str(),
         secret_key.as_str(),
+        enhanced_patches,
         inject_script
     );
 
@@ -2158,6 +2249,42 @@ mod tests {
             assert!(
                 body.contains("visible_on_all_workspaces(true)"),
                 "macOS background scraper windows should stay visible across all Spaces"
+            );
+        }
+    }
+
+    #[test]
+    fn enhanced_scraping_switch_injects_visibility_hooks_contract() {
+        let source = include_str!("scraper.rs");
+        let push_task_body = extract_function_body(source, "pub async fn push_scraper_task");
+        let daemon_body = extract_function_body(source, "async fn start_claimed_scraper_task");
+        let helper_body = extract_function_body(source, "fn enhanced_scrape_patches_script");
+
+        assert!(
+            helper_body.contains("visibilityState"),
+            "Enhanced scraping helper should patch document.visibilityState"
+        );
+        assert!(
+            helper_body.contains("IntersectionObserver"),
+            "Enhanced scraping helper should patch IntersectionObserver"
+        );
+        assert!(
+            helper_body.contains("requestAnimationFrame"),
+            "Enhanced scraping helper should patch requestAnimationFrame"
+        );
+
+        for body in [&push_task_body, &daemon_body] {
+            assert!(
+                body.contains("resolve_enhanced_scraping_enabled"),
+                "Scraper task path should read enhanced scraping switch from settings"
+            );
+            assert!(
+                body.contains("enhanced_scrape_patches_script"),
+                "Scraper task path should compose enhanced scraping patches"
+            );
+            assert!(
+                body.contains("visibility_patch_applied"),
+                "Scraper task path should emit lifecycle log when enhanced patches are enabled"
             );
         }
     }

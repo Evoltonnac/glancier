@@ -658,6 +658,7 @@ class ApiClient {
 export interface SystemSettings {
   autostart: boolean;
   proxy: string;
+  enhanced_scraping: boolean;
   encryption_enabled: boolean;
   encryption_available?: boolean;
   debug_logging_enabled: boolean;

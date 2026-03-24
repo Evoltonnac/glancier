@@ -80,6 +80,7 @@ const CURRENT_TARGET_TRIPLE: &str = "aarch64-pc-windows-msvc";
 struct PersistedSystemSettings {
     debug_logging_enabled: Option<bool>,
     proxy: Option<String>,
+    enhanced_scraping: Option<bool>,
 }
 
 #[derive(Default)]
@@ -297,6 +298,22 @@ pub(crate) fn resolve_webview_proxy_url(app: &tauri::AppHandle) -> Option<tauri:
             None
         }
     }
+}
+
+pub(crate) fn is_enhanced_scraping_enabled(app: &tauri::AppHandle) -> bool {
+    let data_root = resolve_data_root(app);
+    let Some(root) = data_root else {
+        return false;
+    };
+    let settings_file = root.join("data").join("settings.json");
+    let content = match fs::read_to_string(settings_file) {
+        Ok(content) => content,
+        Err(_) => return false,
+    };
+    serde_json::from_str::<PersistedSystemSettings>(&content)
+        .ok()
+        .and_then(|settings| settings.enhanced_scraping)
+        .unwrap_or(false)
 }
 
 fn should_allow_devtools(app: &tauri::AppHandle) -> bool {

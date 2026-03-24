@@ -28,6 +28,8 @@ class SystemSettings(BaseModel):
     # Timeout for a single webview scraper task in seconds.
     # Timed-out tasks are skipped so queue can continue.
     scraper_timeout_seconds: int = Field(default=10, ge=1, le=300)
+    # Optional compatibility hooks for JS-heavy websites during webview scraping.
+    enhanced_scraping: bool = False
     # Opt-in Beta guard for script step execution risk.
     script_sandbox_enabled: bool = False
     # Script step timeout in seconds.
@@ -112,6 +114,8 @@ class SettingsManager:
                     if script_timeout < 1 or script_timeout > 120:
                         script_timeout = 10
                     data["script_timeout_seconds"] = script_timeout
+                if not isinstance(data.get("enhanced_scraping"), bool):
+                    data["enhanced_scraping"] = False
                 settings = SystemSettings.model_validate(data)
                 if had_legacy_master_key:
                     # Strip deprecated plaintext master key from settings.json.

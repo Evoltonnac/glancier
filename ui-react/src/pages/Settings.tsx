@@ -60,6 +60,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
     debug_logging_enabled: false,
     refresh_interval_minutes: 30,
     scraper_timeout_seconds: 10,
+    enhanced_scraping: false,
     script_sandbox_enabled: false,
     script_timeout_seconds: 10,
     encryption_available: true,
@@ -304,6 +305,7 @@ export default function SettingsPage() {
                 scraper_timeout_seconds: normalizeScraperTimeoutSeconds(
                     swrSettings.scraper_timeout_seconds,
                 ),
+                enhanced_scraping: Boolean(swrSettings.enhanced_scraping),
                 script_sandbox_enabled: Boolean(
                     swrSettings.script_sandbox_enabled,
                 ),
@@ -980,6 +982,34 @@ export default function SettingsPage() {
                                         </div>
                                         <div className="rounded-xl border border-border px-5 py-4 bg-surface hover:border-foreground/20 hover:shadow-soft-elevation transition-all duration-150">
                                             <div className="flex flex-col gap-4">
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div className="space-y-1 flex-1">
+                                                        <Label
+                                                            htmlFor="enhanced-scraping"
+                                                            className="text-sm font-medium"
+                                                        >
+                                                            {t("settings.scraper.enhanced.label")}
+                                                        </Label>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {t("settings.scraper.enhanced.description")}
+                                                        </p>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {t("settings.scraper.enhanced.note")}
+                                                    </p>
+                                                    </div>
+                                                    <Switch
+                                                        id="enhanced-scraping"
+                                                        checked={settings.enhanced_scraping}
+                                                        className="data-[state=checked]:bg-brand focus-visible:ring-2 focus-visible:ring-brand/50"
+                                                        onCheckedChange={(value) =>
+                                                            setSettings((s) => ({
+                                                                ...s,
+                                                                enhanced_scraping: value,
+                                                            }))
+                                                        }
+                                                    />
+                                                </div>
+
                                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                                     <div className="space-y-1 flex-1">
                                                         <Label
