@@ -117,8 +117,10 @@ SQL step execution has deterministic timeout and row-limit guardrails. Threshold
 
 Runtime outcomes:
 - timeout breach -> `runtime.sql_timeout`
-- row-limit breach -> `runtime.sql_row_limit_exceeded`
+- row-limit breach does not fail the step; response is normalized with `sql_response.truncated=true` and `sql_response.row_count <= sql_response.max_rows`
+- canonical timing metadata is `sql_response.duration_ms` (`sql_response.execution_ms` remains a compatibility alias)
 
 Retry policy note:
-- SQL timeout/row-limit failures are deterministic guardrail failures, not transient transport failures.
+- SQL timeout and contract/trust failures are deterministic, not transient transport failures.
 - They are intentionally not included in the automatic retry signature allowlist in Section 4.
+- Successful but truncated SQL responses (`sql_response.truncated=true`) are not failures and must not trigger retry metadata.

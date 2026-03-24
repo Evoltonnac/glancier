@@ -337,19 +337,24 @@ Runtime contract:
   - `runtime.sql_auth_failed`
   - `runtime.sql_query_failed`
   - `runtime.sql_timeout`
-  - `runtime.sql_row_limit_exceeded`
+- `max_rows` is a response-shaping guardrail: over-limit rows are truncated into a successful response (`sql_response.truncated=true`) instead of raising a runtime failure.
 
 Runtime output envelope:
-- `sql_response.rows`
-- `sql_response.columns`
-- `sql_response.row_count`
-- `sql_response.statement_count`
-- `sql_response.statement_types`
-- `sql_response.is_high_risk`
-- `sql_response.risk_reasons`
-- `sql_response.execution_ms`
-- `sql_response.timeout_seconds`
-- `sql_response.max_rows`
+- Canonical keys:
+  - `sql_response.rows`
+  - `sql_response.fields`
+  - `sql_response.row_count`
+  - `sql_response.duration_ms`
+  - `sql_response.truncated`
+  - `sql_response.statement_count`
+  - `sql_response.statement_types`
+  - `sql_response.is_high_risk`
+  - `sql_response.risk_reasons`
+  - `sql_response.timeout_seconds`
+  - `sql_response.max_rows`
+- Compatibility aliases:
+  - `sql_response.columns` (derived from `sql_response.fields[*].name`)
+  - `sql_response.execution_ms` (alias of `sql_response.duration_ms`)
 
 Typical mapping:
 

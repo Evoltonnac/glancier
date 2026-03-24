@@ -78,7 +78,6 @@ Refresh scheduler retry architecture: [05_refresh_scheduler_and_retry.md](05_ref
   - SQL authentication failure: `runtime.sql_auth_failed`
   - SQL query execution failure: `runtime.sql_query_failed`
   - SQL timeout guardrail hit: `runtime.sql_timeout`
-  - SQL row-limit guardrail hit: `runtime.sql_row_limit_exceeded`
 
 ### 6.1 SQL Failure Input Matrix
 
@@ -91,7 +90,6 @@ Refresh scheduler retry architecture: [05_refresh_scheduler_and_retry.md](05_ref
 | Auth failure | invalid credential payload | source status `error`, `error_code=runtime.sql_auth_failed` |
 | Query failure | syntactically valid but runtime-invalid query | source status `error`, `error_code=runtime.sql_query_failed` |
 | Timeout | low timeout against slow query | source status `error`, `error_code=runtime.sql_timeout` |
-| Row-limit exceeded | `max_rows` lower than result cardinality | source status `error`, `error_code=runtime.sql_row_limit_exceeded` |
 
 ### 6.2 Guardrail Precedence Reminder (SQL)
 
@@ -99,3 +97,13 @@ For timeout and row-limit deterministic tests, resolve expected thresholds in th
 1. source override (`args.timeout` / `args.max_rows`, including source-variable substitution)
 2. system settings defaults (`sql_default_timeout_seconds`, `sql_default_max_rows`)
 3. SQL runtime built-ins (`30s`, `500 rows`)
+
+### 6.3 SQL Success Envelope Regression Checks
+
+For successful SQL executions, verify normalized envelope metadata explicitly:
+1. `sql_response.fields` is present and ordered with the query projection.
+2. `sql_response.duration_ms` is present and non-negative.
+3. `sql_response.truncated` is deterministic (`true` when connector returns over-limit rows, otherwise `false`).
+4. Compatibility aliases remain consistent:
+   - `sql_response.columns` mirrors `sql_response.fields[*].name`
+   - `sql_response.execution_ms == sql_response.duration_ms`
