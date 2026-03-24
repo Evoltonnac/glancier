@@ -7,8 +7,8 @@
 
 ### SQL Step Contracts
 
-- [ ] **SQL-01**: User can declare a `use: sql` step in Integration YAML with a connector profile and credentials resolved from `secrets` channels.
-- [ ] **SQL-02**: User can execute read-only parameterized SQL queries (typed bound parameters only) without unsafe string interpolation paths.
+- [x] **SQL-01**: User can declare a `use: sql` step in Integration YAML with a connector profile and credentials resolved from `secrets` channels.
+- [x] **SQL-02**: User can execute fully user-authored SQL query text (script-like control), and have non-SELECT/high-risk operations detected by static AST analysis and routed to authorization before execution.
 - [ ] **SQL-03**: User can use multiple SQL connector patterns in one contract model (at least local SQLite and server-side PostgreSQL profiles).
 - [ ] **SQL-04**: User can rely on default SQL guardrails (timeout, max row limit, deterministic truncation behavior) with per-source overrides.
 - [ ] **SQL-05**: User can receive deterministic `error_code` responses for SQL connect/auth/query/guardrail failures.
@@ -35,7 +35,7 @@
 
 - [ ] **UX-01**: User can preview SQL sample rows and inferred field schema during integration authoring before saving production refresh settings.
 - [ ] **UX-02**: User can diagnose SQL/chart setup failures through stable `error_code`-driven, i18n-compatible user messaging (`en`/`zh`).
-- [ ] **UX-03**: User can apply dashboard-level filter values to SQL parameters without breaking canonical `useViewTabsState` ownership and idempotent sync.
+- [ ] **UX-03**: User can apply dashboard-level filter values to SQL query inputs without breaking canonical `useViewTabsState` ownership and idempotent sync.
 - [ ] **UX-04**: User can use SQL+chart workflows without introducing duplicate SWR/Zustand write paths in dashboard management interactions.
 
 ## v2 Requirements
@@ -52,7 +52,7 @@
 
 | Feature | Reason |
 |---------|--------|
-| Write/mutation SQL (`INSERT/UPDATE/DELETE/DDL`) | v1.2 focuses on safe read-only data retrieval and display. |
+| Unguarded write/mutation SQL (`INSERT/UPDATE/DELETE/DDL`) | High-risk SQL must never execute silently; it must be classified and gated by explicit authorization decisions. |
 | Full SQL IDE/notebook workflow | High complexity and not required to ship config-first SQL steps + chart widgets. |
 | Federated cross-database joins/query planner | Expands architecture scope beyond milestone boundary and increases operational risk. |
 | Replacing existing chart rendering foundation | Current stack already includes chart runtime; milestone goal is capability expansion, not renderer migration. |
@@ -61,27 +61,27 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SQL-01 | Phase 7 | Pending |
-| SQL-02 | Phase 7 | Pending |
-| SQL-03 | Phase 8 | Pending |
-| SQL-04 | Phase 7 | Pending |
-| SQL-05 | Phase 7 | Pending |
-| SQL-06 | Phase 7 | Pending |
-| DATA-01 | Phase 8 | Pending |
-| DATA-02 | Phase 8 | Pending |
-| DATA-03 | Phase 8 | Pending |
-| DATA-04 | Phase 8 | Pending |
-| CHART-01 | Phase 9 | Pending |
-| CHART-02 | Phase 9 | Pending |
-| CHART-03 | Phase 9 | Pending |
-| CHART-04 | Phase 9 | Pending |
-| CHART-05 | Phase 9 | Pending |
-| CHART-06 | Phase 9 | Pending |
-| CHART-07 | Phase 9 | Pending |
-| UX-01 | Phase 10 | Pending |
-| UX-02 | Phase 10 | Pending |
-| UX-03 | Phase 10 | Pending |
-| UX-04 | Phase 10 | Pending |
+| SQL-01 | Phase 8 | Complete |
+| SQL-02 | Phase 8 | Complete |
+| SQL-03 | Phase 9 | Pending |
+| SQL-04 | Phase 8 | Pending |
+| SQL-05 | Phase 8 | Pending |
+| SQL-06 | Phase 8 | Pending |
+| DATA-01 | Phase 9 | Pending |
+| DATA-02 | Phase 9 | Pending |
+| DATA-03 | Phase 9 | Pending |
+| DATA-04 | Phase 9 | Pending |
+| CHART-01 | Phase 10 | Pending |
+| CHART-02 | Phase 10 | Pending |
+| CHART-03 | Phase 10 | Pending |
+| CHART-04 | Phase 10 | Pending |
+| CHART-05 | Phase 10 | Pending |
+| CHART-06 | Phase 10 | Pending |
+| CHART-07 | Phase 10 | Pending |
+| UX-01 | Phase 11 | Pending |
+| UX-02 | Phase 11 | Pending |
+| UX-03 | Phase 11 | Pending |
+| UX-04 | Phase 11 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
@@ -90,4 +90,4 @@
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after v1.2 roadmap phase mapping (Phase 7-10)*
+*Last updated: 2026-03-24 after v1.2 roadmap renumbering and Phase 8 planning initialization*

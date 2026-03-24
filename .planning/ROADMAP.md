@@ -29,15 +29,15 @@ This roadmap covers milestone v1.2 only: risk-operation trust authorization and 
 **Plans**: 07-01, 07-02
 
 ### Phase 8: SQL Step Contracts and Safety Guardrails
-**Goal**: Users can safely configure and run read-only SQL steps with deterministic guardrails and failure contracts.
+**Goal**: Users can safely configure SQL steps with deterministic guardrails, SQL AST risk classification, and trust-gated high-risk operation handling.
 **Depends on**: Phase 7
 **Requirements**: SQL-01, SQL-02, SQL-04, SQL-05, SQL-06
 **Success Criteria** (what must be TRUE):
   1. User can define a `use: sql` step in Integration YAML with connector profile and secret-backed credentials that pass schema validation.
-  2. User can run read-only SQL with typed bound parameters, and unsafe interpolation or disallowed mutation SQL is rejected deterministically.
+  2. User can run fully user-authored SQL query text (script-like control), and non-SELECT/high-risk statements are classified via static AST analysis and routed to the existing authorization wall before execution.
   3. User can rely on default SQL timeout/max-row guardrails with per-source override behavior applied predictably.
-  4. User can diagnose SQL connect/auth/query/guardrail failures through stable `error_code` responses, without credential leakage in logs, API payloads, or persisted artifacts.
-**Plans**: TBD
+  4. User can diagnose SQL connect/auth/query/guardrail/trust-gate failures through stable `error_code` responses, without credential leakage in logs, API payloads, or persisted artifacts.
+**Plans**: 08-01, 08-02, 08-03
 
 ### Phase 9: SQL Runtime and Integration Data Normalization
 **Goal**: Users can execute SQL through supported connectors and receive stable normalized Integration Data consumable by existing template channels.
@@ -67,7 +67,7 @@ This roadmap covers milestone v1.2 only: risk-operation trust authorization and 
 **Success Criteria** (what must be TRUE):
   1. User can preview SQL sample rows and inferred field schema during integration authoring before committing refresh settings.
   2. User can troubleshoot SQL/chart setup failures with stable `error_code`-driven messages that are i18n-compatible in `en` and `zh`.
-  3. User can apply dashboard-level filters to SQL parameters while preserving canonical `useViewTabsState` ownership and idempotent SWR/Zustand synchronization.
+  3. User can apply dashboard-level filters to SQL query inputs while preserving canonical `useViewTabsState` ownership and idempotent SWR/Zustand synchronization.
   4. User can complete SQL+chart dashboard workflows without introducing duplicate SWR/Zustand write paths in dashboard management interactions.
 **Plans**: TBD
 
@@ -76,7 +76,7 @@ This roadmap covers milestone v1.2 only: risk-operation trust authorization and 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 7. Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor | 2/2 | Completed | 2026-03-24 |
-| 8. SQL Step Contracts and Safety Guardrails | 0/TBD | Not started | - |
+| 8. SQL Step Contracts and Safety Guardrails | 1/3 | In Progress | - |
 | 9. SQL Runtime and Integration Data Normalization | 0/TBD | Not started | - |
 | 10. SQL Chart Widgets and SDUI Rendering | 0/TBD | Not started | - |
 | 11. Authoring Usability and Diagnostics Hardening | 0/TBD | Not started | - |
