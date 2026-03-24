@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: SQL Data Access and Visualization Expansion
 current_phase: 8
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-24T08:00:42.787Z"
-last_activity: 2026-03-24 - completed 08-01 SQL step contract foundation and queued 08-02 runtime integration
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-24T08:21:09.466Z"
+last_activity: 2026-03-24 - completed 08-02 SQL runtime integration with guardrails and redaction
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 Milestone: v1.2 SQL Data Access and Visualization Expansion
 Phase: 8 of 11 (SQL Step Contracts and Safety Guardrails)
-Plan: 2 of 3 (08-02 next; 08-01 completed)
+Plan: 3 of 3 (08-03 next; 08-02 completed)
 Status: Executing
-Last activity: 2026-03-24 - completed 08-01 SQL schema/contracts + SQLGlot risk validator
+Last activity: 2026-03-24 - completed 08-02 SQL runtime integration with guardrails and redaction
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: ~31 min
 - Total execution time: ~1.6 hours
 
@@ -45,14 +45,15 @@ Progress: [██████░░░░] 60%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 7 | 2 completed | 2 planned | ~42 min |
-| 8 | 1 completed | 3 planned | ~8 min |
+| 8 | 2 completed | 3 planned | ~12 min |
 | 9 | 0 | - | - |
 | 10 | 0 | - | - |
 | 11 | 0 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 07-01 (pass), 07-02 (pass), 08-01 (pass)
+- Last 5 plans: 07-01 (pass), 07-02 (pass), 08-01 (pass), 08-02 (pass)
 - Trend: Stable
+| Phase 08-sql-step-contracts-and-safety-guardrails P02 | 15min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,9 @@ Progress: [██████░░░░] 60%
 - Mongo/GraphQL risk-classification parity is evaluated in Phase 8 planning artifacts for follow-up implementation phases.
 - [Phase 08]: SQL step args require connector profile, credentials references, and user-authored query text as mandatory contract fields.
 - [Phase 08]: SQL contract classification marks non-query or multi-statement SQL as high-risk and sets requires_trust before runtime execution.
+- [Phase 08]: SQL runtime failures now emit explicit runtime.sql_* codes via SqlStepRuntimeError mapping.
+- [Phase 08]: High-risk SQL statements are gated with confirm interaction using capability=sql trust policy evaluation.
+- [Phase 08]: Executor skips raw traceback persistence for runtime.sql_* failures to reduce credential leakage risk.
 
 ### Roadmap Evolution
 - Phase 7 added: Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor (inserted as v1.2 first phase; previous phases shifted by +1)
@@ -84,6 +88,6 @@ None yet.
 None currently.
 
 ## Session Continuity
-Last session: 2026-03-24T08:00:42.785Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-03-24T08:21:09.464Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None

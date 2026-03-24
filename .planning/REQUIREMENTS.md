@@ -10,9 +10,9 @@
 - [x] **SQL-01**: User can declare a `use: sql` step in Integration YAML with a connector profile and credentials resolved from `secrets` channels.
 - [x] **SQL-02**: User can execute fully user-authored SQL query text (script-like control), and have non-SELECT/high-risk operations detected by static AST analysis and routed to authorization before execution.
 - [ ] **SQL-03**: User can use multiple SQL connector patterns in one contract model (at least local SQLite and server-side PostgreSQL profiles).
-- [ ] **SQL-04**: User can rely on default SQL guardrails (timeout, max row limit, deterministic truncation behavior) with per-source overrides.
-- [ ] **SQL-05**: User can receive deterministic `error_code` responses for SQL connect/auth/query/guardrail failures.
-- [ ] **SQL-06**: User can run SQL steps without database credentials leaking into logs, API payloads, or persisted runtime artifacts.
+- [x] **SQL-04**: User can rely on default SQL guardrails (timeout, max row limit, deterministic truncation behavior) with per-source overrides.
+- [x] **SQL-05**: User can receive deterministic `error_code` responses for SQL connect/auth/query/guardrail failures.
+- [x] **SQL-06**: User can run SQL steps without database credentials leaking into logs, API payloads, or persisted runtime artifacts.
 
 ### Normalized SQL Integration Data
 
@@ -64,9 +64,9 @@
 | SQL-01 | Phase 8 | Complete |
 | SQL-02 | Phase 8 | Complete |
 | SQL-03 | Phase 9 | Pending |
-| SQL-04 | Phase 8 | Pending |
-| SQL-05 | Phase 8 | Pending |
-| SQL-06 | Phase 8 | Pending |
+| SQL-04 | Phase 8 | Complete |
+| SQL-05 | Phase 8 | Complete |
+| SQL-06 | Phase 8 | Complete |
 | DATA-01 | Phase 9 | Pending |
 | DATA-02 | Phase 9 | Pending |
 | DATA-03 | Phase 9 | Pending |
