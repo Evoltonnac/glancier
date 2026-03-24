@@ -372,3 +372,92 @@ async def test_execute_sql_step_connect_and_auth_failures_use_stable_codes(
         )
 
     assert getattr(exc_info.value, "code", None) == expected_code
+
+
+@pytest.mark.asyncio
+async def test_sql_connect_error_details_redact_dsn_password_and_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import core.steps.sql_step as sql_step_module
+
+    def _raise_connect_failure(*_args, **_kwargs):
+        raise sqlite3.OperationalError(
+            "connect failed dsn=postgres://reader:super-secret@localhost:5432/db token=abc123"
+        )
+
+    monkeypatch.setattr(sql_step_module.sqlite3, "connect", _raise_connect_failure)
+
+    step = build_step(step_id="sql-step", use=StepType.SQL)
+    source = build_source_config(source_id="sql-redaction-details", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.ALLOW,
+                reason="source_rule",
+            )
+        )
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await execute_sql_step(
+            step,
+            source,
+            {
+                "connector": {"profile": "sqlite"},
+                "credentials": {"database": ":memory:"},
+                "query": "SELECT 1",
+            },
+            {},
+            {},
+            executor,
+        )
+
+    details = str(getattr(exc_info.value, "details", ""))
+    assert "super-secret" not in details
+    assert "abc123" not in details
+    assert "[REDACTED]" in details
+
+
+@pytest.mark.asyncio
+async def test_executor_sql_error_state_redacts_password_fragments(
+    executor,
+    data_controller,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import core.steps.sql_step as sql_step_module
+
+    def _raise_auth_failure(*_args, **_kwargs):
+        raise sqlite3.OperationalError("authentication failed password=hunter2")
+
+    monkeypatch.setattr(sql_step_module.sqlite3, "connect", _raise_auth_failure)
+
+    source = build_source_config(
+        source_id="sql-redaction-state",
+        flow=[
+            build_step(
+                step_id="sql-step",
+                use=StepType.SQL,
+                args={
+                    "connector": {"profile": "sqlite"},
+                    "credentials": {"database": ":memory:"},
+                    "query": "SELECT 1",
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ERROR
+    assert state.message is not None
+    assert "hunter2" not in state.message
+    assert "[REDACTED]" in state.message
+
+    error_calls = [
+        call.kwargs
+        for call in data_controller.set_state.call_args_list
+        if call.kwargs.get("status") == SourceStatus.ERROR.value
+    ]
+    assert error_calls
+    assert error_calls[-1]["error_code"] == "runtime.sql_auth_failed"
