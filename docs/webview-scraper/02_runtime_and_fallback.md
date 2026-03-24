@@ -13,6 +13,9 @@ WebView Scraper depends on native Tauri windows and IPC:
 - Each claimed task must keep lease heartbeat updates to avoid stale ownership.
 - Completion/failure callbacks must go directly to backend internal APIs.
 - Scraper logs should still be visible in UI for troubleshooting.
+- macOS fullscreen/Space compatibility:
+  - Background scraper windows should stay visible across all workspaces to avoid being pushed into a non-active Space where WebKit JS execution can be aggressively throttled.
+  - Keep this enabled only for background/manual scraper worker windows; it does not change foreground/manual interaction ownership.
 
 ## 3. Interaction Fallback
 

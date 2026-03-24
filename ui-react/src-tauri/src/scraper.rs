@@ -1130,6 +1130,11 @@ pub async fn push_scraper_task(
             .inner_size(1.0, 1.0)
             .position(0.0, 0.0)
             .skip_taskbar(true);
+        #[cfg(target_os = "macos")]
+        {
+            // Keep background worker attached to active Space even when app enters fullscreen.
+            builder = builder.visible_on_all_workspaces(true);
+        }
     }
 
     let _webview = builder.build().map_err(|e| {
@@ -1423,7 +1428,7 @@ async fn start_claimed_scraper_task(
             e
         })?;
 
-    let builder = tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         "scraper_worker",
         tauri::WebviewUrl::External(url.parse::<tauri::Url>().map_err(|e| e.to_string())?),
@@ -1435,7 +1440,12 @@ async fn start_claimed_scraper_task(
     .inner_size(1.0, 1.0)
     .position(0.0, 0.0)
     .skip_taskbar(true);
-    let builder = apply_webview_proxy(app, builder, &source_id, &task_id);
+    #[cfg(target_os = "macos")]
+    {
+        // Keep daemon worker attached to active Space during fullscreen transitions.
+        builder = builder.visible_on_all_workspaces(true);
+    }
+    builder = apply_webview_proxy(app, builder, &source_id, &task_id);
 
     #[cfg(target_os = "macos")]
     {
@@ -2136,5 +2146,19 @@ mod tests {
             body.contains("No app proxy configured; falling back to system proxy"),
             "WebView scraper should explicitly keep system proxy fallback when app proxy is unset"
         );
+    }
+
+    #[test]
+    fn macos_background_webview_keeps_all_spaces_visibility_contract() {
+        let source = include_str!("scraper.rs");
+        let push_task_body = extract_function_body(source, "pub async fn push_scraper_task");
+        let daemon_body = extract_function_body(source, "async fn start_claimed_scraper_task");
+
+        for body in [&push_task_body, &daemon_body] {
+            assert!(
+                body.contains("visible_on_all_workspaces(true)"),
+                "macOS background scraper windows should stay visible across all Spaces"
+            );
+        }
     }
 }
