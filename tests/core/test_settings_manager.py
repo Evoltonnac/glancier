@@ -15,6 +15,8 @@ def test_load_settings_defaults_include_scraper_timeout(tmp_path):
     assert settings.encryption_enabled is True
     assert settings.language == "en"
     assert settings.http_private_target_policy_default == "prompt"
+    assert settings.sql_default_timeout_seconds == 30
+    assert settings.sql_default_max_rows == 500
 
 
 def test_save_and_reload_scraper_timeout(tmp_path):
@@ -126,3 +128,20 @@ def test_load_settings_invalid_http_private_target_policy_falls_back_to_prompt(t
     loaded = manager.load_settings()
 
     assert loaded.http_private_target_policy_default == "prompt"
+
+
+def test_load_settings_sql_guardrail_defaults_normalize_legacy_values(tmp_path):
+    manager = SettingsManager(settings_dir=tmp_path)
+    manager.settings_file.write_text(
+        (
+            '{"encryption_enabled":true,'
+            '"sql_default_timeout_seconds":"bad-value",'
+            '"sql_default_max_rows":0}'
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = manager.load_settings()
+
+    assert loaded.sql_default_timeout_seconds == 30
+    assert loaded.sql_default_max_rows == 500
