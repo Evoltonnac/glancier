@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any
 from core.log_redaction import sanitize_log_reason
 from core.network_trust.models import TrustDecision, TrustResolution
 from core.sql.contracts import SqlContractValidationError, classify_sql_contract
+from core.sql.normalization import build_normalized_sql_response, build_sql_fields
+from core.sql.runtime_adapters import run_sql_query_for_profile
 
 if TYPE_CHECKING:
     from core.config_loader import SourceConfig, StepConfig
@@ -24,6 +26,21 @@ _MIN_SQL_MAX_ROWS = 1
 _MAX_SQL_TIMEOUT_SECONDS = 300.0
 _MAX_SQL_MAX_ROWS = 10000
 _MAX_QUERY_PREVIEW_LENGTH = 120
+_REQUIRED_SQL_RESPONSE_KEYS = (
+    "rows",
+    "fields",
+    "row_count",
+    "duration_ms",
+    "truncated",
+    "statement_count",
+    "statement_types",
+    "is_high_risk",
+    "risk_reasons",
+    "timeout_seconds",
+    "max_rows",
+    "columns",
+    "execution_ms",
+)
 
 
 @dataclass(slots=True)
@@ -106,21 +123,6 @@ def _resolve_sql_dialect(args: dict[str, Any]) -> str | None:
         return None
     normalized = dialect.strip().lower()
     return normalized or None
-
-
-def _resolve_sqlite_database_path(args: dict[str, Any]) -> str:
-    credentials = args.get("credentials")
-    if not isinstance(credentials, dict):
-        return ""
-    for key in ("database", "path", "dsn"):
-        value = credentials.get(key)
-        if not isinstance(value, str) or not value.strip():
-            continue
-        normalized = value.strip()
-        if key == "dsn" and normalized.startswith("sqlite:///"):
-            return normalized[len("sqlite:///") :]
-        return normalized
-    return ""
 
 
 def _resolve_sql_runtime_defaults(executor: "Executor") -> tuple[float, int]:
@@ -244,71 +246,6 @@ def _build_risk_interaction_data(
     }
 
 
-def _rows_from_cursor(cursor: sqlite3.Cursor, *, max_rows: int) -> tuple[list[str], list[dict[str, Any]], bool]:
-    if not cursor.description:
-        return [], [], False
-
-    columns = [str(meta[0]) for meta in cursor.description]
-    fetched = cursor.fetchmany(max_rows + 1)
-    has_more_rows = len(fetched) > max_rows
-    candidate_rows = fetched[:max_rows]
-    rows = [dict(zip(columns, row)) for row in candidate_rows]
-    return columns, rows, has_more_rows
-
-
-def _execute_sqlite_query(
-    *,
-    source_id: str,
-    step_id: str,
-    database_path: str,
-    query_text: str,
-    max_rows: int,
-) -> tuple[list[str], list[dict[str, Any]], bool]:
-    try:
-        connection = sqlite3.connect(database_path)
-    except sqlite3.OperationalError as error:
-        raise _map_connect_error(
-            source_id=source_id,
-            step_id=step_id,
-            reason=error,
-        ) from error
-    except sqlite3.DatabaseError as error:
-        raise _map_connect_error(
-            source_id=source_id,
-            step_id=step_id,
-            reason=error,
-        ) from error
-
-    try:
-        try:
-            cursor = connection.execute(query_text)
-        except sqlite3.OperationalError as error:
-            reason_text = sanitize_log_reason(error)
-            if _is_auth_failure_message(reason_text):
-                raise _map_connect_error(
-                    source_id=source_id,
-                    step_id=step_id,
-                    reason=error,
-                ) from error
-            raise _map_query_error(
-                source_id=source_id,
-                step_id=step_id,
-                reason=error,
-            ) from error
-        except sqlite3.DatabaseError as error:
-            raise _map_query_error(
-                source_id=source_id,
-                step_id=step_id,
-                reason=error,
-            ) from error
-
-        columns, rows, has_more_rows = _rows_from_cursor(cursor, max_rows=max_rows)
-        connection.commit()
-        return columns, rows, has_more_rows
-    finally:
-        connection.close()
-
-
 def _map_connect_error(
     *,
     source_id: str,
@@ -346,6 +283,62 @@ def _map_query_error(
         summary="SQL query execution failed.",
         details=sanitize_log_reason(reason),
     )
+
+
+def _is_connect_failure_message(message: str) -> bool:
+    lowered = message.lower()
+    return any(
+        token in lowered
+        for token in (
+            "unsupported sql connector profile",
+            "missing sql credential field",
+            "unable to open database file",
+            "could not connect",
+            "connection refused",
+            "connection reset",
+            "name or service not known",
+            "network is unreachable",
+            "failed to resolve",
+        )
+    )
+
+
+def _map_runtime_adapter_error(
+    *,
+    source_id: str,
+    step_id: str,
+    reason: Exception,
+) -> SqlStepRuntimeError:
+    reason_text = sanitize_log_reason(reason)
+    if _is_auth_failure_message(reason_text):
+        return _map_connect_error(source_id=source_id, step_id=step_id, reason=reason)
+
+    if isinstance(reason, (ConnectionError, TimeoutError, sqlite3.InterfaceError)):
+        return _map_connect_error(source_id=source_id, step_id=step_id, reason=reason)
+    if isinstance(reason, sqlite3.DatabaseError):
+        if _is_connect_failure_message(reason_text):
+            return _map_connect_error(source_id=source_id, step_id=step_id, reason=reason)
+        return _map_query_error(source_id=source_id, step_id=step_id, reason=reason)
+    if _is_connect_failure_message(reason_text):
+        return _map_connect_error(source_id=source_id, step_id=step_id, reason=reason)
+    return _map_query_error(source_id=source_id, step_id=step_id, reason=reason)
+
+
+def _validate_sql_response_contract(
+    *,
+    source_id: str,
+    step_id: str,
+    sql_response: dict[str, Any],
+) -> None:
+    missing_keys = [key for key in _REQUIRED_SQL_RESPONSE_KEYS if key not in sql_response]
+    if missing_keys:
+        raise SqlQueryFailedError(
+            source_id=source_id,
+            step_id=step_id,
+            code="runtime.sql_query_failed",
+            summary="SQL query execution failed.",
+            details=f"Normalized SQL response missing keys: {', '.join(sorted(missing_keys))}",
+        )
 
 
 async def execute_sql_step(
@@ -404,7 +397,7 @@ async def execute_sql_step(
                 data=interaction_data,
             )
 
-    if profile != "sqlite":
+    if profile not in {"sqlite", "postgresql"}:
         raise SqlConnectFailedError(
             source_id=source.id,
             step_id=step.id,
@@ -413,27 +406,20 @@ async def execute_sql_step(
             details=f"Unsupported SQL connector profile: {profile or 'unknown'}",
         )
 
-    database_path = _resolve_sqlite_database_path(args)
-    if not database_path:
-        raise SqlConnectFailedError(
-            source_id=source.id,
-            step_id=step.id,
-            code="runtime.sql_connect_failed",
-            summary="SQL connection failed.",
-            details="Missing SQL credential field: credentials.database",
-        )
-
     default_timeout_seconds, default_max_rows = _resolve_sql_runtime_defaults(executor)
     timeout_seconds = _resolve_sql_timeout(args, default_timeout_seconds=default_timeout_seconds)
     max_rows = _resolve_sql_max_rows(args, default_max_rows=default_max_rows)
+    credentials = args.get("credentials")
+    if not isinstance(credentials, dict):
+        credentials = {}
+
     started_at = time.monotonic()
     try:
-        columns, rows, has_more_rows = await asyncio.wait_for(
+        raw_payload = await asyncio.wait_for(
             asyncio.to_thread(
-                _execute_sqlite_query,
-                source_id=source.id,
-                step_id=step.id,
-                database_path=database_path,
+                run_sql_query_for_profile,
+                profile,
+                credentials=credentials,
                 query_text=query_text,
                 max_rows=max_rows,
             ),
@@ -447,30 +433,45 @@ async def execute_sql_step(
             summary="SQL query timed out.",
             details=f"Query exceeded timeout limit of {timeout_seconds:.3f} second(s).",
         ) from error
-    except SqlStepRuntimeError:
-        raise
-
-    if has_more_rows:
-        raise SqlRowLimitExceededError(
+    except Exception as error:
+        raise _map_runtime_adapter_error(
             source_id=source.id,
             step_id=step.id,
-            code="runtime.sql_row_limit_exceeded",
-            summary="SQL query row limit exceeded.",
-            details=f"SQL step max_rows={max_rows} exceeded.",
-        )
+            reason=error,
+        ) from error
 
-    execution_ms = int((time.monotonic() - started_at) * 1000)
+    columns = raw_payload.get("columns")
+    rows = raw_payload.get("rows")
+    has_more_rows = bool(raw_payload.get("has_more_rows"))
+    db_type_hints = raw_payload.get("db_type_hints")
+
+    if not isinstance(columns, list):
+        columns = []
+    if not isinstance(rows, list):
+        rows = []
+    if not isinstance(db_type_hints, dict):
+        db_type_hints = {}
+
+    duration_ms = int((time.monotonic() - started_at) * 1000)
+    fields = build_sql_fields(columns, rows, db_type_hints=db_type_hints)
+    sql_response = build_normalized_sql_response(
+        rows=rows,
+        fields=fields,
+        row_count=len(rows),
+        duration_ms=duration_ms,
+        truncated=has_more_rows,
+        statement_count=classification.statement_count,
+        statement_types=statement_types,
+        is_high_risk=classification.is_high_risk,
+        risk_reasons=risk_reasons,
+        timeout_seconds=timeout_seconds,
+        max_rows=max_rows,
+    )
+    _validate_sql_response_contract(
+        source_id=source.id,
+        step_id=step.id,
+        sql_response=sql_response,
+    )
     return {
-        "sql_response": {
-            "rows": rows,
-            "columns": columns,
-            "row_count": len(rows),
-            "statement_count": classification.statement_count,
-            "statement_types": statement_types,
-            "is_high_risk": classification.is_high_risk,
-            "risk_reasons": risk_reasons,
-            "execution_ms": execution_ms,
-            "timeout_seconds": timeout_seconds,
-            "max_rows": max_rows,
-        }
+        "sql_response": sql_response
     }
