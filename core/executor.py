@@ -327,7 +327,10 @@ class Executor:
                     execute_browser_step,
                     execute_auth_step,
                     execute_extract_step,
-                    execute_script_step
+                    execute_script_step,
+                    execute_sql_step,
+                    SqlRiskOperationDeniedError,
+                    SqlRiskOperationTrustRequiredError,
                 )
 
                 if step.use in (StepType.API_KEY, StepType.FORM, StepType.CURL, StepType.OAUTH):
@@ -338,6 +341,8 @@ class Executor:
                     output = await execute_extract_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.SCRIPT:
                     output = await execute_script_step(step, source, args, context, step_inputs, self)
+                elif step.use == StepType.SQL:
+                    output = await execute_sql_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.WEBVIEW:
                     output = await execute_browser_step(step, source, args, context, step_inputs, self)
 
@@ -385,6 +390,8 @@ class Executor:
                         NetworkTrustRequiredError,
                         NetworkTargetDeniedError,
                         NetworkTargetInvalidError,
+                        SqlRiskOperationTrustRequiredError,
+                        SqlRiskOperationDeniedError,
                     ),
                 ) or getattr(step_error, "code", None) in {
                     "script_timeout_exceeded",
@@ -561,6 +568,11 @@ class Executor:
         source: SourceConfig,
         error: Exception,
     ) -> Exception:
+        from core.steps.sql_step import (
+            SqlRiskOperationDeniedError,
+            SqlRiskOperationTrustRequiredError,
+        )
+
         if isinstance(
             error,
             (
@@ -572,6 +584,8 @@ class Executor:
                 NetworkTrustRequiredError,
                 NetworkTargetDeniedError,
                 NetworkTargetInvalidError,
+                SqlRiskOperationTrustRequiredError,
+                SqlRiskOperationDeniedError,
             ),
         ):
             return error
@@ -981,6 +995,7 @@ class Executor:
 
     def _exception_to_interaction(self, source: SourceConfig, error: Exception) -> InteractionRequest | None:
         """Build interaction request from exception type."""
+        from core.steps.sql_step import SqlRiskOperationTrustRequiredError
         
         if isinstance(error, RequiredSecretMissing):
             return InteractionRequest(
@@ -1028,6 +1043,21 @@ class Executor:
                 step_id=error.step_id or (webview_step.id if webview_step else "webview"),
                 source_id=source.id,
                 title="Manual Action Required",
+                message=error.message,
+                fields=[],
+                data=interaction_data,
+            )
+
+        if isinstance(error, SqlRiskOperationTrustRequiredError):
+            interaction_data = dict(error.data or {})
+            interaction_data.setdefault("confirm_kind", "network_trust")
+            interaction_data.setdefault("actions", ["allow_once", "allow_always", "deny"])
+            interaction_data.setdefault("available_scopes", ["source", "global"])
+            return InteractionRequest(
+                type=InteractionType.CONFIRM,
+                step_id=error.step_id or "sql",
+                source_id=source.id,
+                title="SQL Trust Required",
                 message=error.message,
                 fields=[],
                 data=interaction_data,
