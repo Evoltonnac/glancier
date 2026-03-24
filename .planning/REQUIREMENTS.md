@@ -19,7 +19,7 @@
 - [x] **DATA-01**: User can receive SQL query output as normalized Integration Data (`rows` + typed field metadata) that is stable across supported connectors.
 - [x] **DATA-02**: User can rely on deterministic serialization for SQL-native values (`decimal`, `datetime`, `null`, `bytes`) before template/chart consumption.
 - [x] **DATA-03**: User can consume SQL execution metadata (`row_count`, `duration_ms`, truncation flag) for diagnostics and card rendering.
-- [ ] **DATA-04**: User can reference SQL outputs through existing template expression channels without moving business logic into frontend widgets.
+- [x] **DATA-04**: User can reference SQL outputs through existing template expression channels without moving business logic into frontend widgets.
 
 ### Chart Widgets
 
@@ -70,7 +70,7 @@
 | DATA-01 | Phase 9 | Complete |
 | DATA-02 | Phase 9 | Complete |
 | DATA-03 | Phase 9 | Complete |
-| DATA-04 | Phase 9 | Pending |
+| DATA-04 | Phase 9 | Complete |
 | CHART-01 | Phase 10 | Pending |
 | CHART-02 | Phase 10 | Pending |
 | CHART-03 | Phase 10 | Pending |
