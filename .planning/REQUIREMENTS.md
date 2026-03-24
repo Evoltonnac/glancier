@@ -9,7 +9,7 @@
 
 - [x] **SQL-01**: User can declare a `use: sql` step in Integration YAML with a connector profile and credentials resolved from `secrets` channels.
 - [x] **SQL-02**: User can execute fully user-authored SQL query text (script-like control), and have non-SELECT/high-risk operations detected by static AST analysis and routed to authorization before execution.
-- [ ] **SQL-03**: User can use multiple SQL connector patterns in one contract model (at least local SQLite and server-side PostgreSQL profiles).
+- [x] **SQL-03**: User can use multiple SQL connector patterns in one contract model (at least local SQLite and server-side PostgreSQL profiles).
 - [x] **SQL-04**: User can rely on default SQL guardrails (timeout, max row limit, deterministic truncation behavior) with per-source overrides.
 - [x] **SQL-05**: User can receive deterministic `error_code` responses for SQL connect/auth/query/guardrail failures.
 - [x] **SQL-06**: User can run SQL steps without database credentials leaking into logs, API payloads, or persisted runtime artifacts.
@@ -18,7 +18,7 @@
 
 - [x] **DATA-01**: User can receive SQL query output as normalized Integration Data (`rows` + typed field metadata) that is stable across supported connectors.
 - [x] **DATA-02**: User can rely on deterministic serialization for SQL-native values (`decimal`, `datetime`, `null`, `bytes`) before template/chart consumption.
-- [ ] **DATA-03**: User can consume SQL execution metadata (`row_count`, `duration_ms`, truncation flag) for diagnostics and card rendering.
+- [x] **DATA-03**: User can consume SQL execution metadata (`row_count`, `duration_ms`, truncation flag) for diagnostics and card rendering.
 - [ ] **DATA-04**: User can reference SQL outputs through existing template expression channels without moving business logic into frontend widgets.
 
 ### Chart Widgets
@@ -63,13 +63,13 @@
 |-------------|-------|--------|
 | SQL-01 | Phase 8 | Complete |
 | SQL-02 | Phase 8 | Complete |
-| SQL-03 | Phase 9 | Pending |
+| SQL-03 | Phase 9 | Complete |
 | SQL-04 | Phase 8 | Complete |
 | SQL-05 | Phase 8 | Complete |
 | SQL-06 | Phase 8 | Complete |
 | DATA-01 | Phase 9 | Complete |
 | DATA-02 | Phase 9 | Complete |
-| DATA-03 | Phase 9 | Pending |
+| DATA-03 | Phase 9 | Complete |
 | DATA-04 | Phase 9 | Pending |
 | CHART-01 | Phase 10 | Pending |
 | CHART-02 | Phase 10 | Pending |
