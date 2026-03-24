@@ -32,6 +32,7 @@ from core.config_loader import (
 )
 from core.auth.oauth_auth import OAuthAuth
 from core.error_formatter import format_runtime_error
+from core.log_redaction import sanitize_log_reason
 from core.network_trust.models import (
     NetworkTargetDeniedError,
     NetworkTargetInvalidError,
@@ -239,7 +240,15 @@ class Executor:
                 self._update_state(source.id, SourceStatus.ERROR, "No flow defined for source")
 
         except Exception as e:
-            logger.error(f"[{source.id}] Fetch failed: {e}", exc_info=True)
+            is_sql_error = str(getattr(e, "code", "")).startswith("runtime.sql_")
+            if is_sql_error:
+                logger.error(
+                    "[%s] Fetch failed: %s",
+                    source.id,
+                    sanitize_log_reason(getattr(e, "details", e)),
+                )
+            else:
+                logger.error(f"[{source.id}] Fetch failed: {e}", exc_info=True)
             normalized_error = self._normalize_interaction_error(source, e)
 
             # For OAuth invalid-credential errors, first attempt token refresh and retry once.
@@ -279,7 +288,10 @@ class Executor:
                 normalized_error,
                 default_code="runtime.fetch_failed",
                 default_summary="Fetch failed",
-                include_traceback=not isinstance(normalized_error, FlowExecutionError),
+                include_traceback=(
+                    not isinstance(normalized_error, FlowExecutionError)
+                    and not str(getattr(normalized_error, "code", "")).startswith("runtime.sql_")
+                ),
             )
             self._update_state(
                 source.id,
