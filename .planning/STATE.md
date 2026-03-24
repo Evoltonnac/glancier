@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: milestone
 status: planning
-stopped_at: Phase 9 context gathered
-last_updated: "2026-03-24T09:46:25.277Z"
-last_activity: 2026-03-24 - completed Phase 08 verification and transitioned to Phase 09 planning
+stopped_at: Completed 09-sql-runtime-and-integration-data-normalization-01-PLAN.md
+last_updated: "2026-03-24T13:11:01.758Z"
+last_activity: 2026-03-24 - completed Phase 09 plan 01 normalization contract and tests
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_plans: 8
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -20,23 +20,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Users can complete auth -> fetch -> parse -> render through config-only integrations without backend hardcoding.
-**Current focus:** Plan Phase 9 SQL runtime and Integration Data normalization.
+**Current focus:** Execute Phase 9 plan 02 connector parity and normalization wiring.
 
 ## Current Position
 Milestone: v1.2 SQL Data Access and Visualization Expansion
 Phase: 9 of 11 (SQL Runtime and Integration Data Normalization)
-Plan: 1 of TBD (planning pending)
-Status: Ready to plan
-Last activity: 2026-03-24 - completed Phase 08 verification and transitioned to Phase 09 planning
+Plan: 2 of 3 (09-02 pending)
+Status: In progress
+Last activity: 2026-03-24 - completed 09-01 canonical SQL normalization contract and regression suite
 
-Progress: [████████████████████] 5/5 plans (100%)
+Progress: [████████░░] 6/8 plans (75%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: ~27 min
-- Total execution time: ~2.2 hours
+- Total plans completed: 6
+- Average duration: ~23 min
+- Total execution time: ~2.3 hours
 
 **By Phase:**
 
@@ -44,15 +44,16 @@ Progress: [████████████████████] 5/5 pla
 |-------|-------|-------|----------|
 | 7 | 2 completed | 2 planned | ~42 min |
 | 8 | 3 completed | 3 planned | ~12 min |
-| 9 | 0 completed | TBD planned | - |
+| 9 | 1 completed | 3 planned | 4 min |
 | 10 | 0 | - | - |
 | 11 | 0 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 07-01 (pass), 07-02 (pass), 08-01 (pass), 08-02 (pass), 08-03 (pass)
+- Last 5 plans: 07-02 (pass), 08-01 (pass), 08-02 (pass), 08-03 (pass), 09-01 (pass)
 - Trend: Stable
 | Phase 08-sql-step-contracts-and-safety-guardrails P02 | 15min | 3 tasks | 6 files |
 | Phase 08 P03 | 11min | 3 tasks | 12 files |
+| Phase 09-sql-runtime-and-integration-data-normalization P01 | 4 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -77,12 +78,15 @@ Progress: [████████████████████] 5/5 pla
 - [Phase 08]: Expose SQL timeout/max-row guardrails as stable system settings fields with legacy normalization.
 - [Phase 08]: Enforce SQL guardrail precedence as args override > system defaults > runtime built-ins with regression coverage.
 - [Phase 08]: Keep SQL write/mutation authoring trust-gated by default and extend connector parity notes for Mongo/GraphQL.
+- [Phase 09-sql-runtime-and-integration-data-normalization]: Keep canonical SQL response keys with compatibility aliases (columns/execution_ms) in normalization output.
+- [Phase 09-sql-runtime-and-integration-data-normalization]: Centralize SQL-native serialization in normalization helpers to ensure JSON-safe deterministic Integration Data.
 
 ### Roadmap Evolution
 - Phase 7 added: Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor (inserted as v1.2 first phase; previous phases shifted by +1)
 - Phase 7 executed: `07-01` and `07-02` completed on 2026-03-24
 - Phase 8 completed: `08-01`, `08-02`, and `08-03` executed on 2026-03-24
-- Next focus: Phase 9 planning/execution for SQL connector parity and normalized Integration Data output.
+- Phase 9 in progress: `09-01` completed on 2026-03-24 (normalization contract + deterministic serialization tests)
+- Next focus: execute `09-02` for sqlite/postgresql runtime adapter parity and canonical envelope wiring.
 
 ### Pending Todos
 None yet.
@@ -91,6 +95,6 @@ None yet.
 None currently.
 
 ## Session Continuity
-Last session: 2026-03-24T09:46:25.275Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-sql-runtime-and-integration-data-normalization/09-CONTEXT.md
+Last session: 2026-03-24T13:11:01.756Z
+Stopped at: Completed 09-sql-runtime-and-integration-data-normalization-01-PLAN.md
+Resume file: None
