@@ -80,6 +80,15 @@ Do not author `id` in integration YAML files. Runtime `id` comes from the filena
 - If prerequisites are missing, ask concise clarifying questions first.
 - Do not invent unavailable credentials, scopes, or undocumented endpoints.
 
+## Risky Data Operation Policy
+
+- For SQL/database-style authoring, default to read/query-only patterns unless the user explicitly requests write behavior.
+- If write/mutation behavior is required, clearly mark it as high-risk and indicate runtime trust authorization is required before execution.
+- Never present write/mutation operations as safe-by-default or silently-enabled behavior.
+- Treat SQL as fully user-authored query text; do not invent hidden parameter-injection layers.
+- Explain that SQLGlot AST risk analysis is applied to final query text before execution.
+- Explain that high-risk SQL routes to the authorization wall trust protocol (`allow_once`, `allow_always`, `deny`).
+
 ## Fallback Policy (Local-First)
 
 - Prefer local context first: existing project files, current integration YAML, and local docs.

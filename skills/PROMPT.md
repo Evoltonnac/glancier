@@ -95,12 +95,21 @@ Supported `use` values:
 - `curl`
 - `extract`
 - `script`
+- `sql`
 - `log`
 - `webview`
 
 Guidance:
 - `api_key`: credential-focused auth input.
 - `form`: generic input collection (single/multi-field), persistence decided by `secrets`/`outputs`/`context` mapping.
+
+### Risky Data Operation Policy
+
+- For SQL/database-style steps, default to read/query-only patterns unless the user explicitly requires writes.
+- If a write/mutation operation is necessary, mark it as high risk and explain it requires runtime trust authorization before execution.
+- Never describe write/mutation operations as safe-by-default behavior.
+- SQL query text should be treated as fully user-authored; do not invent hidden parameter-injection layers.
+- Risk checks should be described as static analysis on final query text before execution.
 
 ### Output Channels
 
@@ -126,7 +135,7 @@ Avoid ambiguous variable naming across channels.
 
 ### Blocking/Resume Notes
 
-Blocking steps (`api_key`, `form`, `oauth`, `curl`, `webview`) may suspend execution.
+Blocking steps (`api_key`, `form`, `oauth`, `curl`, `webview`, and high-risk `sql`) may suspend execution.
 Design for resume safety:
 - keep pre-interaction steps idempotent
 - do not rely on `context` surviving long suspension
@@ -178,6 +187,15 @@ Design for resume safety:
   - `http_response` (JSON object/array, or `null` for non-JSON)
   - `raw_data` (always available response text)
   - `headers` (response headers)
+
+#### `sql`
+
+- Purpose: execute SQL queries through backend connector runtime.
+- Core args: `connector`, `credentials`, `query`; optional `timeout`, `max_rows`.
+- Runtime output envelope: `sql_response` (rows, columns, row_count, timing/guardrail metadata).
+- Authoring default: read/query-only SQL.
+- Write/mutation SQL must be explicitly user-requested, marked high risk, and documented as trust-gated before execution.
+- SQL risk checks are SQLGlot AST-based on final query text, and high-risk operations route to the authorization wall protocol.
 
 #### `extract`
 

@@ -16,7 +16,7 @@ Refresh interval authoring rules:
 
 Required: `id`, `use`. Optional: `args`, `outputs`, `context`, `secrets`, `run`.
 
-Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `log`, `webview`.
+Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `sql`, `log`, `webview`.
 
 ## Output Channels
 
@@ -32,7 +32,7 @@ Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, 
 
 ## Blocking Steps
 
-`api_key`, `form`, `oauth`, `curl`, `webview` suspend execution. Keep pre-steps idempotent. Persist resume-critical values.
+`api_key`, `form`, `oauth`, `curl`, `webview`, and high-risk `sql` suspend execution. Keep pre-steps idempotent. Persist resume-critical values.
 
 ---
 
@@ -80,6 +80,13 @@ Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, 
   - `raw_data` (always available response text)
   - `headers` (response headers)
 - Guidance: use `http_response` for JSON APIs; use `raw_data` for plain text/HTML responses.
+
+## SQL / Database Safety Guidance
+- Default authoring stance: prefer read/query-only SQL behavior.
+- Write/mutation SQL should be treated as high-risk and require explicit runtime trust authorization before execution.
+- SQL query text is user-authored; runtime performs SQLGlot AST risk analysis on final query text before execution.
+- High-risk SQL operations route to the authorization wall protocol (`allow_once`, `allow_always`, `deny`).
+- For future connector parity (for example Mongo/GraphQL), apply the same risk classification + authorization fallback model.
 
 ## `extract`
 - Purpose: extract fields from a structured object.
