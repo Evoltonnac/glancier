@@ -28,8 +28,8 @@
 - [ ] **CHART-03**: User can render SQL-backed area charts in Bento Cards.
 - [ ] **CHART-04**: User can render SQL-backed pie charts in Bento Cards.
 - [ ] **CHART-05**: User can render SQL-backed tabular views as a chart-compatible widget for dense result inspection.
-- [ ] **CHART-06**: User can rely on deterministic empty/loading/error fallback states for all new chart widgets (no renderer crash or white screen).
-- [ ] **CHART-07**: User can configure x/y/series/value field mapping from normalized Integration Data with runtime schema validation.
+- [x] **CHART-06**: User can rely on deterministic empty/loading/error fallback states for all new chart widgets (no renderer crash or white screen).
+- [x] **CHART-07**: User can configure x/y/series/value field mapping from normalized Integration Data with runtime schema validation.
 
 ### Usability and Diagnostics
 
@@ -76,8 +76,8 @@
 | CHART-03 | Phase 10 | Pending |
 | CHART-04 | Phase 10 | Pending |
 | CHART-05 | Phase 10 | Pending |
-| CHART-06 | Phase 10 | Pending |
-| CHART-07 | Phase 10 | Pending |
+| CHART-06 | Phase 10 | Complete |
+| CHART-07 | Phase 10 | Complete |
 | UX-01 | Phase 11 | Pending |
 | UX-02 | Phase 11 | Pending |
 | UX-03 | Phase 11 | Pending |

@@ -86,5 +86,5 @@ Plans:
 | 7. Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor | 2/2 | Completed | 2026-03-24 |
 | 8. SQL Step Contracts and Safety Guardrails | 3/3 | Completed | 2026-03-24 |
 | 9. SQL Runtime and Integration Data Normalization | 3/3 | Complete | 2026-03-24 |
-| 10. SQL Chart Widgets and SDUI Rendering | 0/3 | Not started | - |
+| 10. SQL Chart Widgets and SDUI Rendering | 1/3 | In Progress|  |
 | 11. Authoring Usability and Diagnostics Hardening | 0/TBD | Not started | - |
