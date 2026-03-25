@@ -160,7 +160,12 @@ describe("chart widget foundations", () => {
     it("renders pie chart from sql_response rows", () => {
         render(
             renderPieChart({
-                rows: sqlResponse.rows,
+                rows: [
+                    ...sqlResponse.rows,
+                    { ts: "2026-03-05T00:00:00Z", category: "Delta", amount: 4, label: "Central", count: 2 },
+                    { ts: "2026-03-06T00:00:00Z", category: "Epsilon", amount: 6, label: "Northwest", count: 4 },
+                    { ts: "2026-03-07T00:00:00Z", category: "Zeta", amount: 8, label: "Southeast", count: 6 },
+                ],
                 encoding: {
                     label: { field: "label" },
                     value: { field: "count" },
