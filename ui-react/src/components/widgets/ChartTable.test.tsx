@@ -4,7 +4,28 @@ import { screen, within } from "@testing-library/react";
 import { render } from "../../test/render";
 import { ChartTable } from "./charts/ChartTable";
 
+function baseWidgetColumnsToFields(
+    columns: Array<{ field: string; format?: string }>,
+) {
+    return columns.map((column) => ({
+        name: column.field,
+        type:
+            column.format === "number" || column.format === "percent"
+                ? "float"
+                : column.format === "datetime"
+                  ? "datetime"
+                  : "text",
+    }));
+}
+
 describe("ChartTable", () => {
+    const sqlFields = baseWidgetColumnsToFields([
+        { field: "region", title: "Region Name", format: "text" },
+        { field: "revenue", title: "Revenue", format: "number" },
+        { field: "conversion_rate", title: "Conversion", format: "percent" },
+        { field: "created_at", title: "Created", format: "datetime" },
+    ]);
+
     const baseWidget = {
         type: "Chart.Table" as const,
         data_source: [
@@ -38,7 +59,16 @@ describe("ChartTable", () => {
     };
 
     it("renders selected columns in declared order with title overrides", () => {
-        render(<ChartTable widget={baseWidget} data={{ sql_response: { fields: [] } }} />);
+        render(
+            <ChartTable
+                widget={baseWidget}
+                data={{
+                    sql_response: {
+                        fields: sqlFields,
+                    },
+                }}
+            />,
+        );
 
         const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
         expect(headers).toEqual(["Region Name", "Revenue", "Conversion", "Created"]);
@@ -52,7 +82,7 @@ describe("ChartTable", () => {
                     sort_by: "revenue",
                     sort_order: "desc",
                 }}
-                data={{ sql_response: { fields: [] } }}
+                data={{ sql_response: { fields: sqlFields } }}
             />,
         );
 
@@ -70,7 +100,7 @@ describe("ChartTable", () => {
                     sort_order: "desc",
                     limit: 2,
                 }}
-                data={{ sql_response: { fields: [] } }}
+                data={{ sql_response: { fields: sqlFields } }}
             />,
         );
 
@@ -81,14 +111,23 @@ describe("ChartTable", () => {
     });
 
     it("formats number, percent, datetime, and text values deterministically", () => {
-        render(<ChartTable widget={baseWidget} data={{ sql_response: { fields: [] } }} />);
+        render(
+            <ChartTable
+                widget={baseWidget}
+                data={{
+                    sql_response: {
+                        fields: sqlFields,
+                    },
+                }}
+            />,
+        );
 
         const rows = screen.getAllByRole("row").slice(1);
         const firstRowCells = within(rows[0]!).getAllByRole("cell").map((cell) => cell.textContent);
 
         expect(firstRowCells[0]).toBe("West");
         expect(firstRowCells[1]).toBe("200.12");
-        expect(firstRowCells[2]).toBe("23.4%");
+        expect(firstRowCells[2]).toBe("23.5%");
         expect(firstRowCells[3]).toBe("2026-03-25T10:30:00.000Z");
     });
 });
