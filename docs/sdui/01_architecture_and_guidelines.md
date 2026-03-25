@@ -82,7 +82,7 @@ To output literal template markers, use backslash escapes:
 - Arbitrary code execution is forbidden.
 - Parse failures degrade to empty values without breaking card rendering.
 
-## 5. List and Layout Composition
+## 5. List, Layout, and Chart Composition
 
 ```yaml
 - type: "List"
@@ -101,7 +101,71 @@ To output literal template markers, use backslash escapes:
       label: "Usage"
 ```
 
-### 5.1 Widget Visual Baseline (Spacing and List Item)
+```yaml
+- type: "Chart.Line"
+  data_source: "{sql_response.rows}"
+  title: "Revenue trend"
+  description: "Daily SQL revenue"
+  encoding:
+    x:
+      field: "ts"
+    y:
+      field: "amount"
+    series:
+      field: "category"
+  legend: true
+  colors: ["chart.blue", "chart.teal"]
+  empty_state: "No chart data available"
+
+- type: "Chart.Table"
+  data_source: "{sql_response.rows}"
+  title: "Top regions"
+  columns:
+    - field: "label"
+      title: "Region"
+      format: "text"
+    - field: "amount"
+      title: "Revenue"
+      format: "number"
+  sort_by: "amount"
+  sort_order: "desc"
+  limit: 10
+```
+
+### 5.1 Shared Chart Contract
+
+Supported first-release chart widget types:
+- `Chart.Line`
+- `Chart.Bar`
+- `Chart.Area`
+- `Chart.Pie`
+- `Chart.Table`
+
+Shared chart props:
+- `data_source`: resolved dataset, typically `sql_response.rows`
+- `encoding`: channel mapping for chart fields inside the selected dataset
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+
+Per-chart required encoding channels:
+- `Chart.Line` / `Chart.Bar` / `Chart.Area`: `encoding.x`, `encoding.y`, optional `encoding.series`
+- `Chart.Pie`: `encoding.label`, `encoding.value`
+- `Chart.Table`: `columns.field` references must map to dataset fields; `encoding.columns` is supported for validation compatibility, but `columns` is the canonical authoring surface
+
+Deterministic chart fallback states:
+- `loading`
+- `empty`
+- `config_error`
+- `runtime_error`
+
+State precedence is fixed to: `loading -> runtime_error -> config_error -> empty -> ready`.
+Invalid or empty chart widgets must degrade inside the card shell and must never white-screen the dashboard.
+
+### 5.2 Widget Visual Baseline (Spacing and List Item)
 
 To keep hierarchy clear, widget spacing uses two semantic levels:
 - **Layout spacing** (`Container` / `ColumnSet` / `Column` / `List`): larger for structure grouping.

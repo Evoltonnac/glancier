@@ -42,6 +42,32 @@ Common fields:
 
 - `Progress`: progress/quota visualization (`bar` or `ring`).
   - Common fields: `value`, `label`, `style`, `size`, `tone`, `thresholds.warning`, `thresholds.danger`
+- `Chart.Line`: cartesian trend chart for ordered x/y data.
+- `Chart.Bar`: cartesian comparison chart for x/y data.
+- `Chart.Area`: filled cartesian trend chart for x/y data.
+- `Chart.Pie`: categorical share chart for `label` + `value` data.
+- `Chart.Table`: dense SQL result inspection table for selected columns.
+
+Shared chart fields:
+- `data_source`
+- `encoding`
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+
+Chart-specific field rules:
+- `Chart.Line` / `Chart.Bar` / `Chart.Area`: require `encoding.x` and `encoding.y`; support optional `encoding.series`
+- `Chart.Pie`: requires `encoding.label` and `encoding.value`
+- `Chart.Table`: requires `columns.field` references that resolve against dataset fields; supports `sort_by`, `sort_order`, and `limit`
+
+Deterministic chart fallback states:
+- `loading`
+- `empty`
+- `config_error`
+- `runtime_error`
 
 ## 5. Actions
 
@@ -65,7 +91,8 @@ The following names are not part of the current renderer and must not be used in
 - `hero_metric`
 - `progress_bar`
 - `key_value_grid`
-- `metric` / `line_chart` / `bar_chart` / `table` / `json` / `stat_grid`
+- `metric` / `table` / `json` / `stat_grid`
+- legacy chart aliases such as `line_chart` and `bar_chart` must not be used; use `Chart.Line` and `Chart.Bar`
 
 ## 8. Maintenance Rules
 

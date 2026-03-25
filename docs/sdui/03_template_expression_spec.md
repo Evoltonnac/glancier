@@ -54,3 +54,8 @@ This document defines supported expression syntax and safety boundaries for SDUI
 - `"{key_item.active && key_item.percent >= 80 ? 'Alert' : 'OK'}"`
 - `"Literal \\{usage\\} and resolved {usage}"`
 - `"Windows path: C:\\\\{username}"`
+- `data_source: "{sql_response.rows}"`
+- `encoding.x.field: "ts"` with data resolved from `sql_response.fields`
+- `encoding.y.field: "amount"` with numeric field metadata from `sql_response.fields`
+- `encoding.label.field: "label"` and `encoding.value.field: "count"`
+- `columns[0].field: "label"` and `columns[1].field: "amount"` for `Chart.Table`
