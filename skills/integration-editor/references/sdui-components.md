@@ -59,6 +59,17 @@ Required:
 - `item_alias`: string
 - `render: [Widget]`
 
+Minimal valid shape:
+
+```yaml
+- type: "List"
+  data_source: "{items}"
+  item_alias: "item"
+  render:
+    - type: "TextBlock"
+      text: "{item.title}"
+```
+
 Optional:
 - `layout`: `col` | `grid`
 - `columns`: 1..6
