@@ -74,6 +74,10 @@ const ChartBaseSchema = z.object({
     size: SizeSchema.optional(),
 });
 
+const RuntimeChartBaseSchema = ChartBaseSchema.extend({
+    data_source: z.array(z.record(z.string(), z.any())),
+});
+
 export const ChartLineSchema = ChartBaseSchema.extend({
     type: z.literal("Chart.Line"),
     encoding: CartesianEncodingSchema,
@@ -114,6 +118,34 @@ export const ChartWidgetSchema = z.discriminatedUnion("type", [
     ChartAreaSchema,
     ChartPieSchema,
     ChartTableSchema,
+]);
+
+export const RuntimeChartLineSchema = RuntimeChartBaseSchema.extend({
+    type: z.literal("Chart.Line"),
+    encoding: CartesianEncodingSchema,
+});
+
+export const RuntimeChartBarSchema = RuntimeChartBaseSchema.extend({
+    type: z.literal("Chart.Bar"),
+    encoding: CartesianEncodingSchema,
+});
+
+export const RuntimeChartAreaSchema = RuntimeChartBaseSchema.extend({
+    type: z.literal("Chart.Area"),
+    encoding: CartesianEncodingSchema,
+});
+
+export const RuntimeChartPieSchema = RuntimeChartBaseSchema.extend({
+    type: z.literal("Chart.Pie"),
+    encoding: PieEncodingSchema,
+    donut: z.boolean().default(false),
+});
+
+export const RuntimeChartWidgetSchema = z.discriminatedUnion("type", [
+    RuntimeChartLineSchema,
+    RuntimeChartBarSchema,
+    RuntimeChartAreaSchema,
+    RuntimeChartPieSchema,
 ]);
 
 export type ChartWidget = z.infer<typeof ChartWidgetSchema>;

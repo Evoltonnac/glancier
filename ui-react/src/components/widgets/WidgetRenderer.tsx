@@ -13,6 +13,16 @@ import { FactSetSchema } from "./elements/FactSet";
 import { ImageSchema } from "./elements/Image";
 import { BadgeSchema } from "./elements/Badge";
 import { ProgressSchema } from "./visualizations/Progress";
+import {
+    ChartLineSchema,
+    ChartBarSchema,
+    ChartAreaSchema,
+    ChartPieSchema,
+    RuntimeChartLineSchema,
+    RuntimeChartBarSchema,
+    RuntimeChartAreaSchema,
+    RuntimeChartPieSchema,
+} from "./shared/chartSchemas";
 import { ActionSetSchema } from "./actions/ActionSet";
 import { ActionOpenUrlSchema } from "./actions/ActionOpenUrl";
 import { ActionCopySchema } from "./actions/ActionCopy";
@@ -27,6 +37,10 @@ import { FactSet } from "./elements/FactSet";
 import { Image } from "./elements/Image";
 import { Badge } from "./elements/Badge";
 import { Progress } from "./visualizations/Progress";
+import { ChartLine } from "./charts/ChartLine";
+import { ChartBar } from "./charts/ChartBar";
+import { ChartArea } from "./charts/ChartArea";
+import { ChartPie } from "./charts/ChartPie";
 import { ActionSet } from "./actions/ActionSet";
 import { ActionOpenUrl } from "./actions/ActionOpenUrl";
 import { ActionCopy } from "./actions/ActionCopy";
@@ -39,6 +53,12 @@ import { ActionCopy } from "./actions/ActionCopy";
  */
 function createWidgetSchema(
     listRenderSchemaFactory: (self: z.ZodTypeAny) => z.ZodTypeAny,
+    chartSchemaSet = {
+        line: ChartLineSchema,
+        bar: ChartBarSchema,
+        area: ChartAreaSchema,
+        pie: ChartPieSchema,
+    },
 ): z.ZodType<any> {
     let selfSchema: z.ZodType<any>;
 
@@ -66,6 +86,10 @@ function createWidgetSchema(
             BadgeSchema,
             // Visualizations
             ProgressSchema,
+            chartSchemaSet.line,
+            chartSchemaSet.bar,
+            chartSchemaSet.area,
+            chartSchemaSet.pie,
             // Actions
             ActionSetSchema.extend({
                 actions: z.array(z.union([ActionOpenUrlSchema, ActionCopySchema])),
@@ -83,6 +107,12 @@ export const WidgetSchema = createWidgetSchema((self) => z.array(self));
 const RuntimeWidgetSchema = createWidgetSchema(
     // Defer List.render validation until each item is rendered with item-specific data.
     () => z.array(z.any()),
+    {
+        line: RuntimeChartLineSchema,
+        bar: RuntimeChartBarSchema,
+        area: RuntimeChartAreaSchema,
+        pie: RuntimeChartPieSchema,
+    },
 );
 
 export type Widget = z.infer<typeof WidgetSchema>;
@@ -374,6 +404,18 @@ function WidgetRendererImpl({
 
         case "Progress":
             return <Progress {...validWidget} />;
+
+        case "Chart.Line":
+            return <ChartLine widget={validWidget} data={data} />;
+
+        case "Chart.Bar":
+            return <ChartBar widget={validWidget} data={data} />;
+
+        case "Chart.Area":
+            return <ChartArea widget={validWidget} data={data} />;
+
+        case "Chart.Pie":
+            return <ChartPie widget={validWidget} data={data} />;
 
         case "ActionSet":
             return (

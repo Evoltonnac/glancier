@@ -1,8 +1,73 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 
 import { render } from "../../test/render";
 import { WidgetRenderer } from "./WidgetRenderer";
+
+function mockChartComponent(name: string) {
+    return function MockChartComponent({
+        children,
+        ...props
+    }: {
+        children?: ReactNode;
+        [key: string]: unknown;
+    }) {
+        return createElement(
+            "div",
+            {
+                "data-testid": name,
+                "data-props": JSON.stringify(props),
+            },
+            children,
+        );
+    };
+}
+
+vi.mock("recharts", () => ({
+    ResponsiveContainer: mockChartComponent("ResponsiveContainer"),
+    LineChart: mockChartComponent("LineChart"),
+    Line: mockChartComponent("Line"),
+    BarChart: mockChartComponent("BarChart"),
+    Bar: mockChartComponent("Bar"),
+    AreaChart: mockChartComponent("AreaChart"),
+    Area: mockChartComponent("Area"),
+    PieChart: mockChartComponent("PieChart"),
+    Pie: mockChartComponent("Pie"),
+    Cell: mockChartComponent("Cell"),
+    XAxis: mockChartComponent("XAxis"),
+    YAxis: mockChartComponent("YAxis"),
+    CartesianGrid: mockChartComponent("CartesianGrid"),
+    Tooltip: mockChartComponent("Tooltip"),
+    Legend: mockChartComponent("Legend"),
+}));
+
+beforeAll(() => {
+    class MockResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    }
+
+    Object.defineProperty(globalThis, "ResizeObserver", {
+        configurable: true,
+        writable: true,
+        value: MockResizeObserver,
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+        configurable: true,
+        value: 800,
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+        configurable: true,
+        value: 400,
+    });
+    Object.defineProperty(SVGElement.prototype, "getBBox", {
+        configurable: true,
+        value: () => ({ x: 0, y: 0, width: 100, height: 20 }),
+    });
+});
 
 describe("WidgetRenderer", () => {
     it("renders Progress values from list item templates", () => {
@@ -404,30 +469,122 @@ describe("WidgetRenderer", () => {
         errorSpy.mockRestore();
     });
 
-    it("shows nested validation path for field-level errors", () => {
+    it("renders chart widget branches and keeps invalid chart fallback details", () => {
         const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-        render(
+        const chartData = {
+            sql_response: {
+                rows: [
+                    { ts: "2026-03-01T00:00:00Z", category: "Alpha", amount: 12.5, label: "North", count: 3 },
+                    { ts: "2026-03-02T00:00:00Z", category: "Beta", amount: 18.25, label: "South", count: 7 },
+                ],
+                fields: [
+                    { name: "ts", type: "datetime" },
+                    { name: "category", type: "text" },
+                    { name: "amount", type: "float" },
+                    { name: "label", type: "text" },
+                    { name: "count", type: "integer" },
+                ],
+            },
+        };
+
+        const { rerender } = render(
             <WidgetRenderer
                 widget={
                     {
-                        type: "FactSet",
-                        facts: [
-                            {
-                                label: "CPU",
-                                value: { bad: true },
-                            },
-                        ],
+                        type: "Chart.Line",
+                        title: "Template trend",
+                        data_source: "{sql_response.rows}",
+                        legend: "{showLegend}",
+                        encoding: {
+                            x: { field: "ts" },
+                            y: { field: "amount" },
+                            series: { field: "category" },
+                        },
                     } as any
                 }
-                data={{}}
+                data={{ ...chartData, showLegend: true }}
+            />,
+        );
+
+        expect(screen.getByText("Template trend")).toBeInTheDocument();
+        expect(screen.getByTestId("LineChart")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Bar",
+                        title: "Bars",
+                        data_source: "{sql_response.rows}",
+                        encoding: {
+                            x: { field: "ts" },
+                            y: { field: "amount" },
+                        },
+                    } as any
+                }
+                data={chartData}
+            />,
+        );
+        expect(screen.getByText("Bars")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Area",
+                        title: "Area",
+                        data_source: "{sql_response.rows}",
+                        encoding: {
+                            x: { field: "ts" },
+                            y: { field: "amount" },
+                        },
+                    } as any
+                }
+                data={chartData}
+            />,
+        );
+        expect(screen.getByText("Area")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Pie",
+                        title: "Mix",
+                        data_source: "{sql_response.rows}",
+                        donut: "{useDonut}",
+                        encoding: {
+                            label: { field: "label" },
+                            value: { field: "count" },
+                        },
+                    } as any
+                }
+                data={{ ...chartData, useDonut: true }}
+            />,
+        );
+        expect(screen.getByText("Mix")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Line",
+                        data_source: "{sql_response.rows}",
+                        encoding: {
+                            x: { field: "ts" },
+                        },
+                    } as any
+                }
+                data={chartData}
             />,
         );
 
         expect(
-            screen.getByText("Invalid widget configuration: FactSet"),
+            screen.getByText("Invalid widget configuration: Chart.Line"),
         ).toBeInTheDocument();
-        expect(screen.getByText("Path: facts[0].value")).toBeInTheDocument();
+        expect(screen.getByText("Path: encoding.y.field")).toBeInTheDocument();
+        expect(screen.getByText(/Reason:/)).toBeInTheDocument();
 
         errorSpy.mockRestore();
     });

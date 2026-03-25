@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll } from "vitest";
 import { screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 
@@ -51,6 +51,21 @@ vi.mock("recharts", () => ({
     Tooltip: mockChartComponent("Tooltip"),
     Legend: mockChartComponent("Legend"),
 }));
+
+beforeAll(() => {
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+        configurable: true,
+        value: 800,
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+        configurable: true,
+        value: 400,
+    });
+    Object.defineProperty(SVGElement.prototype, "getBBox", {
+        configurable: true,
+        value: () => ({ x: 0, y: 0, width: 100, height: 20 }),
+    });
+});
 
 const sqlResponse = {
     rows: [
