@@ -42,6 +42,11 @@ Refresh interval behavior reference:
 - Source/global runtime intervals support `0` (disabled) or `1..10080` minutes.
 - UI preset options (`off`, `5m`, `30m`, `1h`, `1d`) are convenience choices, not the full runtime range.
 
+Refresh interval authoring rules:
+- Do not set `default_refresh_interval_minutes: 0` only because the flow contains a `webview` step.
+- Prefer a positive interval (for example `30` or `60`) when WebView is mainly for first-time login and downstream requests can keep/refresh session or token state.
+- Use `0` only when refresh usually requires fresh manual interaction on most runs (for example repeated captcha/login walls), or when the user explicitly asks for manual-only refresh.
+
 Do not author `id` inline for integration files. Runtime `id` is derived from filename:
 - `config/integrations/openai.yaml` -> `id = openai`
 - If inline `id` exists, it is ignored and replaced by filename id
@@ -329,6 +334,17 @@ Do not use legacy enum values.
   - required: `type`, `data_source`, `item_alias`, `render`
   - optional: `layout` (`col` | `grid`), `columns` (1..6), `spacing`, `filter`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `pagination`, `page_size`
 
+Minimal valid `List` snippet (`render` must be a widget array):
+
+```yaml
+- type: "List"
+  data_source: "{items}"
+  item_alias: "item"
+  render:
+    - type: "TextBlock"
+      text: "{item.title}"
+```
+
 #### Elements
 
 - `TextBlock`
@@ -412,6 +428,7 @@ flow:
       usage_percent: "$.usage.percent"
       signal_label: "$.usage.status"
       updated_at: "$.usage.updated_at"
+      top_items: "$.usage.top_items"
 
   - id: summarize
     use: script
@@ -459,6 +476,14 @@ templates:
                 value: "{remaining_value}"
               - label: "Updated"
                 value: "{updated_at}"
+          - type: "List"
+            data_source: "{top_items}"
+            item_alias: "item"
+            render:
+              - type: "TextBlock"
+                text: "{item.name}: {item.value}"
+                size: "sm"
+                tone: "muted"
           - type: "Badge"
             text: "{signal_label}"
             tone: "{signal_tone}"

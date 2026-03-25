@@ -7,6 +7,11 @@ Detailed runtime step behavior is documented in `docs/flow/02_step_reference.md`
 
 `config/integrations/*.yaml` fields: `name`, `description`, `default_refresh_interval_minutes`, `flow`, `templates`. Runtime `id` from filename, not inline.
 
+Refresh interval authoring rules:
+- Do not set `default_refresh_interval_minutes: 0` only because the flow contains `webview`.
+- Prefer a positive interval (for example `30` or `60`) when WebView is mainly for first-time login and downstream requests can keep/refresh session or token state.
+- Use `0` only when refresh usually requires fresh manual interaction on most runs (for example repeated captcha/login walls), or when the user explicitly asks for manual-only refresh.
+
 ## Step Contract
 
 Required: `id`, `use`. Optional: `args`, `outputs`, `context`, `secrets`, `run`.
