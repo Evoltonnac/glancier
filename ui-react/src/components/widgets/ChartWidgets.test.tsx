@@ -1,8 +1,52 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 
 import { render } from "../../test/render";
 import { ChartFrame } from "./charts/ChartFrame";
+import {
+    renderAreaChart,
+    renderBarChart,
+    renderLineChart,
+    renderPieChart,
+} from "./charts/adapters/rechartsAdapter";
+
+function mockChartComponent(name: string) {
+    return function MockChartComponent({
+        children,
+        ...props
+    }: {
+        children?: ReactNode;
+        [key: string]: unknown;
+    }) {
+        return createElement(
+            "div",
+            {
+                "data-testid": name,
+                "data-props": JSON.stringify(props),
+            },
+            children,
+        );
+    };
+}
+
+vi.mock("recharts", () => ({
+    ResponsiveContainer: mockChartComponent("ResponsiveContainer"),
+    LineChart: mockChartComponent("LineChart"),
+    Line: mockChartComponent("Line"),
+    BarChart: mockChartComponent("BarChart"),
+    Bar: mockChartComponent("Bar"),
+    AreaChart: mockChartComponent("AreaChart"),
+    Area: mockChartComponent("Area"),
+    PieChart: mockChartComponent("PieChart"),
+    Pie: mockChartComponent("Pie"),
+    Cell: mockChartComponent("Cell"),
+    XAxis: mockChartComponent("XAxis"),
+    YAxis: mockChartComponent("YAxis"),
+    CartesianGrid: mockChartComponent("CartesianGrid"),
+    Tooltip: mockChartComponent("Tooltip"),
+    Legend: mockChartComponent("Legend"),
+}));
 
 const sqlResponse = {
     rows: [
@@ -47,46 +91,102 @@ const sqlResponse = {
 describe("chart widget foundations", () => {
     it("renders line chart from sql_response rows", () => {
         render(
-            <ChartFrame type="Chart.Line" state={{ kind: "ready" }} title="Revenue trend">
-                <div data-testid="chart-ready">{sqlResponse.rows.length} points</div>
-            </ChartFrame>,
+            renderLineChart({
+                rows: sqlResponse.rows,
+                encoding: {
+                    x: { field: "ts" },
+                    y: { field: "amount" },
+                    series: { field: "category" },
+                },
+                legend: true,
+            }),
         );
 
-        expect(screen.getByText("Revenue trend")).toBeInTheDocument();
-        expect(screen.getByTestId("chart-ready")).toHaveTextContent("4 points");
+        expect(screen.getByTestId("ResponsiveContainer")).toBeInTheDocument();
+        expect(screen.getByTestId("LineChart")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"data"'),
+        );
+        expect(screen.getAllByTestId("Line")).toHaveLength(3);
+        expect(screen.getByTestId("XAxis")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"dataKey":"ts"'),
+        );
+        expect(screen.getAllByTestId("Line")[0]).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"stroke":"blue"'),
+        );
     });
 
     it("renders bar chart from sql_response rows", () => {
         render(
-            <ChartFrame type="Chart.Bar" state={{ kind: "ready" }} title="Revenue by category">
-                <div data-testid="chart-ready">{sqlResponse.rows[0]?.category}</div>
-            </ChartFrame>,
+            renderBarChart({
+                rows: sqlResponse.rows,
+                encoding: {
+                    x: { field: "ts" },
+                    y: { field: "amount" },
+                },
+                legend: false,
+                colors: ["#123456"],
+            }),
         );
 
-        expect(screen.getByText("Revenue by category")).toBeInTheDocument();
-        expect(screen.getByTestId("chart-ready")).toHaveTextContent("Alpha");
+        expect(screen.getByTestId("BarChart")).toBeInTheDocument();
+        expect(screen.getByTestId("Bar")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"fill":"#123456"'),
+        );
     });
 
     it("renders area chart from sql_response rows", () => {
         render(
-            <ChartFrame type="Chart.Area" state={{ kind: "ready" }} title="Area coverage">
-                <div data-testid="chart-ready">{sqlResponse.fields[2]?.name}</div>
-            </ChartFrame>,
+            renderAreaChart({
+                rows: sqlResponse.rows,
+                encoding: {
+                    x: { field: "ts" },
+                    y: { field: "amount" },
+                },
+                legend: false,
+            }),
         );
 
-        expect(screen.getByText("Area coverage")).toBeInTheDocument();
-        expect(screen.getByTestId("chart-ready")).toHaveTextContent("amount");
+        expect(screen.getByTestId("AreaChart")).toBeInTheDocument();
+        expect(screen.getByTestId("Area")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"dataKey":"amount"'),
+        );
     });
 
     it("renders pie chart from sql_response rows", () => {
         render(
-            <ChartFrame type="Chart.Pie" state={{ kind: "ready" }} title="Regional mix">
-                <div data-testid="chart-ready">{sqlResponse.rows[1]?.label}</div>
-            </ChartFrame>,
+            renderPieChart({
+                rows: sqlResponse.rows,
+                encoding: {
+                    label: { field: "label" },
+                    value: { field: "count" },
+                },
+                legend: true,
+                donut: true,
+            }),
         );
 
-        expect(screen.getByText("Regional mix")).toBeInTheDocument();
-        expect(screen.getByTestId("chart-ready")).toHaveTextContent("South");
+        expect(screen.getByTestId("PieChart")).toBeInTheDocument();
+        expect(screen.getByTestId("Pie")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"nameKey":"label"'),
+        );
+        expect(screen.getByTestId("Pie")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"dataKey":"count"'),
+        );
+        expect(screen.getByTestId("Pie")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"innerRadius":48'),
+        );
+        expect(screen.getAllByTestId("Cell")[6]).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"fill":"slate"'),
+        );
     });
 
     it("renders fallback state assertions for empty, config error, runtime error, and loading", () => {
