@@ -21,12 +21,12 @@ const WINDOW_SCRAPER_FOREGROUND: &str = "scraper_foreground";
 const SCRAPER_DAEMON_INTERVAL: Duration = Duration::from_secs(2);
 const SCRAPER_DAEMON_LEASE_SECONDS: u64 = 20;
 
-fn apply_webview_proxy(
-    app: &AppHandle,
-    mut builder: tauri::WebviewWindowBuilder<'_, tauri::Wry, AppHandle>,
-    source_id: &str,
-    task_id: &str,
-) -> tauri::WebviewWindowBuilder<'_, tauri::Wry, AppHandle> {
+fn apply_webview_proxy<'a>(
+    app: &'a AppHandle,
+    mut builder: tauri::WebviewWindowBuilder<'a, tauri::Wry, AppHandle>,
+    source_id: &'a str,
+    task_id: &'a str,
+) -> tauri::WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
     if let Some(proxy_url) = crate::resolve_webview_proxy_url(app) {
         emit_lifecycle_log(
             app,
@@ -39,17 +39,6 @@ fn apply_webview_proxy(
             ),
         );
         builder = builder.proxy_url(proxy_url);
-    } else {
-        emit_lifecycle_log(
-            app,
-            ScraperLifecycleLog::new(
-                source_id.to_string(),
-                task_id.to_string(),
-                "proxy_fallback_system",
-                "debug",
-                "No app proxy configured; falling back to system proxy".to_string(),
-            ),
-        );
     }
     builder
 }
@@ -60,7 +49,7 @@ fn enhanced_scrape_patches_script(enabled: bool) -> String {
     }
     r#"
             // Enhanced scraping mode:
-            // Patch visibility/intersection/rAF heuristics for JS-heavy sites under background throttling.
+            // Keep page logic in "visible" state and drive animation callbacks under background throttling.
             try {
                 Object.defineProperty(document, 'visibilityState', {
                     configurable: true,
@@ -70,7 +59,22 @@ fn enhanced_scrape_patches_script(enabled: bool) -> String {
                     configurable: true,
                     get: function() { return false; }
                 });
-            } catch (_err) {}
+            } catch (_err) {
+                // Ignore patch failures; continue with best-effort compatibility.
+            }
+
+            try {
+                const originalAddEventListener = document.addEventListener;
+                const patchedAddEventListener = function(type, listener, options) {
+                    if (type === 'visibilitychange') {
+                        return;
+                    }
+                    return originalAddEventListener.call(this, type, listener, options);
+                };
+                safeOverride(document, 'addEventListener', patchedAddEventListener);
+            } catch (_err) {
+                // Ignore patch failures; continue with best-effort compatibility.
+            }
 
             try {
                 const NativeIntersectionObserver = window.IntersectionObserver;
@@ -90,17 +94,27 @@ fn enhanced_scrape_patches_script(enabled: bool) -> String {
                     };
                     safeOverride(window, 'IntersectionObserver', PatchedIntersectionObserver);
                 }
-            } catch (_err) {}
+            } catch (_err) {
+                // Ignore patch failures; continue with best-effort compatibility.
+            }
 
             try {
                 const patchedRaf = function(callback) {
                     if (typeof callback !== 'function') {
-                        return setTimeout(() => {}, 16);
+                        return window.setTimeout(function() {}, 16);
                     }
-                    return setTimeout(() => callback(performance.now()), 16);
+                    return window.setTimeout(function() {
+                        callback(performance.now());
+                    }, 16);
+                };
+                const patchedCancelRaf = function(id) {
+                    return window.clearTimeout(id);
                 };
                 safeOverride(window, 'requestAnimationFrame', patchedRaf);
-            } catch (_err) {}
+                safeOverride(window, 'cancelAnimationFrame', patchedCancelRaf);
+            } catch (_err) {
+                // Ignore patch failures; continue with best-effort compatibility.
+            }
 "#
     .to_string()
 }
@@ -402,8 +416,6 @@ impl AppNapGuard {
             let reason_str = NSString::alloc(nil).init_str(reason);
             let activity: id = msg_send![pinfo, beginActivityWithOptions:options reason:reason_str];
 
-            println!("[Scraper Debug] App Nap disabled: {:?}", activity);
-
             AppNapGuard { activity }
         }
     }
@@ -415,7 +427,6 @@ impl Drop for AppNapGuard {
         unsafe {
             let pinfo = NSProcessInfo::processInfo(nil);
             let _: () = msg_send![pinfo, endActivity:self.activity];
-            println!("[Scraper Debug] App Nap re-enabled");
         }
     }
 }
@@ -770,21 +781,11 @@ fn get_active_task_record(app: &AppHandle) -> Option<ActiveScraperTask> {
 
 async fn close_existing_scraper_window(
     app: &AppHandle,
-    source_id: &str,
-    task_id: &str,
+    _source_id: &str,
+    _task_id: &str,
     window_label: &str,
 ) -> Result<(), String> {
     if let Some(win) = app.get_webview_window(window_label) {
-        emit_lifecycle_log(
-            app,
-            ScraperLifecycleLog::new(
-                source_id.to_string(),
-                task_id.to_string(),
-                "window_cleanup",
-                "debug",
-                format!("Closing existing scraper window ({window_label})"),
-            ),
-        );
         let _ = win.close();
     } else {
         return Ok(());
@@ -807,10 +808,22 @@ pub async fn scraper_log(window: Window, app: AppHandle, message: String) -> Res
         &[WINDOW_SCRAPER_WORKER, WINDOW_SCRAPER_FOREGROUND],
         "scraper_log",
     )?;
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let normalized = trimmed.to_ascii_lowercase();
+    let level = if normalized.starts_with("[error]") {
+        "error"
+    } else if normalized.starts_with("[warn]") {
+        "warn"
+    } else {
+        return Ok(());
+    };
     let (source_id, task_id) = get_active_task(&app);
     emit_lifecycle_log(
         &app,
-        ScraperLifecycleLog::new(source_id, task_id, "js_log", "debug", message),
+        ScraperLifecycleLog::new(source_id, task_id, "js_signal", level, trimmed.to_string()),
     );
     Ok(())
 }
@@ -905,18 +918,20 @@ pub async fn push_scraper_task(
 
     let enhanced_scraping_enabled = resolve_enhanced_scraping_enabled(&app);
     let enhanced_patches = enhanced_scrape_patches_script(enhanced_scraping_enabled);
-    if enhanced_scraping_enabled {
-        emit_lifecycle_log(
-            app,
-            ScraperLifecycleLog::new(
-                source_id.clone(),
-                task_id.clone(),
-                "visibility_patch_applied",
-                "debug",
-                "Enhanced scraping hooks enabled".to_string(),
+    emit_lifecycle_log(
+        &app,
+        ScraperLifecycleLog::new(
+            source_id.clone(),
+            task_id.clone(),
+            "enhanced_scraping_status",
+            "info",
+            format!(
+                "Enhanced scraping enabled={} script_len={}",
+                enhanced_scraping_enabled,
+                enhanced_patches.len()
             ),
-        );
-    }
+        ),
+    );
 
     let final_script = format!(
         r#"
@@ -1124,17 +1139,6 @@ pub async fn push_scraper_task(
             e
         })?;
 
-    emit_lifecycle_log(
-        &app,
-        ScraperLifecycleLog::new(
-            source_id.clone(),
-            task_id.clone(),
-            "window_creating",
-            "info",
-            "Creating webview window".to_string(),
-        ),
-    );
-
     let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         window_label,
@@ -1149,48 +1153,18 @@ pub async fn push_scraper_task(
     builder = apply_webview_proxy(&app, builder, &source_id, &task_id);
 
     if foreground {
-        emit_lifecycle_log(
-            &app,
-            ScraperLifecycleLog::new(
-                source_id.clone(),
-                task_id.clone(),
-                "window_mode",
-                "info",
-                "Foreground mode enabled".to_string(),
-            ),
-        );
         builder = builder
             .visible(true)
             .decorations(true)
             .inner_size(960.0, 720.0)
             .resizable(true);
     } else {
-        emit_lifecycle_log(
-            &app,
-            ScraperLifecycleLog::new(
-                source_id.clone(),
-                task_id.clone(),
-                "window_mode",
-                "info",
-                "Background mode enabled".to_string(),
-            ),
-        );
         // Background mode: disable App Nap on macOS to prevent WKWebView suspension
         #[cfg(target_os = "macos")]
         {
             let state = app.state::<ScraperState>();
             let mut guard = state.app_nap_guard.lock().unwrap();
             *guard = Some(AppNapGuard::new("Background webview scraper running"));
-            emit_lifecycle_log(
-                &app,
-                ScraperLifecycleLog::new(
-                    source_id.clone(),
-                    task_id.clone(),
-                    "app_nap_disabled",
-                    "debug",
-                    "macOS App Nap disabled".to_string(),
-                ),
-            );
         }
 
         // CRITICAL: WKWebView must be in the view hierarchy to execute JavaScript
@@ -1226,17 +1200,6 @@ pub async fn push_scraper_task(
         );
         e.to_string()
     })?;
-
-    emit_lifecycle_log(
-        &app,
-        ScraperLifecycleLog::new(
-            source_id.clone(),
-            task_id.clone(),
-            "window_created",
-            "info",
-            "Webview window created successfully".to_string(),
-        ),
-    );
 
     if foreground {
         let _ = _webview.center();
@@ -1320,18 +1283,20 @@ async fn start_claimed_scraper_task(
 
     let enhanced_scraping_enabled = resolve_enhanced_scraping_enabled(app);
     let enhanced_patches = enhanced_scrape_patches_script(enhanced_scraping_enabled);
-    if enhanced_scraping_enabled {
-        emit_lifecycle_log(
-            app,
-            ScraperLifecycleLog::new(
-                source_id.clone(),
-                task_id.clone(),
-                "visibility_patch_applied",
-                "debug",
-                "Enhanced scraping hooks enabled".to_string(),
+    emit_lifecycle_log(
+        app,
+        ScraperLifecycleLog::new(
+            source_id.clone(),
+            task_id.clone(),
+            "enhanced_scraping_status",
+            "info",
+            format!(
+                "Enhanced scraping enabled={} script_len={}",
+                enhanced_scraping_enabled,
+                enhanced_patches.len()
             ),
-        );
-    }
+        ),
+    );
 
     let final_script = format!(
         r#"
@@ -1633,11 +1598,6 @@ pub async fn handle_scraped_data(
             active_task_id
         }
     });
-    println!(
-        "[Scraper Debug] handle_scraped_data called for source_id: {}, task_id: {}",
-        source_id, resolved_task_id
-    );
-
     emit_lifecycle_log(
         &app,
         ScraperLifecycleLog::new(
@@ -1658,20 +1618,6 @@ pub async fn handle_scraped_data(
         let state = app.state::<ScraperState>();
         let mut handled = state.handled_results.lock().unwrap();
         if handled.contains(&resolved_task_id) {
-            println!(
-                "[Scraper Debug] Duplicate handle_scraped_data for task {}, ignoring.",
-                resolved_task_id
-            );
-            emit_lifecycle_log(
-                &app,
-                ScraperLifecycleLog::new(
-                    source_id.clone(),
-                    resolved_task_id.clone(),
-                    "data_duplicate",
-                    "debug",
-                    "Duplicate data ignored (deduplication)".to_string(),
-                ),
-            );
             return Ok(());
         }
         handled.insert(resolved_task_id.clone());
@@ -1758,11 +1704,6 @@ pub async fn handle_scraper_auth(
         let (_, active_task_id) = get_active_task(&app);
         active_task_id
     });
-    println!(
-        "[Scraper Debug] handle_scraper_auth called for source_id: {}, task_id: {}, target_url: {}",
-        source_id, resolved_task_id, target_url
-    );
-
     emit_lifecycle_log(
         &app,
         ScraperLifecycleLog::new(
@@ -1851,7 +1792,6 @@ pub async fn handle_scraper_auth(
 pub async fn show_scraper_window(window: Window, app: AppHandle) -> Result<(), String> {
     ensure_invoker_window(&window, &[WINDOW_MAIN], "show_scraper_window")?;
     let (source_id, task_id) = get_active_task(&app);
-    println!("[Scraper Debug] show_scraper_window called");
     if let Some(win) = app
         .get_webview_window(WINDOW_SCRAPER_WORKER)
         .or_else(|| app.get_webview_window(WINDOW_SCRAPER_FOREGROUND))
@@ -1970,7 +1910,6 @@ pub async fn cancel_scraper_task(window: Window, app: AppHandle) -> Result<(), S
     ensure_invoker_window(&window, &[WINDOW_MAIN], "cancel_scraper_task")?;
     let (source_id, task_id) = get_active_task(&app);
     let active = get_active_task_record(&app);
-    println!("[Scraper Debug] cancel_scraper_task called");
 
     emit_lifecycle_log(
         &app,
@@ -2221,7 +2160,7 @@ mod tests {
     }
 
     #[test]
-    fn webview_builder_applies_app_proxy_or_falls_back_to_system_contract() {
+    fn webview_builder_applies_app_proxy_without_fallback_noise_contract() {
         let source = include_str!("scraper.rs");
         let body = extract_function_body(source, "fn apply_webview_proxy");
 
@@ -2230,12 +2169,16 @@ mod tests {
             "WebView scraper should resolve proxy from app settings"
         );
         assert!(
+            body.contains("if let Some(proxy_url)"),
+            "WebView scraper should only apply proxy when app proxy is configured"
+        );
+        assert!(
             body.contains("builder.proxy_url(proxy_url)"),
             "WebView scraper should apply app-level proxy when configured"
         );
         assert!(
-            body.contains("No app proxy configured; falling back to system proxy"),
-            "WebView scraper should explicitly keep system proxy fallback when app proxy is unset"
+            !body.contains("proxy_fallback_system"),
+            "WebView scraper should avoid non-critical fallback lifecycle logs"
         );
     }
 
@@ -2272,6 +2215,14 @@ mod tests {
             helper_body.contains("requestAnimationFrame"),
             "Enhanced scraping helper should patch requestAnimationFrame"
         );
+        assert!(
+            helper_body.contains("cancelAnimationFrame"),
+            "Enhanced scraping helper should patch cancelAnimationFrame"
+        );
+        assert!(
+            helper_body.contains("visibilitychange"),
+            "Enhanced scraping helper should block visibilitychange listeners"
+        );
 
         for body in [&push_task_body, &daemon_body] {
             assert!(
@@ -2283,8 +2234,8 @@ mod tests {
                 "Scraper task path should compose enhanced scraping patches"
             );
             assert!(
-                body.contains("visibility_patch_applied"),
-                "Scraper task path should emit lifecycle log when enhanced patches are enabled"
+                body.contains("enhanced_scraping_status"),
+                "Scraper task path should emit lifecycle status for enhanced scraping switch"
             );
         }
     }
