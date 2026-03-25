@@ -234,8 +234,38 @@ fn is_quitting(app: &tauri::AppHandle) -> bool {
         .unwrap_or(false)
 }
 
-fn resolve_data_root(app: &tauri::AppHandle) -> Option<PathBuf> {
-    app.path().app_data_dir().ok()
+fn resolve_dev_data_root_from(start_dir: &Path) -> PathBuf {
+    for candidate in start_dir.ancestors() {
+        if candidate.join("config").is_dir() {
+            return candidate.to_path_buf();
+        }
+    }
+    start_dir.to_path_buf()
+}
+
+fn resolve_dev_data_root() -> Option<PathBuf> {
+    if let Ok(raw) = env::var("GLANCEUS_DATA_DIR") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+
+    env::current_dir()
+        .ok()
+        .map(|cwd| resolve_dev_data_root_from(&cwd))
+}
+
+fn resolve_data_root(_app: &tauri::AppHandle) -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    {
+        return resolve_dev_data_root();
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        _app.path().app_data_dir().ok()
+    }
 }
 
 fn ensure_data_root_dirs(data_root: Option<&PathBuf>) {
@@ -393,6 +423,34 @@ mod tests {
             enhanced_scraping
         );
         fs::write(path, content).expect("failed to write settings file");
+    }
+
+    #[test]
+    fn resolve_dev_data_root_from_prefers_nearest_config_ancestor() {
+        let workspace_root = make_unique_temp_dir("dev-data-root");
+        let nested = workspace_root.join("ui-react").join("src-tauri");
+        fs::create_dir_all(&nested).expect("failed to create nested dir");
+        fs::create_dir_all(workspace_root.join("config").join("integrations"))
+            .expect("failed to create config dir");
+
+        let resolved = resolve_dev_data_root_from(&nested);
+        assert_eq!(
+            resolved, workspace_root,
+            "dev data root should resolve to ancestor containing config directory"
+        );
+
+        let _ = fs::remove_dir_all(&workspace_root);
+    }
+
+    #[test]
+    fn resolve_dev_data_root_from_falls_back_to_start_dir_when_no_config() {
+        let start = make_unique_temp_dir("dev-data-root-no-config");
+        let resolved = resolve_dev_data_root_from(&start);
+        assert_eq!(
+            resolved, start,
+            "dev data root should fall back to current directory when no config ancestor exists"
+        );
+        let _ = fs::remove_dir_all(&start);
     }
 
     #[test]

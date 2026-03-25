@@ -16,6 +16,9 @@ WebView Scraper depends on native Tauri windows and IPC:
 - macOS fullscreen/Space compatibility:
   - Background scraper windows should stay visible across all workspaces to avoid being pushed into a non-active Space where WebKit JS execution can be aggressively throttled.
   - Keep this enabled only for background/manual scraper worker windows; it does not change foreground/manual interaction ownership.
+- Windows/Linux background worker visibility:
+  - Background scraper windows should stay hidden (`visible=false`) and not request focus, to avoid top-left tiny viewport flashes and foreground focus stealing.
+  - Explicit user-triggered manual foreground actions are still allowed to show/focus the scraper window.
 - Enhanced scraping compatibility switch:
   - A global settings switch (`enhanced_scraping`) controls optional JS environment compatibility hooks for WebView scraping.
   - Default is off. When enabled, scraper initialization injects visibility and scheduling patches (`document.visibilityState`, `document.hidden`, `IntersectionObserver`, `requestAnimationFrame`) before user scripts.

@@ -1167,20 +1167,26 @@ pub async fn push_scraper_task(
             *guard = Some(AppNapGuard::new("Background webview scraper running"));
         }
 
-        // CRITICAL: WKWebView must be in the view hierarchy to execute JavaScript
-        // Off-screen positioning (-10000, -10000) removes it from view hierarchy
-        // Solution: Use minimal size at (0, 0) with visible(true) but effectively invisible
-        // The window will be 1x1 pixel in top-left corner - invisible but in view hierarchy
-        builder = builder
-            .visible(true)
-            .decorations(false)
-            .inner_size(1.0, 1.0)
-            .position(0.0, 0.0)
-            .skip_taskbar(true);
         #[cfg(target_os = "macos")]
         {
-            // Keep background worker attached to active Space even when app enters fullscreen.
-            builder = builder.visible_on_all_workspaces(true);
+            // WKWebView on macOS may suspend JS for fully hidden/off-screen windows.
+            // Keep a minimal visible window in the active Space to preserve execution.
+            builder = builder
+                .visible(true)
+                .decorations(false)
+                .inner_size(1.0, 1.0)
+                .position(0.0, 0.0)
+                .skip_taskbar(true)
+                .visible_on_all_workspaces(true);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            // On Windows/Linux, keep the background worker truly hidden to avoid focus stealing.
+            builder = builder
+                .visible(false)
+                .focused(false)
+                .decorations(false)
+                .skip_taskbar(true);
         }
     }
 
@@ -1490,16 +1496,27 @@ async fn start_claimed_scraper_task(
         tauri::WebviewUrl::External(url.parse::<tauri::Url>().map_err(|e| e.to_string())?),
     )
     .title("Background Worker")
-    .initialization_script(&final_script)
-    .visible(true)
-    .decorations(false)
-    .inner_size(1.0, 1.0)
-    .position(0.0, 0.0)
-    .skip_taskbar(true);
+    .initialization_script(&final_script);
     #[cfg(target_os = "macos")]
     {
         // Keep daemon worker attached to active Space during fullscreen transitions.
-        builder = builder.visible_on_all_workspaces(true);
+        // WKWebView execution depends on staying visible in view hierarchy on macOS.
+        builder = builder
+            .visible(true)
+            .decorations(false)
+            .inner_size(1.0, 1.0)
+            .position(0.0, 0.0)
+            .skip_taskbar(true)
+            .visible_on_all_workspaces(true);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On Windows/Linux, keep daemon worker hidden to prevent UI flicker/focus steal.
+        builder = builder
+            .visible(false)
+            .focused(false)
+            .decorations(false)
+            .skip_taskbar(true);
     }
     builder = apply_webview_proxy(app, builder, &source_id, &task_id);
 
