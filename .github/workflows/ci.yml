@@ -128,20 +128,20 @@ jobs:
                       updater_glob: "*.nsis.zip"
                       updater_glob_fallback: "*.exe"
                       arch_label: x86_64
-                    - job_id: linux-x86_64
-                      platform: ubuntu-22.04
-                      rust_target: x86_64-unknown-linux-gnu
-                      tauri_args: --bundles appimage,deb,rpm --target x86_64-unknown-linux-gnu
-                      updater_platform_key: linux-x86_64
-                      updater_glob: "*.AppImage"
-                      arch_label: x86_64
-                    - job_id: linux-aarch64
-                      platform: ubuntu-22.04-arm
-                      rust_target: aarch64-unknown-linux-gnu
-                      tauri_args: --bundles appimage,deb,rpm --target aarch64-unknown-linux-gnu
-                      updater_platform_key: linux-aarch64
-                      updater_glob: "*.AppImage"
-                      arch_label: aarch64
+                    # - job_id: linux-x86_64
+                    #   platform: ubuntu-22.04
+                    #   rust_target: x86_64-unknown-linux-gnu
+                    #   tauri_args: --bundles appimage,deb,rpm --target x86_64-unknown-linux-gnu
+                    #   updater_platform_key: linux-x86_64
+                    #   updater_glob: "*.AppImage"
+                    #   arch_label: x86_64
+                    # - job_id: linux-aarch64
+                    #   platform: ubuntu-22.04-arm
+                    #   rust_target: aarch64-unknown-linux-gnu
+                    #   tauri_args: --bundles appimage,deb,rpm --target aarch64-unknown-linux-gnu
+                    #   updater_platform_key: linux-aarch64
+                    #   updater_glob: "*.AppImage"
+                    #   arch_label: aarch64
         runs-on: ${{ matrix.platform }}
         defaults:
             run:
@@ -182,6 +182,7 @@ jobs:
                     libwebkit2gtk-4.1-dev \
                     libsoup-3.0-dev \
                     patchelf \
+                    xdg-utils \
                     file \
                     curl
 
@@ -390,8 +391,6 @@ jobs:
                       "darwin-aarch64",
                       "darwin-x86_64",
                       "windows-x86_64",
-                      "linux-x86_64",
-                      "linux-aarch64",
                   ]
 
                   meta_dir = Path(os.environ["META_DIR"])
