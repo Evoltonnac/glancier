@@ -90,8 +90,8 @@ The GitHub Actions release job is defined in `.github/workflows/ci.yml` as `rele
   - `windows-latest` -> `x86_64-pc-windows-msvc` -> `--bundles nsis`
 - Prebuild policy: run `bash scripts/build.sh --prepare-only` with `SKIP_TAURI_BUILD=1` before `npm run tauri build`, so sidecar archives are staged under `ui-react/src-tauri/binaries/`.
 - Updater policy: `createUpdaterArtifacts` is `true`; updater archives and signatures are generated and signed for release distribution.
-- Release upload policy: upload updater archive/signature from `ui-react/src-tauri/target/<target>/release/bundle/**` by target format (`*.app.tar.gz(.sig)` for macOS, `*.nsis.zip(.sig)` for Windows NSIS).
-- Manifest policy: each matrix target uploads its updater archive/signature and a partial `latest-<platform>.json`; CI then merges partial manifests into one release asset `latest.json` containing all required desktop updater platforms (`darwin-aarch64`, `darwin-x86_64`, `windows-x86_64-nsis`).
+- Release upload policy: upload updater archive/signature from `ui-react/src-tauri/target/<target>/release/bundle/**` by target format (`*.app.tar.gz(.sig)` for macOS; for Windows NSIS, prefer `*.nsis.zip(.sig)` and fallback to `*.exe(.sig)` for Tauri v2 output).
+- Manifest policy: each matrix target uploads its updater archive/signature and a partial `latest-<platform>.json`; updater asset names are prefixed with `platform key` to avoid cross-arch filename collisions (notably macOS arm64/x64), then CI merges partial manifests into one release asset `latest.json` containing all required desktop updater platforms (`darwin-aarch64`, `darwin-x86_64`, `windows-x86_64-nsis`).
 - Signing inputs: set `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in GitHub repository secrets before running `release-tauri`.
 
 ## Runtime Update Contract
