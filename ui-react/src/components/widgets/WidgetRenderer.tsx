@@ -18,10 +18,12 @@ import {
     ChartBarSchema,
     ChartAreaSchema,
     ChartPieSchema,
+    ChartTableSchema,
     RuntimeChartLineSchema,
     RuntimeChartBarSchema,
     RuntimeChartAreaSchema,
     RuntimeChartPieSchema,
+    RuntimeChartTableSchema,
 } from "./shared/chartSchemas";
 import { ActionSetSchema } from "./actions/ActionSet";
 import { ActionOpenUrlSchema } from "./actions/ActionOpenUrl";
@@ -41,6 +43,7 @@ import { ChartLine } from "./charts/ChartLine";
 import { ChartBar } from "./charts/ChartBar";
 import { ChartArea } from "./charts/ChartArea";
 import { ChartPie } from "./charts/ChartPie";
+import { ChartTable } from "./charts/ChartTable";
 import { ActionSet } from "./actions/ActionSet";
 import { ActionOpenUrl } from "./actions/ActionOpenUrl";
 import { ActionCopy } from "./actions/ActionCopy";
@@ -58,6 +61,7 @@ function createWidgetSchema(
         bar: ChartBarSchema,
         area: ChartAreaSchema,
         pie: ChartPieSchema,
+        table: ChartTableSchema,
     },
 ): z.ZodType<any> {
     let selfSchema: z.ZodType<any>;
@@ -90,6 +94,7 @@ function createWidgetSchema(
             chartSchemaSet.bar,
             chartSchemaSet.area,
             chartSchemaSet.pie,
+            chartSchemaSet.table,
             // Actions
             ActionSetSchema.extend({
                 actions: z.array(z.union([ActionOpenUrlSchema, ActionCopySchema])),
@@ -112,6 +117,7 @@ const RuntimeWidgetSchema = createWidgetSchema(
         bar: RuntimeChartBarSchema,
         area: RuntimeChartAreaSchema,
         pie: RuntimeChartPieSchema,
+        table: RuntimeChartTableSchema,
     },
 );
 
@@ -416,6 +422,9 @@ function WidgetRendererImpl({
 
         case "Chart.Pie":
             return <ChartPie widget={validWidget} data={data} />;
+
+        case "Chart.Table":
+            return <ChartTable widget={validWidget} data={data} />;
 
         case "ActionSet":
             return (

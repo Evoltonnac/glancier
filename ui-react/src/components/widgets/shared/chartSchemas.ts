@@ -141,11 +141,25 @@ export const RuntimeChartPieSchema = RuntimeChartBaseSchema.extend({
     donut: z.boolean().default(false),
 });
 
+export const RuntimeChartTableSchema = RuntimeChartBaseSchema.extend({
+    type: z.literal("Chart.Table"),
+    encoding: z
+        .object({
+            columns: z.array(TableColumnSchema).optional(),
+        })
+        .default({}),
+    columns: z.array(TableColumnSchema).optional(),
+    sort_by: z.string().optional(),
+    sort_order: z.enum(["asc", "desc"]).optional(),
+    limit: z.number().int().positive().optional(),
+});
+
 export const RuntimeChartWidgetSchema = z.discriminatedUnion("type", [
     RuntimeChartLineSchema,
     RuntimeChartBarSchema,
     RuntimeChartAreaSchema,
     RuntimeChartPieSchema,
+    RuntimeChartTableSchema,
 ]);
 
 export type ChartWidget = z.infer<typeof ChartWidgetSchema>;
@@ -154,3 +168,4 @@ export type ChartBar = z.infer<typeof ChartBarSchema>;
 export type ChartArea = z.infer<typeof ChartAreaSchema>;
 export type ChartPie = z.infer<typeof ChartPieSchema>;
 export type ChartTable = z.infer<typeof ChartTableSchema>;
+export type RuntimeChartTable = z.infer<typeof RuntimeChartTableSchema>;

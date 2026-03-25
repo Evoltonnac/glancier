@@ -469,6 +469,127 @@ describe("WidgetRenderer", () => {
         errorSpy.mockRestore();
     });
 
+    it("renders Chart.Table branch and shared fallback semantics", () => {
+        const chartData = {
+            sql_response: {
+                rows: [
+                    { ts: "2026-03-01T00:00:00Z", category: "Alpha", amount: 12.5, label: "North", count: 3 },
+                    { ts: "2026-03-02T00:00:00Z", category: "Beta", amount: 18.25, label: "South", count: 7 },
+                ],
+                fields: [
+                    { name: "ts", type: "datetime" },
+                    { name: "category", type: "text" },
+                    { name: "amount", type: "float" },
+                    { name: "label", type: "text" },
+                    { name: "count", type: "integer" },
+                ],
+            },
+        };
+
+        const { rerender } = render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Table",
+                        title: "SQL table",
+                        data_source: "{sql_response.rows}",
+                        columns: [
+                            { field: "label", title: "Region", format: "text" },
+                            { field: "amount", title: "Revenue", format: "number" },
+                        ],
+                        sort_by: "amount",
+                        sort_order: "desc",
+                        limit: 1,
+                    } as any
+                }
+                data={chartData}
+            />,
+        );
+
+        expect(screen.getByText("SQL table")).toBeInTheDocument();
+        expect(screen.getByRole("columnheader", { name: "Region" })).toBeInTheDocument();
+        expect(screen.getByRole("columnheader", { name: "Revenue" })).toBeInTheDocument();
+        expect(screen.getByText("South")).toBeInTheDocument();
+        expect(screen.queryByText("North")).toBeNull();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Table",
+                        title: "SQL table",
+                        data_source: "{sql_response.rows}",
+                        columns: [{ field: "missing_metric", title: "Broken" }],
+                    } as any
+                }
+                data={chartData}
+            />,
+        );
+        expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Table",
+                        title: "SQL table",
+                        data_source: "{sql_response.rows}",
+                        columns: [{ field: "label", title: "Region" }],
+                    } as any
+                }
+                data={{
+                    sql_response: {
+                        rows: [],
+                        fields: chartData.sql_response.fields,
+                    },
+                }}
+            />,
+        );
+        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Table",
+                        title: "SQL table",
+                        data_source: "{sql_response.rows}",
+                        columns: [{ field: "label", title: "Region" }],
+                    } as any
+                }
+                data={{
+                    sql_response: {
+                        rows: chartData.sql_response.rows,
+                        fields: chartData.sql_response.fields,
+                        status: "refreshing",
+                    },
+                }}
+            />,
+        );
+        expect(screen.getByLabelText("Loading chart table")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Table",
+                        title: "SQL table",
+                        data_source: "{sql_response.rows}",
+                        columns: [{ field: "label", title: "Region" }],
+                    } as any
+                }
+                data={{
+                    sql_response: {
+                        rows: chartData.sql_response.rows,
+                        fields: chartData.sql_response.fields,
+                        error: { message: "boom" },
+                    },
+                }}
+            />,
+        );
+        expect(screen.getByText(/This chart cannot be shown right now\./)).toBeInTheDocument();
+    });
+
     it("renders chart widget branches and keeps invalid chart fallback details", () => {
         const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
