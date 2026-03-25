@@ -170,7 +170,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Glanceus API",
         description="API for metric monitoring and data aggregation",
-        version="1.1.1",
+        version="1.1.2",
         lifespan=lifespan,
     )
 

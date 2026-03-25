@@ -718,8 +718,9 @@ export default function Dashboard() {
                 applyOptimisticViewUpdate(updatedView);
                 viewSaveQueueRef.current?.enqueue(updatedView);
             }
-            // Refresh data via SWR
-            invalidateSources();
+            coordinatorRef.current?.submitSources([sourceId], "view_change", {
+                force: true,
+            });
         } catch (error) {
             console.error("Failed to add widget:", error);
             void invalidateViews();

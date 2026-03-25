@@ -8,26 +8,26 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 #[cfg(not(debug_assertions))]
 use std::net::{Shutdown, TcpListener, TcpStream};
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 #[cfg(not(debug_assertions))]
 use std::process::Command;
 #[cfg(not(debug_assertions))]
 use std::process::{Child, Stdio};
-#[cfg(all(not(debug_assertions), target_os = "windows"))]
-use std::os::windows::process::CommandExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(not(debug_assertions))]
 use std::sync::Mutex;
 use std::sync::RwLock;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(not(debug_assertions))]
+use tar::Archive;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
-#[cfg(not(debug_assertions))]
-use tar::Archive;
 use tauri_plugin_autostart::MacosLauncher;
 
 pub mod scraper;
@@ -77,11 +77,23 @@ const CURRENT_TARGET_TRIPLE: &str = "x86_64-pc-windows-msvc";
 #[cfg(all(not(debug_assertions), target_os = "windows", target_arch = "aarch64"))]
 const CURRENT_TARGET_TRIPLE: &str = "aarch64-pc-windows-msvc";
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 struct PersistedSystemSettings {
     debug_logging_enabled: Option<bool>,
     proxy: Option<String>,
     enhanced_scraping: Option<bool>,
+}
+
+#[derive(Default)]
+struct SystemSettingsState {
+    cache: RwLock<PersistedSystemSettings>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SystemSettingsCacheUpdate {
+    debug_logging_enabled: bool,
+    proxy: String,
+    enhanced_scraping: bool,
 }
 
 #[derive(Default)]
@@ -200,6 +212,25 @@ fn relaunch_app(window: tauri::Window, app: tauri::AppHandle) -> Result<(), Stri
     terminate_backend_child(&app);
     mark_quitting(&app);
     app.restart();
+}
+
+#[tauri::command]
+fn sync_system_settings_cache(
+    window: tauri::Window,
+    app: tauri::AppHandle,
+    settings: SystemSettingsCacheUpdate,
+) -> Result<(), String> {
+    ensure_command_window(&window, &["main"], "sync_system_settings_cache")?;
+    update_system_settings_cache(
+        &app,
+        PersistedSystemSettings {
+            debug_logging_enabled: Some(settings.debug_logging_enabled),
+            proxy: Some(settings.proxy),
+            enhanced_scraping: Some(settings.enhanced_scraping),
+        },
+    );
+    enforce_devtools_policy(&app);
+    Ok(())
 }
 
 fn resolve_log_dir(app: &tauri::AppHandle) -> PathBuf {
@@ -323,15 +354,32 @@ fn load_persisted_system_settings(data_root: Option<&PathBuf>) -> Option<Persist
     None
 }
 
-fn read_debug_logging_enabled(data_root: Option<&PathBuf>) -> bool {
-    load_persisted_system_settings(data_root)
-        .and_then(|settings| settings.debug_logging_enabled)
-        .unwrap_or(false)
+fn update_system_settings_cache(app: &tauri::AppHandle, settings: PersistedSystemSettings) {
+    let Some(state) = app.try_state::<SystemSettingsState>() else {
+        return;
+    };
+    if let Ok(mut guard) = state.cache.write() {
+        *guard = settings;
+    };
 }
 
-fn read_proxy_override(data_root: Option<&PathBuf>) -> Option<String> {
-    let settings = load_persisted_system_settings(data_root)?;
-    let raw_proxy = settings.proxy?;
+fn read_cached_system_settings(app: &tauri::AppHandle) -> PersistedSystemSettings {
+    app.try_state::<SystemSettingsState>()
+        .and_then(|state| state.cache.read().ok().map(|guard| guard.clone()))
+        .unwrap_or_default()
+}
+
+fn read_debug_logging_enabled_from(settings: &PersistedSystemSettings) -> bool {
+    settings.debug_logging_enabled.unwrap_or(false)
+}
+
+fn read_debug_logging_enabled(app: &tauri::AppHandle) -> bool {
+    let settings = read_cached_system_settings(app);
+    read_debug_logging_enabled_from(&settings)
+}
+
+fn read_proxy_override_from(settings: &PersistedSystemSettings) -> Option<String> {
+    let raw_proxy = settings.proxy.clone()?;
     let normalized = raw_proxy.trim();
     if normalized.is_empty() {
         return None;
@@ -339,9 +387,18 @@ fn read_proxy_override(data_root: Option<&PathBuf>) -> Option<String> {
     Some(normalized.to_string())
 }
 
+fn read_proxy_override(app: &tauri::AppHandle) -> Option<String> {
+    let settings = read_cached_system_settings(app);
+    read_proxy_override_from(&settings)
+}
+
+fn read_enhanced_scraping_enabled(app: &tauri::AppHandle) -> bool {
+    let settings = read_cached_system_settings(app);
+    settings.enhanced_scraping.unwrap_or(false)
+}
+
 pub(crate) fn resolve_webview_proxy_url(app: &tauri::AppHandle) -> Option<tauri::Url> {
-    let data_root = resolve_data_root(app);
-    let proxy = read_proxy_override(data_root.as_ref())?;
+    let proxy = read_proxy_override(app)?;
 
     let url = match tauri::Url::parse(&proxy) {
         Ok(url) => url,
@@ -364,15 +421,11 @@ pub(crate) fn resolve_webview_proxy_url(app: &tauri::AppHandle) -> Option<tauri:
 }
 
 pub(crate) fn is_enhanced_scraping_enabled(app: &tauri::AppHandle) -> bool {
-    let data_root = resolve_data_root(app);
-    load_persisted_system_settings(data_root.as_ref())
-        .and_then(|settings| settings.enhanced_scraping)
-        .unwrap_or(false)
+    read_enhanced_scraping_enabled(app)
 }
 
 fn should_allow_devtools(app: &tauri::AppHandle) -> bool {
-    let data_root = resolve_data_root(app);
-    read_debug_logging_enabled(data_root.as_ref())
+    read_debug_logging_enabled(app)
 }
 
 fn enforce_devtools_policy(app: &tauri::AppHandle) {
@@ -634,9 +687,7 @@ fn terminate_backend_child(app: &tauri::AppHandle) {
 fn terminate_backend_by_port(port: u16) {
     let port_expr = format!("tcp:{port}");
     let kill_by_signal = |signal: &str| {
-        let output = Command::new("lsof")
-            .args(["-t", "-i", &port_expr])
-            .output();
+        let output = Command::new("lsof").args(["-t", "-i", &port_expr]).output();
         let Ok(output) = output else {
             return;
         };
@@ -657,8 +708,7 @@ fn terminate_backend_by_port(port: u16) {
 }
 
 #[cfg(all(not(debug_assertions), not(unix)))]
-fn terminate_backend_by_port(_port: u16) {
-}
+fn terminate_backend_by_port(_port: u16) {}
 
 #[cfg(not(debug_assertions))]
 fn backend_entry_filename() -> &'static str {
@@ -675,9 +725,9 @@ fn resolve_backend_archive_path(app: &tauri::AppHandle) -> Result<PathBuf, Strin
         .path()
         .resource_dir()
         .map_err(|e| format!("failed to resolve resource dir: {e}"))?;
-    let archive_path = resource_dir
-        .join("binaries")
-        .join(format!("{BACKEND_BINARY_BASENAME}-{CURRENT_TARGET_TRIPLE}.tar.gz"));
+    let archive_path = resource_dir.join("binaries").join(format!(
+        "{BACKEND_BINARY_BASENAME}-{CURRENT_TARGET_TRIPLE}.tar.gz"
+    ));
     if !archive_path.is_file() {
         return Err(format!(
             "backend archive not found: {}",
@@ -690,7 +740,9 @@ fn resolve_backend_archive_path(app: &tauri::AppHandle) -> Result<PathBuf, Strin
 #[cfg(not(debug_assertions))]
 fn backend_runtime_root(data_root: Option<&PathBuf>) -> PathBuf {
     if let Some(root) = data_root {
-        root.join("runtime").join("backend").join(CURRENT_TARGET_TRIPLE)
+        root.join("runtime")
+            .join("backend")
+            .join(CURRENT_TARGET_TRIPLE)
     } else {
         env::temp_dir()
             .join("glanceus-runtime")
@@ -701,8 +753,12 @@ fn backend_runtime_root(data_root: Option<&PathBuf>) -> PathBuf {
 
 #[cfg(not(debug_assertions))]
 fn backend_archive_fingerprint(path: &Path) -> Result<String, String> {
-    let metadata = fs::metadata(path)
-        .map_err(|e| format!("failed to inspect backend archive '{}': {e}", path.display()))?;
+    let metadata = fs::metadata(path).map_err(|e| {
+        format!(
+            "failed to inspect backend archive '{}': {e}",
+            path.display()
+        )
+    })?;
     let modified = metadata
         .modified()
         .ok()
@@ -1382,6 +1438,7 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .manage(AppLifecycleState::default())
         .manage(RuntimeState::default())
+        .manage(SystemSettingsState::default())
         .manage(scraper::ScraperState::default())
         .invoke_handler(tauri::generate_handler![
             scraper::push_scraper_task,
@@ -1400,7 +1457,8 @@ pub fn run() {
             open_logs_folder,
             open_external_url,
             get_runtime_port_info,
-            relaunch_app
+            relaunch_app,
+            sync_system_settings_cache
         ])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build());
@@ -1447,9 +1505,12 @@ pub fn run() {
             ensure_data_root_dirs(data_root.as_ref());
             let log_dir = resolve_log_dir(&app.handle());
             let _ = fs::create_dir_all(&log_dir);
+            let persisted_settings =
+                load_persisted_system_settings(data_root.as_ref()).unwrap_or_default();
+            update_system_settings_cache(&app.handle(), persisted_settings.clone());
 
             let debug_logging_enabled =
-                cfg!(debug_assertions) || read_debug_logging_enabled(data_root.as_ref());
+                cfg!(debug_assertions) || read_debug_logging_enabled_from(&persisted_settings);
             init_log_plugin(&app.handle(), debug_logging_enabled, &log_dir)?;
             let internal_auth_token = resolve_internal_auth_token();
             set_internal_auth_token(&app.handle(), internal_auth_token.clone());

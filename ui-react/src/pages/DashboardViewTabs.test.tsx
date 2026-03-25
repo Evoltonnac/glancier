@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
     apiMock,
     invalidateViewsMock,
+    invalidateSourcesMock,
     useViewsMock,
     useSourcesMock,
     useSettingsMock,
@@ -24,8 +25,16 @@ const {
         refreshAll: vi.fn(),
         deleteSourceFile: vi.fn(),
         getIntegrationTemplates: vi.fn(),
+        connectSourceUpdates: vi.fn().mockResolvedValue({
+            close: vi.fn(),
+            onopen: null,
+            onmessage: null,
+            onclose: null,
+            onerror: null,
+        }),
     };
     const invalidateViewsMock = vi.fn().mockResolvedValue(undefined);
+    const invalidateSourcesMock = vi.fn().mockResolvedValue(undefined);
     const useViewsMock = vi.fn();
     const useSourcesMock = vi.fn();
     const useSettingsMock = vi.fn();
@@ -51,6 +60,7 @@ const {
     return {
         apiMock,
         invalidateViewsMock,
+        invalidateSourcesMock,
         useViewsMock,
         useSourcesMock,
         useSettingsMock,
@@ -70,7 +80,8 @@ vi.mock("../hooks/useSWR", () => ({
     useSources: useSourcesMock,
     useSettings: useSettingsMock,
     invalidateViews: invalidateViewsMock,
-    invalidateSources: vi.fn(),
+    invalidateSources: invalidateSourcesMock,
+    updateSourcesSnapshot: vi.fn(),
     optimisticRemoveSource: vi.fn(),
     optimisticUpdateSourceStatus: vi.fn(),
     mutate: vi.fn(),
@@ -116,7 +127,26 @@ vi.mock("../components/BaseSourceCard", () => ({
 }));
 
 vi.mock("../components/AddWidgetDialog", () => ({
-    AddWidgetDialog: () => null,
+    AddWidgetDialog: ({
+        open,
+        onAddWidget,
+    }: {
+        open: boolean;
+        onAddWidget: (sourceId: string, template: any) => void;
+    }) =>
+        open ? (
+            <button
+                data-testid="mock-add-widget-confirm"
+                onClick={() =>
+                    onAddWidget("source-1", {
+                        id: "template-1",
+                        type: "source_card",
+                    })
+                }
+            >
+                add
+            </button>
+        ) : null,
 }));
 
 vi.mock("../components/EmptyState", () => ({
@@ -161,6 +191,8 @@ function resetDashboardMocks(views: StoredView[], activeViewId: string | null) {
 
     const setActiveViewId = vi.fn();
     const setOrderedViewIds = vi.fn();
+    const setViewMode = vi.fn();
+    const setSelectedDashboardId = vi.fn();
     const syncWithViews = vi.fn().mockReturnValue({
         activeViewId: views[0]?.id ?? null,
         orderedViewIds: views.map((view) => view.id),
@@ -172,6 +204,10 @@ function resetDashboardMocks(views: StoredView[], activeViewId: string | null) {
         setActiveViewId,
         setOrderedViewIds,
         syncWithViews,
+        viewMode: "single",
+        setViewMode,
+        selectedDashboardId: activeViewId,
+        setSelectedDashboardId,
     });
 
     return { setActiveViewId, setOrderedViewIds, syncWithViews };
@@ -432,6 +468,59 @@ describe("dashboard view lifecycle", () => {
         render(<Dashboard />);
 
         expect(screen.getByTestId("dashboard-tab-overflow-trigger")).toHaveTextContent("+2");
+    });
+
+    it("does not invalidate sources when adding widget", async () => {
+        const views = [makeView("view-1", "Overview")];
+        const { syncWithViews } = resetDashboardMocks(views, "view-1");
+        storeState.isAddDialogOpen = true;
+        useSourcesMock.mockReturnValue({
+            sources: [
+                {
+                    id: "source-1",
+                    name: "Demo Source",
+                    description: "",
+                    enabled: true,
+                    auth_type: "none",
+                    has_data: true,
+                    status: "active",
+                },
+            ],
+            dataMap: {
+                "source-1": {
+                    source_id: "source-1",
+                    data: { value: 1 },
+                    updated_at: 100,
+                    status: "active",
+                },
+            },
+            isLoading: false,
+        });
+        apiMock.updateView.mockResolvedValue({
+            ...views[0],
+            items: [
+                {
+                    id: "widget-1",
+                    x: 0,
+                    y: 0,
+                    w: 4,
+                    h: 4,
+                    source_id: "source-1",
+                    template_id: "template-1",
+                    props: {},
+                },
+            ],
+        });
+
+        render(<Dashboard />);
+        expect(syncWithViews).toHaveBeenCalledWith(views);
+
+        fireEvent.click(screen.getByTestId("mock-add-widget-confirm"));
+
+        await waitFor(() => {
+            expect(apiMock.updateView).toHaveBeenCalledTimes(1);
+        });
+        expect(invalidateSourcesMock).not.toHaveBeenCalled();
     });
 });
 
