@@ -4,6 +4,10 @@ import { createElement, type ReactNode } from "react";
 
 import { render } from "../../test/render";
 import { ChartFrame } from "./charts/ChartFrame";
+import { ChartArea } from "./charts/ChartArea";
+import { ChartBar } from "./charts/ChartBar";
+import { ChartLine } from "./charts/ChartLine";
+import { ChartPie } from "./charts/ChartPie";
 import {
     renderAreaChart,
     renderBarChart,
@@ -86,6 +90,40 @@ const sqlResponse = {
         { name: "label", type: "text" },
         { name: "count", type: "integer" },
     ],
+};
+
+const readyData = {
+    sql_response: sqlResponse,
+};
+
+const configErrorData = {
+    sql_response: {
+        rows: sqlResponse.rows,
+        fields: sqlResponse.fields,
+    },
+};
+
+const emptyData = {
+    sql_response: {
+        rows: [],
+        fields: sqlResponse.fields,
+    },
+};
+
+const runtimeErrorData = {
+    sql_response: {
+        rows: sqlResponse.rows,
+        fields: sqlResponse.fields,
+        error: { message: "boom" },
+    },
+};
+
+const loadingData = {
+    sql_response: {
+        rows: sqlResponse.rows,
+        fields: sqlResponse.fields,
+        status: "refreshing",
+    },
 };
 
 describe("chart widget foundations", () => {
@@ -226,5 +264,355 @@ describe("chart widget foundations", () => {
             <ChartFrame type="Chart.Line" state={{ kind: "runtime_error" }} title="Fallback demo" />,
         );
         expect(screen.getByText(/This chart cannot be shown right now\./)).toBeInTheDocument();
+    });
+
+    it("renders line widget ready state and fallback states", () => {
+        const { rerender } = render(
+            <ChartLine
+                widget={{
+                    type: "Chart.Line",
+                    data_source: readyData.sql_response.rows,
+                    title: "Revenue trend",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                        series: { field: "category" },
+                    },
+                    legend: true,
+                }}
+                data={readyData}
+            />,
+        );
+
+        expect(screen.getByText("Revenue trend")).toBeInTheDocument();
+        expect(screen.getByTestId("LineChart")).toBeInTheDocument();
+
+        rerender(
+            <ChartLine
+                widget={{
+                    type: "Chart.Line",
+                    data_source: loadingData.sql_response.rows,
+                    title: "Revenue trend",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={loadingData}
+            />,
+        );
+        expect(screen.getByLabelText("Loading line chart")).toBeInTheDocument();
+
+        rerender(
+            <ChartLine
+                widget={{
+                    type: "Chart.Line",
+                    data_source: runtimeErrorData.sql_response.rows,
+                    title: "Revenue trend",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={runtimeErrorData}
+            />,
+        );
+        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
+
+        rerender(
+            <ChartLine
+                widget={{
+                    type: "Chart.Line",
+                    data_source: configErrorData.sql_response.rows,
+                    title: "Revenue trend",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "missing_metric" },
+                    },
+                }}
+                data={configErrorData}
+            />,
+        );
+        expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
+
+        rerender(
+            <ChartLine
+                widget={{
+                    type: "Chart.Line",
+                    data_source: emptyData.sql_response.rows,
+                    title: "Revenue trend",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={emptyData}
+            />,
+        );
+        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+    });
+
+    it("renders bar widget ready state and fallback states", () => {
+        const { rerender } = render(
+            <ChartBar
+                widget={{
+                    type: "Chart.Bar",
+                    data_source: readyData.sql_response.rows,
+                    title: "Revenue bars",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={readyData}
+            />,
+        );
+
+        expect(screen.getByTestId("BarChart")).toBeInTheDocument();
+
+        rerender(
+            <ChartBar
+                widget={{
+                    type: "Chart.Bar",
+                    data_source: loadingData.sql_response.rows,
+                    title: "Revenue bars",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={loadingData}
+            />,
+        );
+        expect(screen.getByLabelText("Loading bar chart")).toBeInTheDocument();
+
+        rerender(
+            <ChartBar
+                widget={{
+                    type: "Chart.Bar",
+                    data_source: runtimeErrorData.sql_response.rows,
+                    title: "Revenue bars",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={runtimeErrorData}
+            />,
+        );
+        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
+
+        rerender(
+            <ChartBar
+                widget={{
+                    type: "Chart.Bar",
+                    data_source: configErrorData.sql_response.rows,
+                    title: "Revenue bars",
+                    encoding: {
+                        x: { field: "missing_x" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={configErrorData}
+            />,
+        );
+        expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
+
+        rerender(
+            <ChartBar
+                widget={{
+                    type: "Chart.Bar",
+                    data_source: emptyData.sql_response.rows,
+                    title: "Revenue bars",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={emptyData}
+            />,
+        );
+        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+    });
+
+    it("renders area widget ready state and fallback states", () => {
+        const { rerender } = render(
+            <ChartArea
+                widget={{
+                    type: "Chart.Area",
+                    data_source: readyData.sql_response.rows,
+                    title: "Revenue area",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={readyData}
+            />,
+        );
+
+        expect(screen.getByTestId("AreaChart")).toBeInTheDocument();
+
+        rerender(
+            <ChartArea
+                widget={{
+                    type: "Chart.Area",
+                    data_source: loadingData.sql_response.rows,
+                    title: "Revenue area",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={loadingData}
+            />,
+        );
+        expect(screen.getByLabelText("Loading area chart")).toBeInTheDocument();
+
+        rerender(
+            <ChartArea
+                widget={{
+                    type: "Chart.Area",
+                    data_source: runtimeErrorData.sql_response.rows,
+                    title: "Revenue area",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={runtimeErrorData}
+            />,
+        );
+        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
+
+        rerender(
+            <ChartArea
+                widget={{
+                    type: "Chart.Area",
+                    data_source: configErrorData.sql_response.rows,
+                    title: "Revenue area",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "category" },
+                    },
+                }}
+                data={configErrorData}
+            />,
+        );
+        expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
+
+        rerender(
+            <ChartArea
+                widget={{
+                    type: "Chart.Area",
+                    data_source: emptyData.sql_response.rows,
+                    title: "Revenue area",
+                    encoding: {
+                        x: { field: "ts" },
+                        y: { field: "amount" },
+                    },
+                }}
+                data={emptyData}
+            />,
+        );
+        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+    });
+
+    it("renders pie widget ready state, donut mode, and fallback states", () => {
+        const { rerender } = render(
+            <ChartPie
+                widget={{
+                    type: "Chart.Pie",
+                    data_source: [
+                        ...readyData.sql_response.rows,
+                        { ts: "2026-03-05T00:00:00Z", category: "Delta", amount: 4, label: "Central", count: 2 },
+                        { ts: "2026-03-06T00:00:00Z", category: "Epsilon", amount: 6, label: "Northwest", count: 4 },
+                        { ts: "2026-03-07T00:00:00Z", category: "Zeta", amount: 8, label: "Southeast", count: 6 },
+                    ],
+                    title: "Regional mix",
+                    donut: true,
+                    encoding: {
+                        label: { field: "label" },
+                        value: { field: "count" },
+                    },
+                    legend: true,
+                }}
+                data={readyData}
+            />,
+        );
+
+        expect(screen.getByTestId("PieChart")).toBeInTheDocument();
+        expect(screen.getByTestId("Pie")).toHaveAttribute(
+            "data-props",
+            expect.stringContaining('"innerRadius":48'),
+        );
+
+        rerender(
+            <ChartPie
+                widget={{
+                    type: "Chart.Pie",
+                    data_source: loadingData.sql_response.rows,
+                    title: "Regional mix",
+                    donut: true,
+                    encoding: {
+                        label: { field: "label" },
+                        value: { field: "count" },
+                    },
+                }}
+                data={loadingData}
+            />,
+        );
+        expect(screen.getByLabelText("Loading pie chart")).toBeInTheDocument();
+
+        rerender(
+            <ChartPie
+                widget={{
+                    type: "Chart.Pie",
+                    data_source: runtimeErrorData.sql_response.rows,
+                    title: "Regional mix",
+                    donut: true,
+                    encoding: {
+                        label: { field: "label" },
+                        value: { field: "count" },
+                    },
+                }}
+                data={runtimeErrorData}
+            />,
+        );
+        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
+
+        rerender(
+            <ChartPie
+                widget={{
+                    type: "Chart.Pie",
+                    data_source: configErrorData.sql_response.rows,
+                    title: "Regional mix",
+                    donut: true,
+                    encoding: {
+                        label: { field: "label" },
+                        value: { field: "category" },
+                    },
+                }}
+                data={configErrorData}
+            />,
+        );
+        expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
+
+        rerender(
+            <ChartPie
+                widget={{
+                    type: "Chart.Pie",
+                    data_source: emptyData.sql_response.rows,
+                    title: "Regional mix",
+                    donut: true,
+                    encoding: {
+                        label: { field: "label" },
+                        value: { field: "count" },
+                    },
+                }}
+                data={emptyData}
+            />,
+        );
+        expect(screen.getByText("No chart data available")).toBeInTheDocument();
     });
 });
