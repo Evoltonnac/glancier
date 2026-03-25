@@ -1,90 +1,94 @@
 import { describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 
 import { render } from "../../test/render";
-import { ChartFrame } from "./charts/ChartFrame";
+import { ChartTable } from "./charts/ChartTable";
 
-const sqlResponse = {
-    rows: [
-        {
-            ts: "2026-03-01T00:00:00Z",
-            category: "Alpha",
-            amount: 12.5,
-            label: "North",
-            count: 3,
-        },
-        {
-            ts: "2026-03-02T00:00:00Z",
-            category: "Beta",
-            amount: 18.25,
-            label: "South",
-            count: 7,
-        },
-        {
-            ts: "2026-03-03T00:00:00Z",
-            category: "Alpha",
-            amount: 9.75,
-            label: "East",
-            count: 5,
-        },
-        {
-            ts: "2026-03-04T00:00:00Z",
-            category: "Gamma",
-            amount: 21.1,
-            label: "West",
-            count: 11,
-        },
-    ],
-    fields: [
-        { name: "ts", type: "datetime" },
-        { name: "category", type: "text" },
-        { name: "amount", type: "float" },
-        { name: "label", type: "text" },
-        { name: "count", type: "integer" },
-    ],
-};
+describe("ChartTable", () => {
+    const baseWidget = {
+        type: "Chart.Table" as const,
+        data_source: [
+            {
+                region: "West",
+                revenue: 200.123,
+                conversion_rate: 0.2345,
+                created_at: "2026-03-25T10:30:00.000Z",
+            },
+            {
+                region: "East",
+                revenue: 310.4,
+                conversion_rate: 0.125,
+                created_at: "2026-03-24T09:00:00.000Z",
+            },
+            {
+                region: "North",
+                revenue: 150,
+                conversion_rate: 0.5,
+                created_at: "2026-03-23T08:15:00.000Z",
+            },
+        ],
+        columns: [
+            { field: "region", title: "Region Name", format: "text" },
+            { field: "revenue", title: "Revenue", format: "number" },
+            { field: "conversion_rate", title: "Conversion", format: "percent" },
+            { field: "created_at", title: "Created", format: "datetime" },
+        ],
+        title: "Regional performance",
+        description: "Dense SQL result inspection",
+    };
 
-describe("Chart.Table fixtures", () => {
-    it("includes sorting, limiting, column selection, and title override coverage", () => {
-        const sortedLimitedRows = [...sqlResponse.rows]
-            .sort((left, right) => right.amount - left.amount)
-            .slice(0, 2)
-            .map((row) => ({ Region: row.label, Revenue: row.amount }));
+    it("renders selected columns in declared order with title overrides", () => {
+        render(<ChartTable widget={baseWidget} data={{ sql_response: { fields: [] } }} />);
 
+        const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
+        expect(headers).toEqual(["Region Name", "Revenue", "Conversion", "Created"]);
+    });
+
+    it("sorts rows deterministically using sort_by and sort_order", () => {
         render(
-            <ChartFrame type="Chart.Table" state={{ kind: "ready" }} title="Top regions">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Region</th>
-                            <th>Revenue</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {sortedLimitedRows.map((row) => (
-                            <tr key={row.Region}>
-                                <td>{row.Region}</td>
-                                <td>{row.Revenue}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </ChartFrame>,
+            <ChartTable
+                widget={{
+                    ...baseWidget,
+                    sort_by: "revenue",
+                    sort_order: "desc",
+                }}
+                data={{ sql_response: { fields: [] } }}
+            />,
         );
 
-        expect(screen.getByText("Top regions")).toBeInTheDocument();
-        expect(screen.getByRole("columnheader", { name: "Region" })).toBeInTheDocument();
-        expect(screen.getByRole("columnheader", { name: "Revenue" })).toBeInTheDocument();
-        expect(screen.getByText("West")).toBeInTheDocument();
-        expect(screen.getByText("21.1")).toBeInTheDocument();
-        expect(screen.getByText("South")).toBeInTheDocument();
-        expect(screen.queryByText("North")).toBeNull();
-        expect(sqlResponse.fields.map((field) => field.name)).toEqual([
-            "ts",
-            "category",
-            "amount",
-            "label",
-            "count",
-        ]);
+        const rows = screen.getAllByRole("row").slice(1);
+        const firstCells = rows.map((row) => within(row).getAllByRole("cell")[0]?.textContent);
+        expect(firstCells).toEqual(["East", "West", "North"]);
+    });
+
+    it("applies limit after sorting and before render", () => {
+        render(
+            <ChartTable
+                widget={{
+                    ...baseWidget,
+                    sort_by: "revenue",
+                    sort_order: "desc",
+                    limit: 2,
+                }}
+                data={{ sql_response: { fields: [] } }}
+            />,
+        );
+
+        const rows = screen.getAllByRole("row").slice(1);
+        expect(rows).toHaveLength(2);
+        const firstCells = rows.map((row) => within(row).getAllByRole("cell")[0]?.textContent);
+        expect(firstCells).toEqual(["East", "West"]);
+    });
+
+    it("formats number, percent, datetime, and text values deterministically", () => {
+        render(<ChartTable widget={baseWidget} data={{ sql_response: { fields: [] } }} />);
+
+        const rows = screen.getAllByRole("row").slice(1);
+        const firstRowCells = within(rows[0]!).getAllByRole("cell").map((cell) => cell.textContent);
+
+        expect(firstRowCells[0]).toBe("West");
+        expect(firstRowCells[1]).toBe("200.12");
+        expect(firstRowCells[2]).toBe("23.4%");
+        expect(firstRowCells[3]).toBe("2026-03-25T10:30:00.000Z");
     });
 });
