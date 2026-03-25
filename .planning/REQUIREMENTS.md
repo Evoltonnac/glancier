@@ -23,10 +23,10 @@
 
 ### Chart Widgets
 
-- [ ] **CHART-01**: User can render SQL-backed line charts in Bento Cards.
-- [ ] **CHART-02**: User can render SQL-backed bar charts in Bento Cards.
-- [ ] **CHART-03**: User can render SQL-backed area charts in Bento Cards.
-- [ ] **CHART-04**: User can render SQL-backed pie charts in Bento Cards.
+- [x] **CHART-01**: User can render SQL-backed line charts in Bento Cards.
+- [x] **CHART-02**: User can render SQL-backed bar charts in Bento Cards.
+- [x] **CHART-03**: User can render SQL-backed area charts in Bento Cards.
+- [x] **CHART-04**: User can render SQL-backed pie charts in Bento Cards.
 - [ ] **CHART-05**: User can render SQL-backed tabular views as a chart-compatible widget for dense result inspection.
 - [x] **CHART-06**: User can rely on deterministic empty/loading/error fallback states for all new chart widgets (no renderer crash or white screen).
 - [x] **CHART-07**: User can configure x/y/series/value field mapping from normalized Integration Data with runtime schema validation.
@@ -71,10 +71,10 @@
 | DATA-02 | Phase 9 | Complete |
 | DATA-03 | Phase 9 | Complete |
 | DATA-04 | Phase 9 | Complete |
-| CHART-01 | Phase 10 | Pending |
-| CHART-02 | Phase 10 | Pending |
-| CHART-03 | Phase 10 | Pending |
-| CHART-04 | Phase 10 | Pending |
+| CHART-01 | Phase 10 | Complete |
+| CHART-02 | Phase 10 | Complete |
+| CHART-03 | Phase 10 | Complete |
+| CHART-04 | Phase 10 | Complete |
 | CHART-05 | Phase 10 | Pending |
 | CHART-06 | Phase 10 | Complete |
 | CHART-07 | Phase 10 | Complete |
