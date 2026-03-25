@@ -37,6 +37,7 @@ from core.storage.migration import run_startup_migration
 from core.storage.sqlite_connection import create_sqlite_connection
 from core.storage.sqlite_resource_repo import SqliteResourceRepository
 from core.storage.sqlite_runtime_repo import SqliteRuntimeRepository
+from core.source_update_events import SourceUpdateEventBus
 from core import api
 
 
@@ -217,8 +218,13 @@ def create_app() -> FastAPI:
         logger.error("failed to load config; starting with empty config: %s", exc, exc_info=True)
         config = AppConfig()
 
+    source_update_bus = SourceUpdateEventBus()
+
     # Persistent runtime data store.
-    data_controller = DataController(storage=storage_contract)
+    data_controller = DataController(
+        storage=storage_contract,
+        source_update_bus=source_update_bus,
+    )
 
     # Sensitive secret storage.
     secrets_controller = SecretsController()
@@ -277,6 +283,7 @@ def create_app() -> FastAPI:
         settings_manager=settings_manager,
         master_key_provider=master_key_provider,
         scraper_task_store=scraper_task_store,
+        source_update_bus=source_update_bus,
     )
 
     # Register API routes.

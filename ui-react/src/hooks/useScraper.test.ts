@@ -366,6 +366,105 @@ describe("useScraper observer mode", () => {
         expect(useStore.getState().activeScraper).toBeNull();
     });
 
+    it("queue snapshot sync is throttled with leading and trailing execution", async () => {
+        vi.useFakeTimers();
+        const source = buildWebviewSource("source-throttle", "Source Throttle");
+        useStore.setState({
+            sources: [source],
+            activeScraper: null,
+            skippedScrapers: new Set(),
+        });
+
+        let lifecycleListener:
+            | ((event: { payload: any }) => void | Promise<void>)
+            | undefined;
+        mockListen.mockImplementation((eventName: string, callback: any) => {
+            if (eventName === "scraper_lifecycle_log") {
+                lifecycleListener = callback;
+            }
+            return Promise.resolve(mockUnlisten);
+        });
+        mockInvoke.mockImplementation((command: string) => {
+            if (command === "get_scraper_queue_snapshot") {
+                return Promise.resolve({
+                    active_source_id: null,
+                    queue_source_ids: [],
+                });
+            }
+            return Promise.resolve(undefined);
+        });
+
+        renderHook(() => useScraper());
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        const countQueueSyncCalls = () =>
+            mockInvoke.mock.calls.filter(
+                ([command]) => command === "get_scraper_queue_snapshot",
+            ).length;
+
+        const initialCallCount = countQueueSyncCalls();
+        expect(initialCallCount).toBe(1);
+        expect(lifecycleListener).toBeDefined();
+
+        act(() => {
+            lifecycleListener?.({
+                payload: {
+                    source_id: source.id,
+                    task_id: "task-throttle-1",
+                    stage: "task_claimed",
+                    level: "info",
+                    message: "Claimed backend scraper task",
+                    timestamp: 1,
+                },
+            });
+            lifecycleListener?.({
+                payload: {
+                    source_id: source.id,
+                    task_id: "task-throttle-1",
+                    stage: "task_complete",
+                    level: "info",
+                    message: "Scraper completed",
+                    timestamp: 2,
+                },
+            });
+        });
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(countQueueSyncCalls()).toBe(initialCallCount);
+
+        await act(async () => {
+            vi.advanceTimersByTime(600);
+            await Promise.resolve();
+        });
+        expect(countQueueSyncCalls()).toBe(initialCallCount + 1);
+
+        await act(async () => {
+            vi.advanceTimersByTime(600);
+            await Promise.resolve();
+        });
+        act(() => {
+            lifecycleListener?.({
+                payload: {
+                    source_id: source.id,
+                    task_id: "task-throttle-2",
+                    stage: "task_claimed",
+                    level: "info",
+                    message: "Claimed backend scraper task again",
+                    timestamp: 3,
+                },
+            });
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(countQueueSyncCalls()).toBe(initialCallCount + 2);
+        vi.useRealTimers();
+    });
+
     it("scraper_result error clears active state and marks source skipped", async () => {
         const source = buildWebviewSource("source-err", "Source Err");
         useStore.setState({

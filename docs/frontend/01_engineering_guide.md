@@ -31,6 +31,8 @@ Use hooks from `ui-react/src/hooks/useSWR.ts` first.
 Available hooks:
 
 - `useSources()`
+  - Default behavior returns source list + current cached detail map without forcing all detail requests.
+  - Use `useSources({ withDetails: true })` only when a page explicitly needs eager full-detail hydration.
 - `useSourceData(sourceId)`
 - `useViews()`
 - `useSettings()`
@@ -47,8 +49,34 @@ Cache helpers:
 - `invalidateSettings()`
 - `invalidateIntegrationFiles()`
 - `optimisticUpdateSources(...)`
+- `updateSourcesSnapshot(...)`
 - `optimisticRemoveSource(sourceId)`
 - `optimisticUpdateSourceStatus(sourceId, status)`
+
+## Source Update Coordinator Contract
+
+Dashboard source updates are coordinated by `SourceUpdateCoordinator` (`ui-react/src/pages/sourceUpdateCoordinator.ts`).
+
+Required behavior:
+
+- Unified ingress: polling, websocket events, manual refresh, and dashboard view changes all submit into one coordinator queue.
+- Source-level deduplication: one in-flight detail fetch per source.
+- Priority scheduling:
+  - Tier 1: active dashboard sources in card order.
+  - Tier 2: other dashboard sources in dashboard order.
+  - Tier 3: unreferenced sources.
+- Bounded concurrency (default 4) with progressive UI update after each detail returns.
+- Per-source detail throttle with leading + trailing semantics:
+  - leading: first update in a burst fetches detail immediately.
+  - trailing: updates within the throttle window are coalesced into one final fetch.
+- Stale-result protection: older detail responses must not overwrite newer summary state.
+- Summary/detail convergence: detail success can write summary-compatible fields (`status`, `error_code`, timestamps) back into the source list snapshot.
+
+WebSocket contract:
+
+- Event stream is lightweight (`source.updated`) and does not carry full detail payload.
+- On websocket reconnect/history gap, frontend must trigger list reconciliation polling (`source.sync_required` path).
+- HTTP remains the source of truth for detail payload retrieval.
 
 ## Effect Safety and StrictMode
 

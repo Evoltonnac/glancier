@@ -10,6 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
+from core.source_update_events import SourceUpdateEventBus
 from core.storage.contract import RuntimeStore, StorageContract
 from core.storage.errors import StorageContractError, map_sqlite_error
 from core.storage.sqlite_connection import create_sqlite_connection
@@ -29,6 +30,7 @@ class DataController:
         db_path: str | Path | None = None,
         runtime_store: RuntimeStore | None = None,
         storage: StorageContract | None = None,
+        source_update_bus: SourceUpdateEventBus | None = None,
     ):
         if runtime_store is not None and storage is not None:
             raise ValueError("runtime_store and storage are mutually exclusive")
@@ -44,6 +46,7 @@ class DataController:
             self._owned_connection = connection
             self._runtime_store = SqliteRuntimeRepository(connection)
             logger.info("SQLite runtime store opened: %s", resolved_path)
+        self._source_update_bus = source_update_bus
 
     def _with_storage_call(
         self,
@@ -65,6 +68,11 @@ class DataController:
             operation="data_controller.upsert",
             action=lambda: self._runtime_store.upsert(source_id, data),
         )
+        if self._source_update_bus is not None:
+            self._source_update_bus.publish_source_updated(
+                source_id,
+                event_type="detail_updated",
+            )
 
     def set_error(self, source_id: str, error: str) -> None:
         self._with_storage_call(
@@ -72,6 +80,11 @@ class DataController:
             operation="data_controller.set_error",
             action=lambda: self._runtime_store.set_error(source_id, error),
         )
+        if self._source_update_bus is not None:
+            self._source_update_bus.publish_source_updated(
+                source_id,
+                event_type="error_updated",
+            )
 
     def set_state(
         self,
@@ -94,6 +107,13 @@ class DataController:
                 error_code=error_code,
             ),
         )
+        if self._source_update_bus is not None:
+            self._source_update_bus.publish_source_updated(
+                source_id,
+                event_type="state_updated",
+                status=status,
+                error_code=error_code,
+            )
 
     def set_retry_metadata(self, source_id: str, metadata: dict[str, Any] | None) -> None:
         self._with_storage_call(

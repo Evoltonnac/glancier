@@ -9,6 +9,7 @@ import type { SourceSummary } from "../types/config";
 
 const SCRAPER_LOG_LIMIT = 300;
 const DEFAULT_SCRAPER_TIMEOUT_SECONDS = 10;
+const QUEUE_SNAPSHOT_SYNC_THROTTLE_MS = 500;
 const ACTIVE_STAGES = new Set(["task_claimed"]);
 const TERMINAL_STAGES = new Set([
     "task_complete",
@@ -83,6 +84,11 @@ export function useScraper() {
     const [scraperLogs, setScraperLogs] = useState<ScraperLifecycleLog[]>([]);
     const [activeTaskToken, setActiveTaskToken] = useState<string | null>(null);
     const [queueSourceIds, setQueueSourceIds] = useState<string[]>([]);
+    const queueSyncLastRunAtRef = useRef(0);
+    const queueSyncPendingRef = useRef(false);
+    const queueSyncInFlightRef = useRef(false);
+    const queueSyncTimerRef = useRef<number | null>(null);
+    const runQueueSnapshotSyncRef = useRef<() => void>(() => {});
 
     const activeScraperRef = useRef<string | null>(null);
     const activeTaskIdRef = useRef<string | null>(null);
@@ -183,18 +189,114 @@ export function useScraper() {
         }
     }, [scraperEnabled]);
 
+    const clearQueueSnapshotSyncTimer = useCallback(() => {
+        if (queueSyncTimerRef.current !== null) {
+            window.clearTimeout(queueSyncTimerRef.current);
+            queueSyncTimerRef.current = null;
+        }
+    }, []);
+
+    const scheduleTrailingQueueSnapshotSync = useCallback(
+        (delayMs: number) => {
+            if (queueSyncTimerRef.current !== null) {
+                return;
+            }
+            queueSyncTimerRef.current = window.setTimeout(() => {
+                queueSyncTimerRef.current = null;
+                if (!queueSyncPendingRef.current) {
+                    return;
+                }
+                queueSyncPendingRef.current = false;
+                runQueueSnapshotSyncRef.current();
+            }, delayMs);
+        },
+        [],
+    );
+
+    const runQueueSnapshotSync = useCallback(async () => {
+        if (!scraperEnabled) {
+            return;
+        }
+        if (queueSyncInFlightRef.current) {
+            queueSyncPendingRef.current = true;
+            return;
+        }
+
+        queueSyncInFlightRef.current = true;
+        queueSyncLastRunAtRef.current = Date.now();
+        try {
+            await syncQueueSnapshotFromRust();
+        } finally {
+            queueSyncInFlightRef.current = false;
+            if (!queueSyncPendingRef.current) {
+                return;
+            }
+            const elapsedMs = Date.now() - queueSyncLastRunAtRef.current;
+            if (elapsedMs >= QUEUE_SNAPSHOT_SYNC_THROTTLE_MS) {
+                queueSyncPendingRef.current = false;
+                runQueueSnapshotSyncRef.current();
+                return;
+            }
+            scheduleTrailingQueueSnapshotSync(
+                Math.max(QUEUE_SNAPSHOT_SYNC_THROTTLE_MS - elapsedMs, 0),
+            );
+        }
+    }, [scheduleTrailingQueueSnapshotSync, scraperEnabled, syncQueueSnapshotFromRust]);
+
+    useEffect(() => {
+        runQueueSnapshotSyncRef.current = () => {
+            void runQueueSnapshotSync();
+        };
+    }, [runQueueSnapshotSync]);
+
+    const requestQueueSnapshotSync = useCallback(() => {
+        if (!scraperEnabled) {
+            return;
+        }
+        const now = Date.now();
+        const elapsedMs = now - queueSyncLastRunAtRef.current;
+        if (
+            queueSyncLastRunAtRef.current === 0 ||
+            elapsedMs >= QUEUE_SNAPSHOT_SYNC_THROTTLE_MS
+        ) {
+            runQueueSnapshotSyncRef.current();
+            return;
+        }
+        queueSyncPendingRef.current = true;
+        scheduleTrailingQueueSnapshotSync(
+            Math.max(QUEUE_SNAPSHOT_SYNC_THROTTLE_MS - elapsedMs, 0),
+        );
+    }, [scheduleTrailingQueueSnapshotSync, scraperEnabled]);
+
+    useEffect(() => {
+        if (scraperEnabled) {
+            return;
+        }
+        queueSyncPendingRef.current = false;
+        queueSyncInFlightRef.current = false;
+        queueSyncLastRunAtRef.current = 0;
+        clearQueueSnapshotSyncTimer();
+    }, [clearQueueSnapshotSyncTimer, scraperEnabled]);
+
+    useEffect(
+        () => () => {
+            clearQueueSnapshotSyncTimer();
+        },
+        [clearQueueSnapshotSyncTimer],
+    );
+
     useEffect(() => {
         if (!scraperEnabled) {
             return;
         }
-        void syncQueueSnapshotFromRust();
+        requestQueueSnapshotSync();
         const interval = window.setInterval(() => {
-            void syncQueueSnapshotFromRust();
+            requestQueueSnapshotSync();
         }, 1500);
         return () => {
             window.clearInterval(interval);
         };
-    }, [scraperEnabled, syncQueueSnapshotFromRust]);
+    }, [requestQueueSnapshotSync, scraperEnabled]);
 
     const handleSkipScraper = useCallback(async () => {
         if (!scraperEnabled || !activeScraper) {
@@ -420,7 +522,7 @@ export function useScraper() {
                         log.stage === "task_cancelled" ||
                         log.stage === "task_killed_log_burst"
                     ) {
-                        void syncQueueSnapshotFromRust();
+                        requestQueueSnapshotSync();
                     }
                 },
             );
@@ -547,7 +649,7 @@ export function useScraper() {
                 unlistenLifecycleLog();
             }
         };
-    }, [scraperEnabled, setSources, syncErrorLogsFromMemory, syncQueueSnapshotFromRust]);
+    }, [requestQueueSnapshotSync, scraperEnabled, setSources, syncErrorLogsFromMemory]);
 
     useEffect(() => {
         if (!scraperEnabled || !activeTaskToken) {
