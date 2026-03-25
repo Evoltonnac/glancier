@@ -66,6 +66,9 @@ Required behavior:
   - Tier 2: other dashboard sources in dashboard order.
   - Tier 3: unreferenced sources.
 - Bounded concurrency (default 4) with progressive UI update after each detail returns.
+- Per-source detail throttle with leading + trailing semantics:
+  - leading: first update in a burst fetches detail immediately.
+  - trailing: updates within the throttle window are coalesced into one final fetch.
 - Stale-result protection: older detail responses must not overwrite newer summary state.
 - Summary/detail convergence: detail success can write summary-compatible fields (`status`, `error_code`, timestamps) back into the source list snapshot.
 

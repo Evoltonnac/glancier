@@ -28,6 +28,12 @@ type SourceRuntimeState = {
     needsRefetch: boolean;
     manualBoostPending: boolean;
     activeRequestId: number;
+    lastSubmitAt: number;
+    trailingTimer: number | null;
+    trailingPending: boolean;
+    trailingForce: boolean;
+    trailingManualBoost: boolean;
+    trailingTrigger: SourceUpdateTrigger;
 };
 
 type PriorityContext = {
@@ -38,6 +44,7 @@ type PriorityContext = {
 type SourceUpdateCoordinatorOptions = {
     maxConcurrency?: number;
     pollIntervalMs?: number;
+    detailThrottleMs?: number;
     fetchSources: () => Promise<SourceSummary[]>;
     fetchSourceData: (sourceId: string) => Promise<DataResponse | null>;
     getSnapshot: () => SourcesWithData;
@@ -47,6 +54,7 @@ type SourceUpdateCoordinatorOptions = {
 
 const DEFAULT_MAX_CONCURRENCY = 4;
 const DEFAULT_POLL_INTERVAL_MS = 3000;
+const DEFAULT_DETAIL_THROTTLE_MS = 800;
 
 function byPriority(a: QueueTask, b: QueueTask): number {
     if (a.manualBoost !== b.manualBoost) {
@@ -65,6 +73,23 @@ function toNumericTimestamp(value: unknown): number | null {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function hasOwn(value: object, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function normalizeOptionalInteraction(
+    value: unknown,
+): SourceSummary["interaction"] | undefined {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        return value as SourceSummary["interaction"];
+    }
+    return undefined;
+}
+
 export class SourceUpdateCoordinator {
     private readonly maxConcurrency: number;
 
@@ -77,6 +102,8 @@ export class SourceUpdateCoordinator {
     private readonly getSnapshot: () => SourcesWithData;
 
     private readonly updateSnapshot: (updater: SnapshotUpdater) => void;
+
+    private readonly detailThrottleMs: number;
 
     private readonly onError?: (error: unknown, context: string) => void;
 
@@ -110,6 +137,10 @@ export class SourceUpdateCoordinator {
             1000,
             options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
         );
+        this.detailThrottleMs = Math.max(
+            0,
+            options.detailThrottleMs ?? DEFAULT_DETAIL_THROTTLE_MS,
+        );
         this.fetchSources = options.fetchSources;
         this.fetchSourceData = options.fetchSourceData;
         this.getSnapshot = options.getSnapshot;
@@ -133,6 +164,9 @@ export class SourceUpdateCoordinator {
         if (this.pollTimer !== null) {
             window.clearInterval(this.pollTimer);
             this.pollTimer = null;
+        }
+        for (const runtime of this.sourceRuntime.values()) {
+            this.resetTrailingState(runtime, { clearTimer: true });
         }
         this.queue.clear();
     }
@@ -174,6 +208,7 @@ export class SourceUpdateCoordinator {
         options?: {
             force?: boolean;
             manualBoost?: boolean;
+            bypassThrottle?: boolean;
         },
     ): void {
         const uniqueIds = Array.from(new Set(sourceIds));
@@ -183,6 +218,7 @@ export class SourceUpdateCoordinator {
 
         const force = options?.force === true;
         const manualBoost = options?.manualBoost === true || trigger === "manual";
+        const bypassThrottle = options?.bypassThrottle === true;
         for (const sourceId of uniqueIds) {
             if (!force && !this.needsFetch(sourceId)) {
                 continue;
@@ -195,29 +231,23 @@ export class SourceUpdateCoordinator {
                 continue;
             }
 
-            const priority = this.resolvePriority(sourceId);
-            const existingTask = this.queue.get(sourceId);
-            if (existingTask) {
-                existingTask.priorityTier = Math.min(
-                    existingTask.priorityTier,
-                    priority.priorityTier,
+            if (
+                !bypassThrottle &&
+                !manualBoost &&
+                this.shouldThrottle(state)
+            ) {
+                this.scheduleTrailingSubmit(
+                    sourceId,
+                    state,
+                    trigger,
+                    force,
+                    manualBoost,
                 );
-                existingTask.priorityOrder = Math.min(
-                    existingTask.priorityOrder,
-                    priority.priorityOrder,
-                );
-                existingTask.manualBoost = existingTask.manualBoost || manualBoost;
                 continue;
             }
 
-            this.queue.set(sourceId, {
-                sourceId,
-                enqueueSeq: this.nextEnqueueSeq++,
-                priorityTier: priority.priorityTier,
-                priorityOrder: priority.priorityOrder,
-                manualBoost,
-                trigger,
-            });
+            this.resetTrailingState(state, { clearTimer: true });
+            this.enqueueTask(sourceId, trigger, manualBoost);
         }
 
         this.pumpQueue();
@@ -226,42 +256,52 @@ export class SourceUpdateCoordinator {
     handleWebSocketEvent(event: {
         source_id?: string;
         updated_at?: number;
-        status?: string;
-        error_code?: string;
+        status?: string | null;
+        error_code?: string | null;
     }): void {
         if (!event.source_id) {
             return;
         }
+        const hasEventErrorCode = hasOwn(event, "error_code");
+        const nextStatus = normalizeOptionalString(event.status);
         this.updateSnapshot((prev) => {
             const nextSources = prev.sources.map((source) => {
                 if (source.id !== event.source_id) {
                     return source;
                 }
-                const nextUpdatedAt =
-                    toNumericTimestamp(event.updated_at) ?? source.updated_at;
+                const resolvedStatus = (nextStatus as SourceSummary["status"]) ?? source.status;
+                let nextErrorCode: string | undefined = source.error_code;
+                if (hasEventErrorCode) {
+                    nextErrorCode = normalizeOptionalString(event.error_code);
+                } else if (resolvedStatus !== "error" && resolvedStatus !== "suspended") {
+                    nextErrorCode = undefined;
+                }
                 return {
                     ...source,
-                    updated_at: nextUpdatedAt,
-                    status: (event.status as SourceSummary["status"]) ?? source.status,
-                    error_code: event.error_code ?? source.error_code,
+                    status: resolvedStatus,
+                    error_code: nextErrorCode,
                 };
             });
             return { sources: nextSources, dataMap: prev.dataMap };
         });
 
-        if (toNumericTimestamp(event.updated_at) !== null) {
-            const current = this.summaryById.get(event.source_id);
-            if (current) {
-                this.summaryById.set(event.source_id, {
-                    ...current,
-                    updated_at: toNumericTimestamp(event.updated_at) ?? current.updated_at,
-                    status: (event.status as SourceSummary["status"]) ?? current.status,
-                    error_code: event.error_code ?? current.error_code,
-                });
+        const current = this.summaryById.get(event.source_id);
+        if (current) {
+            const resolvedStatus = (nextStatus as SourceSummary["status"]) ?? current.status;
+            let nextErrorCode: string | undefined = current.error_code;
+            if (hasEventErrorCode) {
+                nextErrorCode = normalizeOptionalString(event.error_code);
+            } else if (resolvedStatus !== "error" && resolvedStatus !== "suspended") {
+                nextErrorCode = undefined;
             }
+            this.summaryById.set(event.source_id, {
+                ...current,
+                status: resolvedStatus,
+                error_code: nextErrorCode,
+            });
         }
 
-        this.submitSources([event.source_id], "websocket");
+        this.submitSources([event.source_id], "websocket", { force: true });
     }
 
     private applySourcesSnapshot(
@@ -294,7 +334,11 @@ export class SourceUpdateCoordinator {
             if (!nextById.has(previous.id)) {
                 this.summaryById.delete(previous.id);
                 this.queue.delete(previous.id);
-                this.sourceRuntime.delete(previous.id);
+                const runtime = this.sourceRuntime.get(previous.id);
+                if (runtime) {
+                    this.resetTrailingState(runtime, { clearTimer: true });
+                    this.sourceRuntime.delete(previous.id);
+                }
             }
         }
 
@@ -344,9 +388,100 @@ export class SourceUpdateCoordinator {
             needsRefetch: false,
             manualBoostPending: false,
             activeRequestId: 0,
+            lastSubmitAt: 0,
+            trailingTimer: null,
+            trailingPending: false,
+            trailingForce: false,
+            trailingManualBoost: false,
+            trailingTrigger: "polling",
         };
         this.sourceRuntime.set(sourceId, created);
         return created;
+    }
+
+    private shouldThrottle(state: SourceRuntimeState): boolean {
+        if (this.detailThrottleMs <= 0 || state.lastSubmitAt <= 0) {
+            return false;
+        }
+        return Date.now() - state.lastSubmitAt < this.detailThrottleMs;
+    }
+
+    private enqueueTask(
+        sourceId: string,
+        trigger: SourceUpdateTrigger,
+        manualBoost: boolean,
+    ): void {
+        const priority = this.resolvePriority(sourceId);
+        const existingTask = this.queue.get(sourceId);
+        const state = this.getOrCreateRuntimeState(sourceId);
+        state.lastSubmitAt = Date.now();
+        if (existingTask) {
+            existingTask.priorityTier = Math.min(
+                existingTask.priorityTier,
+                priority.priorityTier,
+            );
+            existingTask.priorityOrder = Math.min(
+                existingTask.priorityOrder,
+                priority.priorityOrder,
+            );
+            existingTask.manualBoost = existingTask.manualBoost || manualBoost;
+            return;
+        }
+        this.queue.set(sourceId, {
+            sourceId,
+            enqueueSeq: this.nextEnqueueSeq++,
+            priorityTier: priority.priorityTier,
+            priorityOrder: priority.priorityOrder,
+            manualBoost,
+            trigger,
+        });
+    }
+
+    private scheduleTrailingSubmit(
+        sourceId: string,
+        state: SourceRuntimeState,
+        trigger: SourceUpdateTrigger,
+        force: boolean,
+        manualBoost: boolean,
+    ): void {
+        state.trailingPending = true;
+        state.trailingForce = state.trailingForce || force;
+        state.trailingManualBoost = state.trailingManualBoost || manualBoost;
+        state.trailingTrigger = trigger;
+        if (state.trailingTimer !== null) {
+            return;
+        }
+        const elapsed = Math.max(0, Date.now() - state.lastSubmitAt);
+        const waitMs = Math.max(this.detailThrottleMs - elapsed, 0);
+        state.trailingTimer = window.setTimeout(() => {
+            state.trailingTimer = null;
+            if (!this.running || !state.trailingPending) {
+                return;
+            }
+            const trailingForce = state.trailingForce;
+            const trailingManualBoost = state.trailingManualBoost;
+            const trailingTrigger = state.trailingTrigger;
+            this.resetTrailingState(state, { clearTimer: false });
+            this.submitSources([sourceId], trailingTrigger, {
+                force: trailingForce,
+                manualBoost: trailingManualBoost,
+                bypassThrottle: true,
+            });
+        }, waitMs);
+    }
+
+    private resetTrailingState(
+        state: SourceRuntimeState,
+        options: { clearTimer: boolean },
+    ): void {
+        if (options.clearTimer && state.trailingTimer !== null) {
+            window.clearTimeout(state.trailingTimer);
+            state.trailingTimer = null;
+        }
+        state.trailingPending = false;
+        state.trailingForce = false;
+        state.trailingManualBoost = false;
+        state.trailingTrigger = "polling";
     }
 
     private pumpQueue(): void {
@@ -452,6 +587,7 @@ export class SourceUpdateCoordinator {
         summary: SourceSummary,
         detail: DataResponse,
     ): SourceSummary {
+        const detailRecord = detail as unknown as Record<string, unknown>;
         const detailUpdatedAt =
             toNumericTimestamp(detail.updated_at) ?? summary.updated_at ?? undefined;
         const summaryUpdatedAt = toNumericTimestamp(summary.updated_at) ?? 0;
@@ -464,19 +600,66 @@ export class SourceUpdateCoordinator {
             return summary;
         }
 
+        const hasMessageField = hasOwn(detailRecord, "message");
+        const hasErrorField = hasOwn(detailRecord, "error");
+        const hasErrorCodeField = hasOwn(detailRecord, "error_code");
+        const hasInteractionField = hasOwn(detailRecord, "interaction");
+        const hasDataField = hasOwn(detailRecord, "data");
+        const hasLastSuccessAtField = hasOwn(detailRecord, "last_success_at");
+
+        const nextStatus = (
+            normalizeOptionalString(detailRecord.status) as SourceSummary["status"]
+        ) ?? summary.status;
+        const nextMessage = hasMessageField
+            ? normalizeOptionalString(detailRecord.message)
+            : summary.message;
+        let nextError = hasErrorField
+            ? normalizeOptionalString(detailRecord.error)
+            : summary.error;
+        if (!hasErrorField && nextStatus !== "error") {
+            nextError = undefined;
+        }
+        let nextErrorCode = hasErrorCodeField
+            ? normalizeOptionalString(detailRecord.error_code)
+            : summary.error_code;
+        if (!hasErrorCodeField && nextStatus !== "error" && nextStatus !== "suspended") {
+            nextErrorCode = undefined;
+        }
+        let nextInteraction = hasInteractionField
+            ? normalizeOptionalInteraction(detailRecord.interaction)
+            : summary.interaction;
+        if (!hasInteractionField && nextStatus !== "error" && nextStatus !== "suspended") {
+            nextInteraction = undefined;
+        }
+        const nextHasData = hasDataField
+            ? detailRecord.data !== null && detailRecord.data !== undefined
+            : summary.has_data;
+
+        let nextLastSuccessAt = summary.last_success_at;
+        if (hasLastSuccessAtField) {
+            const normalizedLastSuccessAt = toNumericTimestamp(
+                detailRecord.last_success_at,
+            );
+            nextLastSuccessAt =
+                normalizedLastSuccessAt !== null ? normalizedLastSuccessAt : null;
+        } else if (nextHasData) {
+            nextLastSuccessAt = detailUpdatedAt ?? summary.last_success_at;
+        }
+
         return {
             ...summary,
             updated_at: detailUpdatedAt,
-            status: detail.status ?? summary.status,
-            message: detail.message ?? summary.message,
-            error: detail.error ?? summary.error,
-            error_code: detail.error_code ?? summary.error_code,
-            interaction: detail.interaction ?? summary.interaction,
-            has_data: detail.data !== null ? true : summary.has_data,
-            last_success_at:
-                detail.data !== null
-                    ? (detailUpdatedAt ?? summary.last_success_at)
-                    : summary.last_success_at,
+            status: nextStatus,
+            message: nextMessage,
+            error: nextError,
+            error_code: nextErrorCode,
+            error_details:
+                nextStatus === "error"
+                    ? (nextMessage ?? summary.error_details)
+                    : undefined,
+            interaction: nextInteraction,
+            has_data: nextHasData,
+            last_success_at: nextLastSuccessAt,
         };
     }
 
