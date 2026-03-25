@@ -121,9 +121,11 @@ struct RuntimeState {
 }
 
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
-type WindowsHandle = *mut std::ffi::c_void;
+type RawWindowsHandle = *mut std::ffi::c_void;
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
-const INVALID_WINDOWS_HANDLE: WindowsHandle = -1isize as WindowsHandle;
+type WindowsHandle = usize;
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+const INVALID_WINDOWS_HANDLE: WindowsHandle = usize::MAX;
 
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
 #[repr(C)]
@@ -169,15 +171,15 @@ unsafe extern "system" {
     fn CreateJobObjectW(
         lp_job_attributes: *mut std::ffi::c_void,
         lp_name: *const u16,
-    ) -> WindowsHandle;
+    ) -> RawWindowsHandle;
     fn SetInformationJobObject(
-        h_job: WindowsHandle,
+        h_job: RawWindowsHandle,
         job_object_information_class: i32,
         lp_job_object_information: *mut std::ffi::c_void,
         cb_job_object_information_length: u32,
     ) -> i32;
-    fn AssignProcessToJobObject(h_job: WindowsHandle, h_process: WindowsHandle) -> i32;
-    fn CloseHandle(h_object: WindowsHandle) -> i32;
+    fn AssignProcessToJobObject(h_job: RawWindowsHandle, h_process: RawWindowsHandle) -> i32;
+    fn CloseHandle(h_object: RawWindowsHandle) -> i32;
 }
 
 #[derive(Debug, Serialize)]
@@ -777,12 +779,13 @@ fn terminate_backend_child(app: &tauri::AppHandle) {
 
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
 fn is_valid_windows_handle(handle: WindowsHandle) -> bool {
-    !handle.is_null() && handle != INVALID_WINDOWS_HANDLE
+    handle != 0 && handle != INVALID_WINDOWS_HANDLE
 }
 
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
 fn create_backend_job_object() -> Result<WindowsHandle, String> {
-    let handle = unsafe { CreateJobObjectW(std::ptr::null_mut(), std::ptr::null()) };
+    let handle =
+        unsafe { CreateJobObjectW(std::ptr::null_mut(), std::ptr::null()) as WindowsHandle };
     if !is_valid_windows_handle(handle) {
         return Err(format!(
             "failed to create backend job object: {}",
@@ -817,7 +820,7 @@ fn create_backend_job_object() -> Result<WindowsHandle, String> {
     };
     let configured = unsafe {
         SetInformationJobObject(
-            handle,
+            handle as RawWindowsHandle,
             JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
             &mut limits as *mut JobObjectExtendedLimitInformation as *mut std::ffi::c_void,
             std::mem::size_of::<JobObjectExtendedLimitInformation>() as u32,
@@ -825,7 +828,7 @@ fn create_backend_job_object() -> Result<WindowsHandle, String> {
     };
     if configured == 0 {
         let error = std::io::Error::last_os_error();
-        let _ = unsafe { CloseHandle(handle) };
+        let _ = unsafe { CloseHandle(handle as RawWindowsHandle) };
         return Err(format!("failed to configure backend job object: {error}"));
     }
 
@@ -853,8 +856,8 @@ fn ensure_backend_job_object(app: &tauri::AppHandle) -> Result<WindowsHandle, St
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
 fn attach_backend_child_to_job_object(app: &tauri::AppHandle, child: &Child) -> Result<(), String> {
     let job = ensure_backend_job_object(app)?;
-    let process_handle = child.as_raw_handle() as WindowsHandle;
-    let attached = unsafe { AssignProcessToJobObject(job, process_handle) };
+    let process_handle = child.as_raw_handle() as RawWindowsHandle;
+    let attached = unsafe { AssignProcessToJobObject(job as RawWindowsHandle, process_handle) };
     if attached == 0 {
         return Err(format!(
             "failed to assign backend process to job object: {}",
@@ -875,7 +878,7 @@ fn close_backend_job_object(app: &tauri::AppHandle) {
     let Some(handle) = guard.take() else {
         return;
     };
-    let closed = unsafe { CloseHandle(handle) };
+    let closed = unsafe { CloseHandle(handle as RawWindowsHandle) };
     if closed == 0 {
         log::warn!(
             "failed to close backend job object handle during shutdown: {}",
