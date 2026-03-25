@@ -65,6 +65,27 @@ async function resolveApiBaseUrl(): Promise<string> {
   return tauriResolvedBaseUrl;
 }
 
+async function syncTauriSystemSettingsCache(
+  settings: Pick<SystemSettings, "debug_logging_enabled" | "proxy" | "enhanced_scraping">
+): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("sync_system_settings_cache", {
+      settings: {
+        debug_logging_enabled: Boolean(settings.debug_logging_enabled),
+        proxy: settings.proxy ?? "",
+        enhanced_scraping: Boolean(settings.enhanced_scraping),
+      },
+    });
+  } catch (error) {
+    console.warn("Failed to sync Tauri system settings cache:", error);
+  }
+}
+
 export function getApiBaseUrl(): string {
   return isTauri() ? DEFAULT_TAURI_BACKEND_BASE_URL : WEB_BASE_URL;
 }
@@ -711,7 +732,9 @@ class ApiClient {
       body: JSON.stringify(settings),
     });
     if (!res.ok) throw new Error("Failed to update settings");
-    return res.json();
+    const savedSettings = (await res.json()) as SystemSettings;
+    await syncTauriSystemSettingsCache(savedSettings);
+    return savedSettings;
   }
 }
 
