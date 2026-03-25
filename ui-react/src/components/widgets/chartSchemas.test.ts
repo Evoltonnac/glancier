@@ -108,6 +108,13 @@ describe("chart schemas", () => {
             type: "Chart.Table",
             data_source: "sql_response.rows",
             title: "Top regions",
+            encoding: {
+                columns: [
+                    { field: "label", title: "Region" },
+                    { field: "amount", title: "Revenue", format: "currency" },
+                    { field: "count", format: "integer" },
+                ],
+            },
             columns: [
                 { field: "label", title: "Region" },
                 { field: "amount", title: "Revenue", format: "currency" },
@@ -117,7 +124,6 @@ describe("chart schemas", () => {
             sort_order: "desc",
             limit: 3,
         });
-
         expect(validTable.success).toBe(true);
 
         const invalidField = validateChartEncoding(
