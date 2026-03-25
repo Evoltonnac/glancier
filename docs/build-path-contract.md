@@ -100,6 +100,8 @@ The GitHub Actions release job is defined in `.github/workflows/ci.yml` as `rele
 - Proxy policy for update checks/downloads: prefer app settings proxy (`SystemSettings.proxy`); when unset, fall back to system/env proxy resolution.
 - When an update is available, the client must call updater download/install flow to fetch signed updater artifacts (for macOS: `*.app.tar.gz` + `*.app.tar.gz.sig`).
 - After successful install, the desktop runtime must relaunch the app process so the replaced bundle is activated without a manual installer flow.
+- Windows process-lifecycle policy: backend child processes must be assigned to a `Job Object` with `KILL_ON_JOB_CLOSE` so installer/update-driven app termination also cascades to backend process trees.
+- Windows runtime cleanup policy: when backend runtime extraction needs to refresh files and the cleanup is blocked by stale `glanceus-server.exe`, the app must force-terminate stale backend processes and retry cleanup before startup continues.
 
 ## Script and npm Command Audit (2026-03-09)
 

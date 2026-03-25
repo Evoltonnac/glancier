@@ -1,6 +1,8 @@
 #[cfg(not(debug_assertions))]
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -8,6 +10,8 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 #[cfg(not(debug_assertions))]
 use std::net::{Shutdown, TcpListener, TcpStream};
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+use std::os::windows::io::AsRawHandle;
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -62,6 +66,10 @@ const MAX_WEB_MODE_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
 const BACKEND_BINARY_BASENAME: &str = "glanceus-server";
 #[cfg(all(not(debug_assertions), target_os = "windows"))]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS: i32 = 9;
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x00002000;
 const DEVTOOLS_GUARD_INTERVAL: Duration = Duration::from_millis(80);
 
 #[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
@@ -108,6 +116,68 @@ struct RuntimeState {
     internal_auth_token: RwLock<Option<String>>,
     #[cfg(not(debug_assertions))]
     backend_child: Mutex<Option<Child>>,
+    #[cfg(all(not(debug_assertions), target_os = "windows"))]
+    backend_job_handle: Mutex<Option<WindowsHandle>>,
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+type WindowsHandle = *mut std::ffi::c_void;
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+const INVALID_WINDOWS_HANDLE: WindowsHandle = -1isize as WindowsHandle;
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct IoCounters {
+    read_operation_count: u64,
+    write_operation_count: u64,
+    other_operation_count: u64,
+    read_transfer_count: u64,
+    write_transfer_count: u64,
+    other_transfer_count: u64,
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct JobObjectBasicLimitInformation {
+    per_process_user_time_limit: i64,
+    per_job_user_time_limit: i64,
+    limit_flags: u32,
+    minimum_working_set_size: usize,
+    maximum_working_set_size: usize,
+    active_process_limit: u32,
+    affinity: usize,
+    priority_class: u32,
+    scheduling_class: u32,
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct JobObjectExtendedLimitInformation {
+    basic_limit_information: JobObjectBasicLimitInformation,
+    io_info: IoCounters,
+    process_memory_limit: usize,
+    job_memory_limit: usize,
+    peak_process_memory_used: usize,
+    peak_job_memory_used: usize,
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+unsafe extern "system" {
+    fn CreateJobObjectW(
+        lp_job_attributes: *mut std::ffi::c_void,
+        lp_name: *const u16,
+    ) -> WindowsHandle;
+    fn SetInformationJobObject(
+        h_job: WindowsHandle,
+        job_object_information_class: i32,
+        lp_job_object_information: *mut std::ffi::c_void,
+        cb_job_object_information_length: u32,
+    ) -> i32;
+    fn AssignProcessToJobObject(h_job: WindowsHandle, h_process: WindowsHandle) -> i32;
+    fn CloseHandle(h_object: WindowsHandle) -> i32;
 }
 
 #[derive(Debug, Serialize)]
@@ -535,6 +605,20 @@ mod tests {
         let _ = fs::remove_dir_all(&workspace_root);
         let _ = fs::remove_dir_all(&app_data_root);
     }
+
+    #[test]
+    fn parse_windows_tasklist_csv_pids_extracts_matching_rows() {
+        let output = "\"glanceus-server.exe\",\"1032\",\"Console\",\"1\",\"11,988 K\"\n\"other.exe\",\"2056\",\"Console\",\"1\",\"1,200 K\"\n\"Glanceus-Server.exe\",\"4096\",\"Console\",\"1\",\"9,876 K\"";
+        let pids = parse_windows_tasklist_csv_pids(output, "glanceus-server.exe");
+        assert_eq!(pids, vec![1032, 4096]);
+    }
+
+    #[test]
+    fn parse_windows_tasklist_csv_pids_ignores_info_and_invalid_rows() {
+        let output = "INFO: No tasks are running which match the specified criteria.\ninvalid-row\n\"glanceus-server.exe\",\"not-a-pid\",\"Console\",\"1\",\"9,876 K\"";
+        let pids = parse_windows_tasklist_csv_pids(output, "glanceus-server.exe");
+        assert!(pids.is_empty());
+    }
 }
 
 fn set_web_mode_port(app: &tauri::AppHandle, port: Option<u16>) {
@@ -656,6 +740,11 @@ fn resolve_internal_auth_token() -> Option<String> {
 
 #[cfg(not(debug_assertions))]
 fn set_backend_child(app: &tauri::AppHandle, child: Child) {
+    #[cfg(target_os = "windows")]
+    if let Err(err) = attach_backend_child_to_job_object(app, &child) {
+        log::warn!("failed to bind backend process to windows job object: {err}");
+    }
+
     if let Some(state) = app.try_state::<RuntimeState>() {
         if let Ok(mut guard) = state.backend_child.lock() {
             if let Some(mut previous) = guard.take() {
@@ -678,9 +767,219 @@ fn terminate_backend_child(app: &tauri::AppHandle) {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    close_backend_job_object(app);
+
     // Ensure no backend process remains bound to the API port after quit.
     let api_port = get_api_target_port(app);
     terminate_backend_by_port(api_port);
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+fn is_valid_windows_handle(handle: WindowsHandle) -> bool {
+    !handle.is_null() && handle != INVALID_WINDOWS_HANDLE
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+fn create_backend_job_object() -> Result<WindowsHandle, String> {
+    let handle = unsafe { CreateJobObjectW(std::ptr::null_mut(), std::ptr::null()) };
+    if !is_valid_windows_handle(handle) {
+        return Err(format!(
+            "failed to create backend job object: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+
+    let mut limits = JobObjectExtendedLimitInformation {
+        basic_limit_information: JobObjectBasicLimitInformation {
+            per_process_user_time_limit: 0,
+            per_job_user_time_limit: 0,
+            limit_flags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            minimum_working_set_size: 0,
+            maximum_working_set_size: 0,
+            active_process_limit: 0,
+            affinity: 0,
+            priority_class: 0,
+            scheduling_class: 0,
+        },
+        io_info: IoCounters {
+            read_operation_count: 0,
+            write_operation_count: 0,
+            other_operation_count: 0,
+            read_transfer_count: 0,
+            write_transfer_count: 0,
+            other_transfer_count: 0,
+        },
+        process_memory_limit: 0,
+        job_memory_limit: 0,
+        peak_process_memory_used: 0,
+        peak_job_memory_used: 0,
+    };
+    let configured = unsafe {
+        SetInformationJobObject(
+            handle,
+            JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
+            &mut limits as *mut JobObjectExtendedLimitInformation as *mut std::ffi::c_void,
+            std::mem::size_of::<JobObjectExtendedLimitInformation>() as u32,
+        )
+    };
+    if configured == 0 {
+        let error = std::io::Error::last_os_error();
+        let _ = unsafe { CloseHandle(handle) };
+        return Err(format!("failed to configure backend job object: {error}"));
+    }
+
+    Ok(handle)
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+fn ensure_backend_job_object(app: &tauri::AppHandle) -> Result<WindowsHandle, String> {
+    let state = app
+        .try_state::<RuntimeState>()
+        .ok_or_else(|| "runtime state unavailable when creating backend job object".to_string())?;
+    let mut guard = state
+        .backend_job_handle
+        .lock()
+        .map_err(|_| "failed to lock backend job object state".to_string())?;
+    if let Some(existing) = *guard {
+        return Ok(existing);
+    }
+
+    let handle = create_backend_job_object()?;
+    *guard = Some(handle);
+    Ok(handle)
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+fn attach_backend_child_to_job_object(app: &tauri::AppHandle, child: &Child) -> Result<(), String> {
+    let job = ensure_backend_job_object(app)?;
+    let process_handle = child.as_raw_handle() as WindowsHandle;
+    let attached = unsafe { AssignProcessToJobObject(job, process_handle) };
+    if attached == 0 {
+        return Err(format!(
+            "failed to assign backend process to job object: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+fn close_backend_job_object(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<RuntimeState>() else {
+        return;
+    };
+    let Ok(mut guard) = state.backend_job_handle.lock() else {
+        return;
+    };
+    let Some(handle) = guard.take() else {
+        return;
+    };
+    let closed = unsafe { CloseHandle(handle) };
+    if closed == 0 {
+        log::warn!(
+            "failed to close backend job object handle during shutdown: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+}
+
+#[cfg(any(test, all(not(debug_assertions), target_os = "windows")))]
+fn parse_windows_tasklist_csv_pids(output: &str, image_name: &str) -> Vec<u32> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("INFO:") {
+                return None;
+            }
+
+            let normalized = trimmed
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+                .unwrap_or(trimmed);
+            let fields: Vec<&str> = normalized.split("\",\"").collect();
+            if fields.len() < 2 || !fields[0].eq_ignore_ascii_case(image_name) {
+                return None;
+            }
+            fields[1].trim().parse::<u32>().ok()
+        })
+        .collect()
+}
+
+#[cfg(all(not(debug_assertions), target_os = "windows"))]
+fn terminate_windows_stale_backends() {
+    let image_name = backend_entry_filename();
+    let filter = format!("IMAGENAME eq {image_name}");
+    let output = Command::new("tasklist")
+        .args(["/FO", "CSV", "/NH", "/FI", &filter])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    let Ok(output) = output else {
+        log::warn!("failed to query stale backend process list via tasklist");
+        return;
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pids: BTreeSet<u32> = parse_windows_tasklist_csv_pids(&stdout, image_name)
+        .into_iter()
+        .collect();
+    if pids.is_empty() {
+        return;
+    }
+
+    log::warn!("detected stale backend process ids before runtime cleanup: {pids:?}");
+    for pid in pids {
+        let status = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F", "/T"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+        match status {
+            Ok(value) if value.success() => {}
+            Ok(value) => {
+                log::warn!("failed to terminate stale backend process {pid}: exit status {value}");
+            }
+            Err(err) => {
+                log::warn!("failed to terminate stale backend process {pid}: {err}");
+            }
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn clear_backend_runtime_root(runtime_root: &Path) -> Result<(), String> {
+    if !runtime_root.exists() {
+        return Ok(());
+    }
+
+    match fs::remove_dir_all(runtime_root) {
+        Ok(()) => Ok(()),
+        Err(first_error) => {
+            #[cfg(target_os = "windows")]
+            {
+                log::warn!(
+                    "failed to clear backend runtime dir '{}': {first_error}; retrying after stale backend cleanup",
+                    runtime_root.display()
+                );
+                terminate_windows_stale_backends();
+                thread::sleep(Duration::from_millis(220));
+                return fs::remove_dir_all(runtime_root).map_err(|retry_error| {
+                    format!(
+                        "failed to clear backend runtime dir '{}' after stale backend cleanup: {retry_error}",
+                        runtime_root.display()
+                    )
+                });
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err(format!(
+                    "failed to clear backend runtime dir '{}': {first_error}",
+                    runtime_root.display()
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(all(not(debug_assertions), unix))]
@@ -787,14 +1086,7 @@ fn ensure_backend_bundle_dir(
             == Some(fingerprint.clone());
 
     if !should_reuse {
-        if runtime_root.exists() {
-            fs::remove_dir_all(&runtime_root).map_err(|e| {
-                format!(
-                    "failed to clear backend runtime dir '{}': {e}",
-                    runtime_root.display()
-                )
-            })?;
-        }
+        clear_backend_runtime_root(&runtime_root)?;
         fs::create_dir_all(&runtime_root).map_err(|e| {
             format!(
                 "failed to create backend runtime dir '{}': {e}",
