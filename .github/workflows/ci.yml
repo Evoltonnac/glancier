@@ -209,8 +209,7 @@ jobs:
 
                   gh release upload "${{ needs.create-release.outputs.tag }}" "$NSIS_PATH" --clobber --repo "${{ github.repository }}"
 
-            - name: Upload Updater Manifest
-              if: matrix.platform == 'macos-15'
+            - name: Upload Updater Artifacts and Partial Manifest
               env:
                   GH_TOKEN: ${{ github.token }}
               run: |
@@ -220,9 +219,28 @@ jobs:
                     exit 1
                   fi
 
-                  UPDATER_ARCHIVE_PATH=$(find "$BUNDLE_DIR" -name "*.app.tar.gz" -type f -print -quit)
+                  case "${{ matrix.rust_target }}" in
+                    aarch64-apple-darwin)
+                      UPDATER_GLOB="*.app.tar.gz"
+                      PLATFORM_KEY="darwin-aarch64"
+                      ;;
+                    x86_64-apple-darwin)
+                      UPDATER_GLOB="*.app.tar.gz"
+                      PLATFORM_KEY="darwin-x86_64"
+                      ;;
+                    x86_64-pc-windows-msvc)
+                      UPDATER_GLOB="*.nsis.zip"
+                      PLATFORM_KEY="windows-x86_64-nsis"
+                      ;;
+                    *)
+                      echo "Unsupported updater target: ${{ matrix.rust_target }}"
+                      exit 1
+                      ;;
+                  esac
+
+                  UPDATER_ARCHIVE_PATH=$(find "$BUNDLE_DIR" -name "$UPDATER_GLOB" -type f -print -quit)
                   if [[ -z "$UPDATER_ARCHIVE_PATH" ]]; then
-                    echo "Missing updater archive (*.app.tar.gz) under $BUNDLE_DIR"
+                    echo "Missing updater archive ($UPDATER_GLOB) under $BUNDLE_DIR"
                     exit 1
                   fi
                   echo "updater archive path: $UPDATER_ARCHIVE_PATH"
@@ -236,52 +254,36 @@ jobs:
 
                   gh release upload "${{ needs.create-release.outputs.tag }}" "$UPDATER_ARCHIVE_PATH" "$UPDATER_SIG_PATH" --clobber --repo "${{ github.repository }}"
 
-                  LATEST_JSON_PATH=$(find "$BUNDLE_DIR" -name "latest.json" -type f -print -quit)
-                  if [[ -z "$LATEST_JSON_PATH" ]]; then
-                    GENERATED_LATEST_JSON_PATH="$RUNNER_TEMP/latest.json"
-                    UPDATER_ARCHIVE_BASENAME=$(basename "$UPDATER_ARCHIVE_PATH")
-                    UPDATER_TARGET="${{ matrix.rust_target }}"
-                    RELEASE_VERSION="${{ needs.create-release.outputs.version }}"
-                    RELEASE_TAG="${{ needs.create-release.outputs.tag }}"
-                    RELEASE_REPOSITORY="${{ github.repository }}"
-                    export GENERATED_LATEST_JSON_PATH
-                    export UPDATER_ARCHIVE_BASENAME
-                    export UPDATER_TARGET
-                    export RELEASE_VERSION
-                    export RELEASE_TAG
-                    export RELEASE_REPOSITORY
-                    export UPDATER_SIG_PATH
+                  PARTIAL_LATEST_JSON_PATH="$RUNNER_TEMP/latest-${PLATFORM_KEY}.json"
+                  UPDATER_ARCHIVE_BASENAME=$(basename "$UPDATER_ARCHIVE_PATH")
+                  RELEASE_VERSION="${{ needs.create-release.outputs.version }}"
+                  RELEASE_TAG="${{ needs.create-release.outputs.tag }}"
+                  RELEASE_REPOSITORY="${{ github.repository }}"
+                  export PARTIAL_LATEST_JSON_PATH
+                  export UPDATER_ARCHIVE_BASENAME
+                  export RELEASE_VERSION
+                  export RELEASE_TAG
+                  export RELEASE_REPOSITORY
+                  export UPDATER_SIG_PATH
+                  export PLATFORM_KEY
 
                   python - <<'PY'
                   import json
                   import os
                   from datetime import datetime, timezone
 
-                  target_to_platform = {
-                      "aarch64-apple-darwin": "darwin-aarch64",
-                      "x86_64-apple-darwin": "darwin-x86_64",
-                      "x86_64-pc-windows-msvc": "windows-x86_64",
-                      "aarch64-pc-windows-msvc": "windows-aarch64",
-                      "x86_64-unknown-linux-gnu": "linux-x86_64",
-                      "aarch64-unknown-linux-gnu": "linux-aarch64",
-                  }
-
-                  target = os.environ["UPDATER_TARGET"]
-                  platform = target_to_platform.get(target)
-                  if not platform:
-                      raise SystemExit(f"Unsupported updater target for manifest generation: {target}")
-
                   version = os.environ["RELEASE_VERSION"]
                   tag = os.environ["RELEASE_TAG"]
                   repo = os.environ["RELEASE_REPOSITORY"]
+                  platform = os.environ["PLATFORM_KEY"]
                   archive_name = os.environ["UPDATER_ARCHIVE_BASENAME"]
                   sig_path = os.environ["UPDATER_SIG_PATH"]
                   with open(sig_path, "r", encoding="utf-8") as f:
                       signature = f.read().strip()
 
-                  latest_json = {
+                  partial_json = {
                       "version": version,
-                      "notes": f"Automated release for Glanceus v{version}.",
+                      "notes": "",
                       "pub_date": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
                       "platforms": {
                           platform: {
@@ -291,13 +293,88 @@ jobs:
                       },
                   }
 
-                  with open(os.environ["GENERATED_LATEST_JSON_PATH"], "w", encoding="utf-8") as f:
-                      json.dump(latest_json, f, indent=2, ensure_ascii=False)
+                  with open(os.environ["PARTIAL_LATEST_JSON_PATH"], "w", encoding="utf-8") as f:
+                      json.dump(partial_json, f, indent=2, ensure_ascii=False)
                       f.write("\n")
                   PY
-                    LATEST_JSON_PATH="$GENERATED_LATEST_JSON_PATH"
-                    echo "Generated updater manifest: $LATEST_JSON_PATH"
-                  fi
-                  echo "latest.json path: $LATEST_JSON_PATH"
+                  echo "partial latest.json path: $PARTIAL_LATEST_JSON_PATH"
+                  gh release upload "${{ needs.create-release.outputs.tag }}" "$PARTIAL_LATEST_JSON_PATH#latest-${PLATFORM_KEY}.json" --clobber --repo "${{ github.repository }}"
 
-                  gh release upload "${{ needs.create-release.outputs.tag }}" "$LATEST_JSON_PATH#latest.json" --clobber --repo "${{ github.repository }}"
+    merge-updater-manifest:
+        if: github.event_name == 'workflow_dispatch'
+        needs:
+            - create-release
+            - release-tauri
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Download partial updater manifests
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  PARTIAL_DIR="$RUNNER_TEMP/latest-partials"
+                  mkdir -p "$PARTIAL_DIR"
+                  gh release download "${{ needs.create-release.outputs.tag }}" \
+                    --pattern "latest-*.json" \
+                    --dir "$PARTIAL_DIR" \
+                    --repo "${{ github.repository }}"
+                  ls -la "$PARTIAL_DIR"
+
+            - name: Merge updater manifests
+              env:
+                  RELEASE_VERSION: ${{ needs.create-release.outputs.version }}
+              run: |
+                  PARTIAL_DIR="$RUNNER_TEMP/latest-partials"
+                  MERGED_LATEST_JSON_PATH="$RUNNER_TEMP/latest.json"
+                  export PARTIAL_DIR
+                  export MERGED_LATEST_JSON_PATH
+                  export RELEASE_VERSION
+
+                  python - <<'PY'
+                  import json
+                  import os
+                  from datetime import datetime, timezone
+                  from pathlib import Path
+
+                  partial_dir = Path(os.environ["PARTIAL_DIR"])
+                  manifest_paths = sorted(partial_dir.glob("latest-*.json"))
+                  if not manifest_paths:
+                      raise SystemExit(f"No partial manifests found in {partial_dir}")
+
+                  required_platforms = {
+                      "darwin-aarch64",
+                      "darwin-x86_64",
+                      "windows-x86_64-nsis",
+                  }
+
+                  merged_platforms = {}
+                  for path in manifest_paths:
+                      with path.open("r", encoding="utf-8") as f:
+                          payload = json.load(f)
+                      for platform, data in payload.get("platforms", {}).items():
+                          merged_platforms[platform] = data
+
+                  missing_platforms = sorted(required_platforms - set(merged_platforms.keys()))
+                  if missing_platforms:
+                      raise SystemExit(f"Missing required updater platforms: {', '.join(missing_platforms)}")
+
+                  version = os.environ["RELEASE_VERSION"]
+                  latest = {
+                      "version": version,
+                      "notes": f"Automated release for Glanceus v{version}.",
+                      "pub_date": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                      "platforms": {k: merged_platforms[k] for k in sorted(required_platforms)},
+                  }
+
+                  merged_path = Path(os.environ["MERGED_LATEST_JSON_PATH"])
+                  with merged_path.open("w", encoding="utf-8") as f:
+                      json.dump(latest, f, indent=2, ensure_ascii=False)
+                      f.write("\n")
+                  PY
+
+            - name: Upload merged latest.json
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  gh release upload "${{ needs.create-release.outputs.tag }}" "$RUNNER_TEMP/latest.json#latest.json" --clobber --repo "${{ github.repository }}"
