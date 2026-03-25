@@ -174,3 +174,17 @@ def test_update_settings_persists_script_sandbox_and_timeout():
     assert updated["script_timeout_seconds"] == 25
     assert settings_manager.saved[-1].script_sandbox_enabled is True
     assert settings_manager.saved[-1].script_timeout_seconds == 25
+
+
+def test_update_settings_persists_enhanced_scraping_flag():
+    settings_manager = _MockSettingsManager(SystemSettings())
+    client = _build_client(settings_manager)
+
+    payload = settings_manager.load_settings().model_dump()
+    payload["enhanced_scraping"] = True
+    response = client.put("/api/settings", json=payload)
+
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["enhanced_scraping"] is True
+    assert settings_manager.saved[-1].enhanced_scraping is True

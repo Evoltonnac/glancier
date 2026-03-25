@@ -9,6 +9,7 @@ def test_load_settings_defaults_include_scraper_timeout(tmp_path):
     settings = manager.load_settings()
 
     assert settings.scraper_timeout_seconds == 10
+    assert settings.enhanced_scraping is False
     assert settings.debug_logging_enabled is False
     assert settings.refresh_interval_minutes == 30
     assert settings.encryption_enabled is True
@@ -19,6 +20,7 @@ def test_save_and_reload_scraper_timeout(tmp_path):
     manager = SettingsManager(settings_dir=tmp_path)
     expected = SystemSettings(
         scraper_timeout_seconds=25,
+        enhanced_scraping=True,
         proxy="http://127.0.0.1:7890",
         debug_logging_enabled=True,
         refresh_interval_minutes=30,
@@ -29,6 +31,7 @@ def test_save_and_reload_scraper_timeout(tmp_path):
     loaded = manager.load_settings()
 
     assert loaded.scraper_timeout_seconds == 25
+    assert loaded.enhanced_scraping is True
     assert loaded.proxy == "http://127.0.0.1:7890"
     assert loaded.debug_logging_enabled is True
     assert loaded.refresh_interval_minutes == 30
@@ -97,3 +100,15 @@ def test_proxy_value_is_trimmed_on_save_and_load(tmp_path):
     loaded = manager.load_settings()
 
     assert loaded.proxy == "http://127.0.0.1:7890"
+
+
+def test_load_settings_enhanced_scraping_defaults_false_on_invalid_value(tmp_path):
+    manager = SettingsManager(settings_dir=tmp_path)
+    manager.settings_file.write_text(
+        '{"enhanced_scraping": "yes"}',
+        encoding="utf-8",
+    )
+
+    loaded = manager.load_settings()
+
+    assert loaded.enhanced_scraping is False

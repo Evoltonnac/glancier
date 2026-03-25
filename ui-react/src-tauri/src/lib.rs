@@ -1,6 +1,7 @@
 #[cfg(not(debug_assertions))]
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 #[cfg(not(debug_assertions))]
@@ -19,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::sync::RwLock;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -79,6 +80,8 @@ const CURRENT_TARGET_TRIPLE: &str = "aarch64-pc-windows-msvc";
 #[derive(Debug, Deserialize)]
 struct PersistedSystemSettings {
     debug_logging_enabled: Option<bool>,
+    proxy: Option<String>,
+    enhanced_scraping: Option<bool>,
 }
 
 #[derive(Default)]
@@ -244,20 +247,96 @@ fn ensure_data_root_dirs(data_root: Option<&PathBuf>) {
     let _ = fs::create_dir_all(root.join("logs"));
 }
 
+fn load_persisted_system_settings(data_root: Option<&PathBuf>) -> Option<PersistedSystemSettings> {
+    let mut candidates = Vec::new();
+    if let Some(root) = data_root {
+        candidates.push(root.join("data").join("settings.json"));
+    }
+    if let Ok(current_dir) = env::current_dir() {
+        candidates.push(current_dir.join("data").join("settings.json"));
+        candidates.push(current_dir.join("..").join("data").join("settings.json"));
+        candidates.push(
+            current_dir
+                .join("..")
+                .join("..")
+                .join("data")
+                .join("settings.json"),
+        );
+    }
+
+    let mut seen = HashSet::new();
+    let mut latest: Option<(SystemTime, PersistedSystemSettings, PathBuf)> = None;
+
+    for settings_file in candidates {
+        if !seen.insert(settings_file.clone()) {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&settings_file) else {
+            continue;
+        };
+        let Ok(settings) = serde_json::from_str::<PersistedSystemSettings>(&content) else {
+            continue;
+        };
+        let modified_at = fs::metadata(&settings_file)
+            .and_then(|meta| meta.modified())
+            .unwrap_or(UNIX_EPOCH);
+        match &latest {
+            Some((current_modified_at, _, _)) if modified_at < *current_modified_at => {}
+            _ => latest = Some((modified_at, settings, settings_file)),
+        }
+    }
+
+    if let Some((_, settings, path)) = latest {
+        log::debug!("Loaded system settings from {}", path.display());
+        return Some(settings);
+    }
+    None
+}
+
 fn read_debug_logging_enabled(data_root: Option<&PathBuf>) -> bool {
-    let Some(root) = data_root else {
-        return false;
-    };
-
-    let settings_file = root.join("data").join("settings.json");
-    let content = match fs::read_to_string(settings_file) {
-        Ok(content) => content,
-        Err(_) => return false,
-    };
-
-    serde_json::from_str::<PersistedSystemSettings>(&content)
-        .ok()
+    load_persisted_system_settings(data_root)
         .and_then(|settings| settings.debug_logging_enabled)
+        .unwrap_or(false)
+}
+
+fn read_proxy_override(data_root: Option<&PathBuf>) -> Option<String> {
+    let settings = load_persisted_system_settings(data_root)?;
+    let raw_proxy = settings.proxy?;
+    let normalized = raw_proxy.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+    Some(normalized.to_string())
+}
+
+pub(crate) fn resolve_webview_proxy_url(app: &tauri::AppHandle) -> Option<tauri::Url> {
+    let data_root = resolve_data_root(app);
+    let proxy = read_proxy_override(data_root.as_ref())?;
+
+    let url = match tauri::Url::parse(&proxy) {
+        Ok(url) => url,
+        Err(err) => {
+            log::warn!("Ignoring invalid app proxy for webview: {}", err);
+            return None;
+        }
+    };
+
+    match url.scheme() {
+        "http" | "socks5" => Some(url),
+        unsupported => {
+            log::warn!(
+                "Ignoring unsupported proxy scheme '{}' for webview; expected http or socks5",
+                unsupported
+            );
+            None
+        }
+    }
+}
+
+pub(crate) fn is_enhanced_scraping_enabled(app: &tauri::AppHandle) -> bool {
+    let data_root = resolve_data_root(app);
+    load_persisted_system_settings(data_root.as_ref())
+        .and_then(|settings| settings.enhanced_scraping)
         .unwrap_or(false)
 }
 
@@ -286,6 +365,65 @@ fn start_devtools_guard(app: &tauri::AppHandle) {
         enforce_devtools_policy(&app_handle);
         thread::sleep(DEVTOOLS_GUARD_INTERVAL);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::thread;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    fn make_unique_temp_dir(prefix: &str) -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            .as_nanos();
+        let index = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = env::temp_dir().join(format!("glanceus-{prefix}-{nanos}-{index}"));
+        fs::create_dir_all(&path).expect("failed to create temporary test directory");
+        path
+    }
+
+    fn write_settings(path: &Path, enhanced_scraping: bool) {
+        let content = format!(
+            r#"{{"enhanced_scraping":{},"debug_logging_enabled":false,"proxy":""}}"#,
+            enhanced_scraping
+        );
+        fs::write(path, content).expect("failed to write settings file");
+    }
+
+    #[test]
+    fn load_persisted_system_settings_prefers_latest_modified_file() {
+        let workspace_root = make_unique_temp_dir("settings-priority");
+        let app_data_root = make_unique_temp_dir("settings-app-data");
+        let workspace_data = workspace_root.join("data");
+        let app_data = app_data_root.join("data");
+        fs::create_dir_all(&workspace_data).expect("failed to create workspace data dir");
+        fs::create_dir_all(&app_data).expect("failed to create app data dir");
+
+        let app_settings_path = app_data.join("settings.json");
+        let workspace_settings_path = workspace_data.join("settings.json");
+        write_settings(&app_settings_path, false);
+        thread::sleep(Duration::from_millis(25));
+        write_settings(&workspace_settings_path, true);
+
+        let original_cwd = env::current_dir().expect("failed to read current dir");
+        env::set_current_dir(&workspace_root).expect("failed to set current dir");
+        let loaded = load_persisted_system_settings(Some(&app_data_root))
+            .expect("expected persisted settings to be loaded");
+        env::set_current_dir(original_cwd).expect("failed to restore current dir");
+
+        assert!(
+            loaded.enhanced_scraping.unwrap_or(false),
+            "Most recently modified settings file should win when multiple candidates exist"
+        );
+
+        let _ = fs::remove_dir_all(&workspace_root);
+        let _ = fs::remove_dir_all(&app_data_root);
+    }
 }
 
 fn set_web_mode_port(app: &tauri::AppHandle, port: Option<u16>) {

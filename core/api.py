@@ -633,6 +633,26 @@ def _validate_interaction_payload_keys(
         raise HTTPException(400, "interaction_payload_invalid")
 
 
+def _resolve_webview_interaction_secret_key(
+    interaction: InteractionRequest | Any,
+) -> str | None:
+    interaction_data = getattr(interaction, "data", None)
+    interaction_type = getattr(interaction, "type", None)
+    if isinstance(interaction, dict):
+        interaction_data = interaction.get("data")
+        interaction_type = interaction.get("type")
+
+    normalized_type = _normalize_interaction_type(interaction_type)
+    if normalized_type != InteractionType.WEBVIEW_SCRAPE.value:
+        return None
+
+    if isinstance(interaction_data, dict):
+        secret_key = interaction_data.get("secret_key")
+        if isinstance(secret_key, str) and secret_key.strip():
+            return secret_key.strip()
+    return "webview_data"
+
+
 def create_stored_source_record(
     source: StoredSource,
     resource_manager,
@@ -1388,17 +1408,22 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         request_interaction_type=interaction_type,
         request_source_id=request_source_id,
     )
+    allowed_protocol_keys = {
+        "type",
+        "interaction_type",
+        "source_id",
+        "code",
+        "state",
+        "redirect_uri",
+    }
+    webview_secret_key = _resolve_webview_interaction_secret_key(binding)
+    if webview_secret_key:
+        allowed_protocol_keys.add(webview_secret_key)
+
     _validate_interaction_payload_keys(
         data,
         binding,
-        allowed_protocol_keys={
-            "type",
-            "interaction_type",
-            "source_id",
-            "code",
-            "state",
-            "redirect_uri",
-        },
+        allowed_protocol_keys=allowed_protocol_keys,
     )
     payload_data = {key: value for key, value in data.items() if key != "source_id"}
 

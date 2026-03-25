@@ -13,6 +13,13 @@ WebView Scraper depends on native Tauri windows and IPC:
 - Each claimed task must keep lease heartbeat updates to avoid stale ownership.
 - Completion/failure callbacks must go directly to backend internal APIs.
 - Scraper logs should still be visible in UI for troubleshooting.
+- macOS fullscreen/Space compatibility:
+  - Background scraper windows should stay visible across all workspaces to avoid being pushed into a non-active Space where WebKit JS execution can be aggressively throttled.
+  - Keep this enabled only for background/manual scraper worker windows; it does not change foreground/manual interaction ownership.
+- Enhanced scraping compatibility switch:
+  - A global settings switch (`enhanced_scraping`) controls optional JS environment compatibility hooks for WebView scraping.
+  - Default is off. When enabled, scraper initialization injects visibility and scheduling patches (`document.visibilityState`, `document.hidden`, `IntersectionObserver`, `requestAnimationFrame`) before user scripts.
+  - This switch is intended for JS-heavy websites that stall only under fullscreen/background constraints; keep it disabled for normal sites to minimize side effects.
 
 ## 3. Interaction Fallback
 
