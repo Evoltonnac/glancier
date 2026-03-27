@@ -40,7 +40,7 @@ async def test_form_step_requests_missing_required_fields_with_secret_keys(execu
     state = executor.get_source_state(source.id)
     assert state.status == SourceStatus.SUSPENDED
     assert state.interaction is not None
-    assert state.interaction.type == InteractionType.INPUT_TEXT
+    assert state.interaction.type == InteractionType.INPUT_FORM
     assert [field.key for field in state.interaction.fields] == [
         "provider_account_id",
         "provider_token",
@@ -94,7 +94,7 @@ async def test_form_step_uses_persisted_secrets_and_maps_outputs(executor, data_
 
 
 @pytest.mark.asyncio
-async def test_form_step_optional_missing_field_does_not_suspend(executor, data_controller):
+async def test_form_step_optional_missing_field_suspends_with_input_form(executor, data_controller):
     source = build_source_config(
         source_id="form-optional-missing",
         name="Form Optional Missing",
@@ -111,9 +111,12 @@ async def test_form_step_optional_missing_field_does_not_suspend(executor, data_
     await executor.fetch_source(source)
 
     state = executor.get_source_state(source.id)
-    assert state.status == SourceStatus.ACTIVE
-    assert state.interaction is None
-    data_controller.upsert.assert_called_once_with(source.id, {})
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.type == InteractionType.INPUT_FORM
+    assert [field.key for field in state.interaction.fields] == ["note"]
+    assert state.interaction.fields[0].required is False
+    data_controller.upsert.assert_not_called()
 
 
 @pytest.mark.asyncio

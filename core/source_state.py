@@ -19,6 +19,7 @@ class SourceStatus(str, Enum):
 
 class InteractionType(str, Enum):
     INPUT_TEXT = "input_text"
+    INPUT_FORM = "input_form"  # Multi-field form interaction (distinct from single api_key input).
     OAUTH_START = "oauth_start"
     OAUTH_DEVICE_FLOW = "oauth_device_flow"
     COOKIES_REFRESH = "cookies_refresh"
@@ -50,10 +51,11 @@ class InteractionRequest(BaseModel):
     step_id: Optional[str] = None  # Flow step ID that triggered interaction.
     source_id: Optional[str] = None  # Associated source ID.
 
-    title: str = "Action Required"
+    title: Optional[str] = None
+    description: Optional[str] = None
     message: Optional[str] = None
     warning_message: Optional[str] = None
-    
+
     fields: List[InteractionField] = Field(default_factory=list)
     data: Dict[str, Any] | None = None  # Additional metadata (for example oauth_url).
 

@@ -150,7 +150,7 @@ async def execute_auth_step(
     Returns:
         Dict[str, Any]: output dictionary with keys like api_key, oauth_secrets, etc.
     """
-    from core.executor import RequiredSecretMissing
+    from core.executor import MissingFormInputs, RequiredSecretMissing
     from core.source_state import InteractionType, InteractionField
 
     if step.use == StepType.API_KEY:
@@ -167,10 +167,13 @@ async def execute_auth_step(
                         key=secret_key,
                         label=args.get("label", "API Key"),
                         type="password",
-                        description=args.get("description", "Please enter the API Key")
+                        description=args.get("description")
                     )
                 ],
-                message=args.get("message", f"Missing API Key for {source.name}")
+                title=args.get("title"),
+                description=args.get("description"),
+                message=args.get("message"),
+                warning_message=args.get("warning_message"),
             )
 
         return {"api_key": api_key}
@@ -202,12 +205,13 @@ async def execute_auth_step(
             resolved_values[spec["source_key"]] = value
 
         if interaction_fields:
-            raise RequiredSecretMissing(
+            raise MissingFormInputs(
                 source_id=source.id,
                 step_id=step.id,
-                interaction_type=InteractionType.INPUT_TEXT,
                 fields=interaction_fields,
-                message=args.get("message", f"Missing required form values for {source.name}"),
+                title=args.get("title"),
+                description=args.get("description"),
+                message=args.get("message"),
                 warning_message=args.get("warning_message"),
             )
 
@@ -227,10 +231,12 @@ async def execute_auth_step(
                         key=secret_key,
                         label=args.get("label", "cURL Request"),
                         type="text",
-                        description=args.get("description", "Paste your cURL command here")
+                        description=args.get("description")
                     )
                 ],
-                message=args.get("message", f"Provide cURL request for {source.name}"),
+                title=args.get("title"),
+                description=args.get("description"),
+                message=args.get("message"),
                 warning_message=args.get("warning_message")
             )
             
@@ -288,14 +294,14 @@ async def execute_auth_step(
                 key="client_id",
                 label="Client ID",
                 type="text",
-                description="OAuth Client ID"
+                description=None,
             ))
         if not client_secret:
             interaction_fields.append(InteractionField(
                 key="client_secret",
                 label="Client Secret",
                 type="password",
-                description="OAuth Client Secret",
+                description=None,
                 required=False,
             ))
 
@@ -310,24 +316,16 @@ async def execute_auth_step(
                 "doc_url": oauth_args.get("doc_url"),
                 "oauth_flow": normalized_flow,
             }
-            required_fields = [field for field in interaction_fields if field.required]
-            guidance = (
-                "Please provide required OAuth credentials."
-                if required_fields
-                else (
-                    "Optional OAuth credentials can be provided before authorization."
-                    if interaction_fields
-                    else "Click to authorize."
-                )
-            )
-            msg = f"Authorization required for step {step.id}. {guidance}"
             raise RequiredSecretMissing(
                 source_id=source.id,
                 step_id=step.id,
                 interaction_type=interaction_type,
                 fields=interaction_fields,
-                message=msg,
-                data=interaction_data
+                title=oauth_args.get("title"),
+                description=oauth_args.get("description"),
+                message=oauth_args.get("message"),
+                data=interaction_data,
+                code="auth.authorization_required",
             )
             
         return {

@@ -79,7 +79,11 @@ async def execute_browser_step(
             step_id=step.id,
             interaction_type=InteractionType.WEBVIEW_SCRAPE,
             fields=[],
-            message=f"System background scraping required for {source.id}",
+            title=args.get("title"),
+            description=args.get("description"),
+            message=args.get("message"),
+            warning_message=args.get("warning_message"),
+            code="auth.manual_webview_required",
             data={
                 "task_id": task_id,
                 "url": url,

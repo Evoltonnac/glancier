@@ -394,6 +394,7 @@ class Executor:
                     step_error,
                     (
                         RequiredSecretMissing,
+                        MissingFormInputs,
                         InvalidCredentialsError,
                         NetworkTimeoutError,
                         WebScraperBlockedError,
@@ -586,6 +587,7 @@ class Executor:
             error,
             (
                 RequiredSecretMissing,
+                MissingFormInputs,
                 InvalidCredentialsError,
                 NetworkTimeoutError,
                 WebScraperBlockedError,
@@ -840,8 +842,9 @@ class Executor:
                     type=interaction_type,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Authorization Invalid",
-                    message="Current OAuth authorization is invalid. Please reconnect.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[],
                     data={
                         "oauth_args": oauth_args,
@@ -857,14 +860,15 @@ class Executor:
                     type=InteractionType.INPUT_TEXT,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Credentials Invalid",
-                    message="The API key appears invalid. Please update it and retry.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[
                         InteractionField(
                             key=api_key,
                             label=(step.args or {}).get("label", "API Key"),
                             type="password",
-                            description=(step.args or {}).get("description", "Enter a valid API key"),
+                            description=(step.args or {}).get("description"),
                         )
                     ],
                     data={
@@ -874,16 +878,14 @@ class Executor:
                 )
             if step.use == StepType.FORM:
                 return InteractionRequest(
-                    type=InteractionType.INPUT_TEXT,
+                    type=InteractionType.INPUT_FORM,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Input Invalid",
-                    message=(step.args or {}).get(
-                        "message",
-                        "Provided form values appear invalid. Please update and retry.",
-                    ),
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=self._build_form_recovery_fields(step),
-                    warning_message=(step.args or {}).get("warning_message"),
+                    warning_message=None,
                     data={
                         "failed_step_id": error.step_id,
                         "recovery_step_id": step.id,
@@ -895,20 +897,18 @@ class Executor:
                     type=InteractionType.INPUT_TEXT,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Credentials Invalid",
-                    message="Session credentials expired or invalid. Please paste a fresh cURL command.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[
                         InteractionField(
                             key=curl_key,
                             label=(step.args or {}).get("label", "cURL Request"),
                             type="text",
-                            description=(step.args or {}).get(
-                                "description",
-                                "Paste a new authenticated cURL command",
-                            ),
+                            description=(step.args or {}).get("description"),
                         )
                     ],
-                    warning_message=(step.args or {}).get("warning_message"),
+                    warning_message=None,
                     data={
                         "failed_step_id": error.step_id,
                         "recovery_step_id": step.id,
@@ -919,8 +919,9 @@ class Executor:
                     type=InteractionType.WEBVIEW_SCRAPE,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Web Scraper Blocked",
-                    message="Web scraper was blocked. Please resume in foreground mode.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[],
                     data={
                         "url": (step.args or {}).get("url"),
@@ -937,8 +938,9 @@ class Executor:
             type=InteractionType.RETRY,
             step_id="flow_retry",
             source_id=source.id,
-            title="Retry Required",
-            message="Credentials are invalid. Please update credentials and retry.",
+            title=None,
+            description=None,
+            message=None,
             fields=[],
             data={"failed_step_id": error.step_id},
         )
@@ -1008,12 +1010,13 @@ class Executor:
         """Build interaction request from exception type."""
         from core.steps.sql_step import SqlRiskOperationTrustRequiredError
         
-        if isinstance(error, RequiredSecretMissing):
+        if isinstance(error, (RequiredSecretMissing, MissingFormInputs)):
             return InteractionRequest(
                 type=error.interaction_type,
                 step_id=error.step_id or "auth_check",
                 source_id=error.source_id,
-                title="Authentication Required",
+                title=error.title,
+                description=error.description,
                 message=error.message,
                 warning_message=error.warning_message,
                 fields=error.fields,
@@ -1053,8 +1056,9 @@ class Executor:
                 type=InteractionType.WEBVIEW_SCRAPE,
                 step_id=error.step_id or (webview_step.id if webview_step else "webview"),
                 source_id=source.id,
-                title="Manual Action Required",
-                message=error.message,
+                title=None,
+                description=None,
+                message=None,
                 fields=[],
                 data=interaction_data,
             )
@@ -1068,8 +1072,9 @@ class Executor:
                 type=InteractionType.CONFIRM,
                 step_id=error.step_id or "sql",
                 source_id=source.id,
-                title="SQL Trust Required",
-                message=error.message,
+                title=None,
+                description=None,
+                message=None,
                 fields=[],
                 data=interaction_data,
             )
@@ -1083,8 +1088,9 @@ class Executor:
                 type=InteractionType.CONFIRM,
                 step_id=error.step_id or "http",
                 source_id=source.id,
-                title="Network Trust Required",
-                message=error.message,
+                title=None,
+                description=None,
+                message=None,
                 fields=[],
                 data=interaction_data,
             )
@@ -1105,11 +1111,13 @@ class RequiredSecretMissing(Exception):
         source_id: str,
         interaction_type: InteractionType,
         fields: list[InteractionField],
-        message: str,
+        message: str | None = None,
         data: dict = None,
-        warning_message: str = None,
+        warning_message: str | None = None,
         step_id: str | None = None,
         code: str = "auth.missing_credentials",
+        title: str | None = None,
+        description: str | None = None,
     ):
         self.source_id = source_id
         self.step_id = step_id
@@ -1119,7 +1127,37 @@ class RequiredSecretMissing(Exception):
         self.data = data
         self.warning_message = warning_message
         self.code = code
-        super().__init__(message)
+        self.title = title
+        self.description = description
+        super().__init__(message or code)
+
+
+class MissingFormInputs(RequiredSecretMissing):
+    """Custom exception: form interaction is missing required inputs."""
+
+    def __init__(
+        self,
+        source_id: str,
+        fields: list[InteractionField],
+        message: str | None = None,
+        data: dict | None = None,
+        warning_message: str | None = None,
+        step_id: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(
+            source_id=source_id,
+            interaction_type=InteractionType.INPUT_FORM,
+            fields=fields,
+            message=message,
+            data=data,
+            warning_message=warning_message,
+            step_id=step_id,
+            code="auth.missing_form_inputs",
+            title=title,
+            description=description,
+        )
 
 
 class InvalidCredentialsError(Exception):

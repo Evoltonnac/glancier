@@ -300,6 +300,7 @@ def _infer_error_code_from_interaction(interaction: dict[str, Any] | None) -> st
         "oauth_start": "auth.authorization_required",
         "oauth_device_flow": "auth.authorization_required",
         "input_text": "auth.missing_credentials",
+        "input_form": "auth.missing_form_inputs",
         "cookies_refresh": "auth.invalid_credentials",
         "captcha": "auth.interactive_verification_required",
         "webview_scrape": "auth.manual_webview_required",
