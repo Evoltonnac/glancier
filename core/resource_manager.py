@@ -107,6 +107,13 @@ class ResourceManager:
             action=lambda: self._resource_store.save_view(view),
         )
 
+    def reorder_views(self, ordered_view_ids: list[str]) -> list[StoredView]:
+        return self._with_storage_call(
+            kind="write",
+            operation="resource_manager.reorder_views",
+            action=lambda: self._resource_store.reorder_views(ordered_view_ids),
+        )
+
     def delete_view(self, view_id: str) -> bool:
         return self._with_storage_call(
             kind="write",

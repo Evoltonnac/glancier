@@ -42,6 +42,10 @@ class FileContentRequest(BaseModel):
     content: str
 
 
+class ViewReorderRequest(BaseModel):
+    ordered_view_ids: list[str]
+
+
 class IntegrationPresetPayload(BaseModel):
     id: str
     label: str
@@ -930,6 +934,16 @@ def create_stored_view_record(
         )
 
     return saved_view
+
+
+def _resolve_next_view_sort_index(resource_manager) -> int:
+    load_views = getattr(resource_manager, "load_views", None)
+    if not callable(load_views):
+        return 0
+    views = load_views()
+    if not views:
+        return 0
+    return max(view.sort_index for view in views) + 1
 
 
 @router.post("/refresh/{source_id}")
@@ -1874,11 +1888,78 @@ async def list_stored_views() -> list[StoredView]:
     ]
 
 
+@router.post("/views/reorder")
+async def reorder_stored_views(payload: ViewReorderRequest) -> list[StoredView]:
+    unique_ordered_view_ids = list(dict.fromkeys(payload.ordered_view_ids))
+    if len(unique_ordered_view_ids) != len(payload.ordered_view_ids):
+        raise HTTPException(400, "Duplicate view ids are not allowed")
+
+    try:
+        current_views = _resource_manager.load_views()
+    except StorageContractError as error:
+        return _storage_error_response(error)
+
+    if not current_views:
+        return []
+
+    current_view_ids = {view.id for view in current_views}
+    if (
+        len(unique_ordered_view_ids) != len(current_views)
+        or set(unique_ordered_view_ids) != current_view_ids
+    ):
+        raise HTTPException(400, "ordered_view_ids must include each existing view exactly once")
+
+    reorder_views = getattr(_resource_manager, "reorder_views", None)
+    try:
+        if callable(reorder_views):
+            reordered_views = reorder_views(unique_ordered_view_ids)
+        else:
+            view_by_id = {view.id: view for view in current_views}
+            reordered_views = []
+            for index, view_id in enumerate(unique_ordered_view_ids):
+                next_view = view_by_id[view_id].model_copy(update={"sort_index": index})
+                reordered_views.append(_resource_manager.save_view(next_view))
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    except StorageContractError as error:
+        return _storage_error_response(error)
+
+    if not reordered_views:
+        return reordered_views
+
+    try:
+        source_by_id = {source.id: source for source in _resource_manager.load_sources()}
+    except StorageContractError as error:
+        return _storage_error_response(error)
+    template_lookup_by_integration = build_template_lookup_from_config(_config)
+    if not source_by_id or not template_lookup_by_integration:
+        return reordered_views
+
+    return [
+        inject_view_item_props_from_templates(
+            view,
+            source_by_id=source_by_id,
+            template_lookup_by_integration=template_lookup_by_integration,
+        )
+        for view in reordered_views
+    ]
+
+
 @router.post("/views")
 async def create_stored_view(view: StoredView) -> StoredView:
     """Create new stored view."""
+    prepared_view = view
     try:
-        return create_stored_view_record(view, _resource_manager, config=_config)
+        if "sort_index" not in view.model_fields_set:
+            get_view = getattr(_resource_manager, "get_view", None)
+            existing_view = get_view(view.id) if callable(get_view) else None
+            resolved_sort_index = (
+                existing_view.sort_index
+                if existing_view is not None
+                else _resolve_next_view_sort_index(_resource_manager)
+            )
+            prepared_view = view.model_copy(update={"sort_index": resolved_sort_index})
+        return create_stored_view_record(prepared_view, _resource_manager, config=_config)
     except StorageContractError as error:
         return _storage_error_response(error)
 
@@ -1888,8 +1969,16 @@ async def update_stored_view(view_id: str, view: StoredView) -> StoredView:
     """Update stored view."""
     if view.id != view_id:
         raise HTTPException(400, "ID mismatch")
+    prepared_view = view
     try:
-        return create_stored_view_record(view, _resource_manager, config=_config)
+        if "sort_index" not in view.model_fields_set:
+            get_view = getattr(_resource_manager, "get_view", None)
+            existing_view = get_view(view_id) if callable(get_view) else None
+            if existing_view is not None:
+                prepared_view = view.model_copy(
+                    update={"sort_index": existing_view.sort_index},
+                )
+        return create_stored_view_record(prepared_view, _resource_manager, config=_config)
     except StorageContractError as error:
         return _storage_error_response(error)
 

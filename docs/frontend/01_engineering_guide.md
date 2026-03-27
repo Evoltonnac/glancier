@@ -144,6 +144,7 @@ Scope: `Dashboard.tsx`, `viewTabsState.ts`, dashboard management components.
 - Do not split dashboard ordering logic across multiple components. Reorder intent should funnel into store actions/helpers.
 - Keep `Dashboard` page effects thin. Effects should trigger sync/invalidation, not duplicate reconciliation logic.
 - Route dashboard layout persistence through `viewSaveQueue` and keep optimistic update + `invalidateViews()` reconciliation.
+- Persist dashboard reorder through one backend call (`POST /api/views/reorder`) that updates `StoredView.sort_index` transactionally, then reconcile with `invalidateViews()`.
 - Treat keys under `dashboard.tabs.*` and `dashboard.management.*` as stable contracts in i18n catalogs.
 - Before shipping dashboard-management changes, run at least:
   - `DashboardViewTabs.test.tsx`

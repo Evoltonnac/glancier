@@ -23,6 +23,7 @@ class StoredView(BaseModel):
     """A stored View configuration."""
     id: str
     name: str
+    sort_index: int = Field(default=0, description="View ordering index (ascending)")
     layout_columns: int = Field(default=12, description="Default 12, supports 24")
     items: List[ViewItem] = Field(default_factory=list, description="List of ViewItems")
 

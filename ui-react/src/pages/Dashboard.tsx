@@ -357,6 +357,13 @@ function getFreshnessStyles(
     return "bg-gradient-to-r from-muted/40 to-muted/0 text-muted-foreground/60";
 }
 
+function resolveViewSortIndex(view: StoredView, fallbackIndex: number): number {
+    if (typeof view.sort_index === "number" && Number.isFinite(view.sort_index)) {
+        return view.sort_index;
+    }
+    return fallbackIndex;
+}
+
 export default function Dashboard() {
     const navigate = useNavigate();
     const { t, getErrorMessageByCode } = useI18n();
@@ -492,6 +499,7 @@ export default function Dashboard() {
     const viewSaveQueueRef = useRef<ReturnType<typeof createViewSaveQueue> | null>(
         null,
     );
+    const reorderSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
     const [nowSeconds, setNowSeconds] = useState<number>(() =>
         Math.floor(Date.now() / 1000),
     );
@@ -572,24 +580,25 @@ export default function Dashboard() {
             const nextView: StoredView = {
                 id: `view-${Date.now()}`,
                 name: name.trim(),
+                sort_index: orderedViews.length,
                 layout_columns: 12,
                 items: [],
             };
-            await api.createView(nextView);
+            const createdView = await api.createView(nextView);
             await mutate(
                 "views",
                 (existingViews?: StoredView[]) => {
                     const baseViews: StoredView[] = existingViews ?? swrViews;
-                    if (baseViews.some((view) => view.id === nextView.id)) {
+                    if (baseViews.some((view) => view.id === createdView.id)) {
                         return baseViews;
                     }
-                    return [...baseViews, nextView];
+                    return [...baseViews, createdView];
                 },
                 false,
             );
-            setActiveViewId(nextView.id);
-            setSelectedDashboardId(nextView.id);
-            setOrderedViewIds([...orderedViews.map((view) => view.id), nextView.id]);
+            setActiveViewId(createdView.id);
+            setSelectedDashboardId(createdView.id);
+            setOrderedViewIds([...orderedViews.map((view) => view.id), createdView.id]);
             await invalidateViews();
             showToast(t("dashboard.management.create_success"), "success");
             setIsCreateDialogOpen(false);
@@ -643,10 +652,67 @@ export default function Dashboard() {
         }
     };
 
-    const handleReorderDashboards = (newOrderedIds: string[]) => {
-        // Update orderedViewIds in Zustand - this persists the new order
-        setOrderedViewIds(newOrderedIds);
-    };
+    const handleReorderDashboards = useCallback(
+        (newOrderedIds: string[]) => {
+            const previousOrderedIds = orderedViews.map((view) => view.id);
+            setOrderedViewIds(newOrderedIds);
+
+            const nextSortIndexById = new Map<string, number>();
+            newOrderedIds.forEach((viewId, index) => {
+                nextSortIndexById.set(viewId, index);
+            });
+            const currentSortIndexById = new Map<string, number>();
+            orderedViews.forEach((view, index) => {
+                currentSortIndexById.set(view.id, resolveViewSortIndex(view, index));
+            });
+
+            void mutate(
+                "views",
+                (existingViews?: StoredView[]) => {
+                    const baseViews: StoredView[] =
+                        existingViews && existingViews.length > 0
+                            ? existingViews
+                            : swrViews;
+                    return baseViews.map((view: StoredView) => {
+                        const nextSortIndex = nextSortIndexById.get(view.id);
+                        if (nextSortIndex === undefined) {
+                            return view;
+                        }
+                        const currentSortIndex =
+                            currentSortIndexById.get(view.id) ?? nextSortIndex;
+                        if (currentSortIndex === nextSortIndex) {
+                            return view;
+                        }
+                        return { ...view, sort_index: nextSortIndex };
+                    });
+                },
+                false,
+            );
+
+            const hasSortIndexChange = newOrderedIds.some((viewId, index) => {
+                const currentSortIndex = currentSortIndexById.get(viewId) ?? index;
+                return currentSortIndex !== index;
+            });
+            if (!hasSortIndexChange) {
+                return;
+            }
+
+            reorderSavePromiseRef.current = reorderSavePromiseRef.current
+                .catch(() => undefined)
+                .then(async () => {
+                    const reorderedViews = await api.reorderViews(newOrderedIds);
+                    await mutate("views", reorderedViews, false);
+                    await invalidateViews();
+                })
+                .catch((error) => {
+                    console.error("Failed to persist dashboard reorder:", error);
+                    setOrderedViewIds(previousOrderedIds);
+                    showToast(t("common.retryLater"), "error");
+                    void invalidateViews();
+                });
+        },
+        [orderedViews, setOrderedViewIds, showToast, swrViews, t, viewsById],
+    );
 
     const handleSelectDashboard = (view: StoredView) => {
         // Click on dashboard card to enter that dashboard
@@ -680,6 +746,7 @@ export default function Dashboard() {
             currentView = {
                 id: `view-${Date.now()}`,
                 name: t("dashboard.view.default_name"),
+                sort_index: orderedViews.length,
                 layout_columns: 12,
                 items: [],
             };

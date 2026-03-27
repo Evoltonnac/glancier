@@ -341,6 +341,10 @@ def test_resource_repo_crud_and_source_reference_cleanup(tmp_path):
         assert saved_view.id == "view-alpha"
         assert [v.id for v in repo.load_views()] == ["view-alpha"]
 
+        reordered_views = repo.reorder_views(["view-alpha"])
+        assert [v.id for v in reordered_views] == ["view-alpha"]
+        assert [v.sort_index for v in reordered_views] == [0]
+
         affected_views = repo.remove_source_references_from_views("source-alpha")
         assert affected_views == ["view-alpha"]
         updated_view = repo.load_views()[0]
@@ -350,6 +354,81 @@ def test_resource_repo_crud_and_source_reference_cleanup(tmp_path):
         assert repo.delete_source("source-alpha") is False
         assert repo.delete_view("view-alpha") is True
         assert repo.delete_view("view-alpha") is False
+    finally:
+        conn.close()
+
+
+def test_resource_repo_load_views_orders_by_sort_index_then_id(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    repo = SqliteResourceRepository(conn)
+
+    views = [
+        StoredView(
+            id="view-b",
+            name="View B",
+            sort_index=2,
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-c",
+            name="View C",
+            sort_index=1,
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-a",
+            name="View A",
+            sort_index=1,
+            layout_columns=12,
+            items=[],
+        ),
+    ]
+
+    try:
+        for view in views:
+            repo.save_view(view)
+        assert [view.id for view in repo.load_views()] == [
+            "view-a",
+            "view-c",
+            "view-b",
+        ]
+    finally:
+        conn.close()
+
+
+def test_resource_repo_reorder_views_updates_sort_index_atomically(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    repo = SqliteResourceRepository(conn)
+
+    views = [
+        StoredView(
+            id="view-1",
+            name="View 1",
+            sort_index=0,
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-2",
+            name="View 2",
+            sort_index=1,
+            layout_columns=12,
+            items=[],
+        ),
+    ]
+
+    try:
+        for view in views:
+            repo.save_view(view)
+
+        reordered_views = repo.reorder_views(["view-2", "view-1"])
+        assert [view.id for view in reordered_views] == ["view-2", "view-1"]
+        assert [view.sort_index for view in reordered_views] == [0, 1]
+        assert [view.id for view in repo.load_views()] == ["view-2", "view-1"]
     finally:
         conn.close()
 
@@ -656,6 +735,7 @@ def test_resource_repo_mutations_run_in_begin_immediate_transaction(tmp_path):
     try:
         repo.save_source(source)
         repo.save_view(view)
+        repo.reorder_views(["view-alpha"])
         repo.remove_source_references_from_views("source-alpha")
         repo.delete_source("source-alpha")
         repo.delete_view("view-alpha")

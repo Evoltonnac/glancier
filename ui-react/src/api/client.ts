@@ -368,6 +368,16 @@ class ApiClient {
     return res.json();
   }
 
+  async reorderViews(orderedViewIds: string[]): Promise<StoredView[]> {
+    const res = await this.request(`/views/reorder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ordered_view_ids: orderedViewIds }),
+    });
+    if (!res.ok) throw new Error("Failed to reorder views");
+    return res.json();
+  }
+
   async createView(view: StoredView): Promise<StoredView> {
     const res = await this.request(`/views`, {
       method: "POST",

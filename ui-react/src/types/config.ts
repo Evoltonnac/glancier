@@ -318,6 +318,7 @@ export interface ViewItem {
 export interface StoredView {
     id: string;
     name: string;
+    sort_index?: number;
     layout_columns: number;
     items: ViewItem[];
 }
