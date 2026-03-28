@@ -233,6 +233,8 @@ const zhMessages = {
   "integrations.sidebar.tooltip_new": "新建集成",
   "integrations.sidebar.tooltip_reload": "重新加载配置",
   "integrations.validation_errors": "配置错误 ({count})",
+  "integrations.validation_warnings": "配置警告 ({count})",
+  "integrations.validation_issues": "配置问题 ({count})",
   "integrations.delete_integration.title": "确认删除集成文件",
   "integrations.delete_integration.description": "删除 \"{name}\" 后，该文件内配置将不可恢复。使用该集成的数据源不会自动删除，但可能因配置缺失而失效。",
   "integrations.delete_source.title": "确认删除数据源",

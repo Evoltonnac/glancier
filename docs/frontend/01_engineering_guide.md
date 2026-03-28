@@ -182,6 +182,15 @@ Documentation and change policy:
 - Public API methods currently do not expose caller-level cancellation (`signal`).
 - Add explicit `signal` plumbing in `ApiClient` before using cancellation in new paths.
 
+## Integration Editor Diagnostics
+
+Scope: Integration YAML editing and validation UX.
+
+- Diagnostics must be severity-aware (`error` vs `warning`), not treated as a single blocking bucket.
+- Unknown/additional parameter diagnostics should be presented as `warning` so users can keep iterating.
+- Save interception (`Save` button and `Ctrl/Cmd+S`) must block only on `error` diagnostics.
+- Runtime widget validation should tolerate extra widget parameters (ignore/drop extras) instead of failing card rendering only due unknown keys.
+
 ## Mutation Pattern
 
 After create/update/delete:

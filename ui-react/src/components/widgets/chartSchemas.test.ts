@@ -151,7 +151,7 @@ describe("chart schemas", () => {
         expect(invalidLegacyName.success).toBe(false);
     });
 
-    it("Chart.Table accepts columns entries and rejects unknown field references", () => {
+    it("Chart.Table accepts columns entries, tolerates extra params, and rejects unknown field references", () => {
         const validTable = ChartTableSchema.safeParse({
             type: "Chart.Table",
             data_source: "sql_response.rows",
@@ -168,7 +168,7 @@ describe("chart schemas", () => {
         });
         expect(validTable.success).toBe(true);
 
-        const invalidLegacyColumns = ChartTableSchema.safeParse({
+        const legacyExtraColumns = ChartTableSchema.safeParse({
             type: "Chart.Table",
             data_source: "sql_response.rows",
             columns: [{ field: "label", title: "Region" }],
@@ -176,7 +176,11 @@ describe("chart schemas", () => {
                 columns: [{ field: "label", title: "Region" }],
             },
         });
-        expect(invalidLegacyColumns.success).toBe(false);
+        expect(legacyExtraColumns.success).toBe(true);
+        expect(
+            legacyExtraColumns.success &&
+                "columns" in legacyExtraColumns.data,
+        ).toBe(false);
 
         const invalidField = validateChartEncoding(
             "Chart.Table",

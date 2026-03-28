@@ -85,7 +85,6 @@ templates:
         spacing: "md"
         items:
           - type: "Chart.Line"
-            title: "Service Latency Score Trend"
             data_source: "{pg_timeseries_rows}"
             legend: true
             encoding:
@@ -95,9 +94,7 @@ templates:
                 field: "latency_score"
               series:
                 field: "service"
-            empty_state: "No trend rows."
           - type: "Chart.Area"
-            title: "Request Count Trend"
             data_source: "{pg_timeseries_rows}"
             legend: true
             encoding:
@@ -107,9 +104,7 @@ templates:
                 field: "request_count"
               series:
                 field: "service"
-            empty_state: "No request rows."
           - type: "Chart.Pie"
-            title: "Category Volume Mix"
             data_source: "{pg_mix_rows}"
             donut: false
             encoding:
@@ -117,9 +112,7 @@ templates:
                 field: "category"
               value:
                 field: "volume"
-            empty_state: "No volume rows."
           - type: "Chart.Table"
-            title: "Category Volume Table"
             data_source: "{pg_mix_rows}"
             encoding:
               columns:
@@ -132,4 +125,3 @@ templates:
             sort_by: "volume"
             sort_order: "desc"
             limit: 10
-            empty_state: "No table rows."

@@ -117,7 +117,7 @@ export const ChartTableSchema = ChartBaseSchema.extend({
     sort_by: z.string().optional(),
     sort_order: z.enum(["asc", "desc"]).optional(),
     limit: z.number().int().positive().optional(),
-}).strict();
+});
 
 export const ChartWidgetSchema = z.discriminatedUnion("type", [
     ChartLineSchema,
@@ -156,7 +156,7 @@ export const RuntimeChartTableSchema = RuntimeChartBaseSchema.extend({
     sort_by: z.string().optional(),
     sort_order: z.enum(["asc", "desc"]).optional(),
     limit: z.number().int().positive().optional(),
-}).strict();
+});
 
 export const RuntimeChartWidgetSchema = z.discriminatedUnion("type", [
     RuntimeChartLineSchema,

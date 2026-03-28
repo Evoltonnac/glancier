@@ -233,6 +233,8 @@ const enMessages = {
   "integrations.sidebar.tooltip_new": "Create integration",
   "integrations.sidebar.tooltip_reload": "Reload configuration",
   "integrations.validation_errors": "Configuration errors ({count})",
+  "integrations.validation_warnings": "Configuration warnings ({count})",
+  "integrations.validation_issues": "Configuration issues ({count})",
   "integrations.delete_integration.title": "Confirm Integration File Deletion",
   "integrations.delete_integration.description": "Deleting \"{name}\" is irreversible. Sources using this integration are not auto-deleted, but may fail due to missing config.",
   "integrations.delete_source.title": "Confirm Source Deletion",

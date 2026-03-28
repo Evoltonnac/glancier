@@ -241,11 +241,7 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
         : processedData;
 
     if (processedData.length === 0) {
-        return (
-            <div className="flex h-full w-full min-h-0 flex-1 overflow-hidden">
-                <DataWidgetEmptyState kind="list" />
-            </div>
-        );
+        return <DataWidgetEmptyState kind="list" />;
     }
 
     return (

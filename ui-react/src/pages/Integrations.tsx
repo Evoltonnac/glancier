@@ -56,6 +56,7 @@ import {
     FileJson,
     Database,
     AlertCircle,
+    AlertTriangle,
     CheckCircle,
     ChevronLeft,
     ChevronRight,
@@ -73,6 +74,7 @@ import {
     setupYamlWorker,
     type IntegrationDiagnostic,
 } from "../components/editor/YamlEditorWorkerSetup";
+import { resolveDiagnosticSeverity } from "../components/editor/integrationDiagnostics";
 import { RouteInterceptor } from "../components/RouteInterceptor";
 import { EmptyState } from "../components/EmptyState";
 import { InlineError } from "../components/InlineError";
@@ -210,18 +212,32 @@ function buildReloadToastMessage(
 function DiagnosticItem({ diagnostic }: { diagnostic: IntegrationDiagnostic }) {
     const { t } = useI18n();
     const [expanded, setExpanded] = useState(false);
+    const isWarning = diagnostic.severity === "warning";
+    const containerClass = isWarning
+        ? "rounded-md border border-warning/20 bg-warning/5 px-3 py-2 text-xs mb-2"
+        : "rounded-md border border-error/20 bg-background/80 px-3 py-2 text-xs mb-2";
+    const iconClass = isWarning
+        ? "h-3.5 w-3.5 text-warning flex-shrink-0"
+        : "h-3.5 w-3.5 text-error flex-shrink-0";
+    const detailClass = isWarning
+        ? "mt-2 text-muted-foreground pl-5 border-l-2 border-warning/30 ml-1.5 space-y-1"
+        : "mt-2 text-muted-foreground pl-5 border-l-2 border-error/20 ml-1.5 space-y-1";
     const locationPrefix =
         diagnostic.line && diagnostic.column
             ? `l:${diagnostic.line},c:${diagnostic.column} `
             : "";
     return (
-        <div className="rounded-md border border-error/20 bg-background/80 px-3 py-2 text-xs mb-2">
+        <div className={containerClass}>
             <div
                 className="font-medium text-foreground cursor-pointer flex justify-between items-center"
                 onClick={() => setExpanded(!expanded)}
             >
                 <div className="flex items-center gap-2 truncate pr-2">
-                    <AlertCircle className="h-3.5 w-3.5 text-error flex-shrink-0" />
+                    {isWarning ? (
+                        <AlertTriangle className={iconClass} />
+                    ) : (
+                        <AlertCircle className={iconClass} />
+                    )}
                     <span className="truncate">
                         {locationPrefix && (
                             <span className="text-muted-foreground">
@@ -236,7 +252,7 @@ function DiagnosticItem({ diagnostic }: { diagnostic: IntegrationDiagnostic }) {
                 />
             </div>
             {expanded && (
-                <div className="mt-2 text-muted-foreground pl-5 border-l-2 border-error/20 ml-1.5 space-y-1">
+                <div className={detailClass}>
                     <p>
                         {diagnostic.line && diagnostic.column
                             ? t("integrations.diagnostic.location", {
@@ -374,9 +390,34 @@ export default function IntegrationsPage() {
         [backendDiagnosticsByFile, editorDiagnosticsByFile],
     );
 
+    const getFileDiagnosticSummary = useCallback(
+        (filename: string): { errorCount: number; warningCount: number } => {
+            const diagnostics = getFileDiagnostics(filename);
+            return diagnostics.reduce(
+                (summary, diagnostic) => {
+                    if (diagnostic.severity === "warning") {
+                        summary.warningCount += 1;
+                    } else {
+                        summary.errorCount += 1;
+                    }
+                    return summary;
+                },
+                { errorCount: 0, warningCount: 0 },
+            );
+        },
+        [getFileDiagnostics],
+    );
+
     const selectedDiagnostics = selectedFile
         ? getFileDiagnostics(selectedFile)
         : [];
+    const selectedErrorDiagnostics = selectedDiagnostics.filter(
+        (diagnostic) => diagnostic.severity === "error",
+    );
+    const selectedWarningDiagnostics = selectedDiagnostics.filter(
+        (diagnostic) => diagnostic.severity === "warning",
+    );
+    const selectedHasBlockingErrors = selectedErrorDiagnostics.length > 0;
 
     useEffect(() => {
         if (selectedDiagnostics.length > 0) {
@@ -395,8 +436,16 @@ export default function IntegrationsPage() {
     }, []);
 
     const hasFileErrors = useCallback(
-        (filename: string) => getFileDiagnostics(filename).length > 0,
-        [getFileDiagnostics],
+        (filename: string) =>
+            getFileDiagnosticSummary(filename).errorCount > 0,
+        [getFileDiagnosticSummary],
+    );
+    const hasFileWarnings = useCallback(
+        (filename: string) => {
+            const summary = getFileDiagnosticSummary(filename);
+            return summary.errorCount === 0 && summary.warningCount > 0;
+        },
+        [getFileDiagnosticSummary],
     );
 
     const editorModelPath = selectedFile
@@ -432,6 +481,7 @@ export default function IntegrationsPage() {
                             source: "backend",
                             message: fallbackMessage,
                             code: "reload.error",
+                            severity: "error",
                         },
                     ],
                 };
@@ -452,6 +502,10 @@ export default function IntegrationsPage() {
                     line: diagnostic.line,
                     column: diagnostic.column,
                     fieldPath: diagnostic.field_path ?? diagnostic.fieldPath,
+                    severity: resolveDiagnosticSeverity({
+                        code: diagnostic.code,
+                        message: diagnostic.message || fallbackMessage,
+                    }),
                 });
             });
             return grouped;
@@ -939,7 +993,7 @@ export default function IntegrationsPage() {
                 if (
                     selectedFile &&
                     content !== originalContent &&
-                    selectedDiagnostics.length === 0
+                    !selectedHasBlockingErrors
                 ) {
                     handleSave();
                 }
@@ -947,7 +1001,7 @@ export default function IntegrationsPage() {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [selectedFile, content, originalContent, selectedDiagnostics]);
+    }, [selectedFile, content, originalContent, selectedHasBlockingErrors]);
 
     const handleMonacoMount = useCallback(
         async (
@@ -984,6 +1038,23 @@ export default function IntegrationsPage() {
         );
     })();
     const defaultIntegrationName = stripYamlExtension(newFilename);
+    const diagnosticsHeaderKey =
+        selectedErrorDiagnostics.length > 0 &&
+        selectedWarningDiagnostics.length > 0
+            ? "integrations.validation_issues"
+            : selectedErrorDiagnostics.length > 0
+              ? "integrations.validation_errors"
+              : "integrations.validation_warnings";
+    const diagnosticsHasErrors = selectedErrorDiagnostics.length > 0;
+    const diagnosticsPanelClass = diagnosticsHasErrors
+        ? "absolute bottom-0 left-0 right-0 bg-background/95 border-t border-error/30 z-10 transition-all duration-200 ease-out flex flex-col backdrop-blur-sm"
+        : "absolute bottom-0 left-0 right-0 bg-background/95 border-t border-warning/40 z-10 transition-all duration-200 ease-out flex flex-col backdrop-blur-sm";
+    const diagnosticsHeaderTextClass = diagnosticsHasErrors
+        ? "flex items-center gap-2 text-sm font-medium text-error"
+        : "flex items-center gap-2 text-sm font-medium text-warning";
+    const diagnosticsBodyClass = diagnosticsHasErrors
+        ? "flex-1 overflow-y-auto p-4 bg-error/5"
+        : "flex-1 overflow-y-auto p-4 bg-warning/5";
 
     return (
         <TooltipProvider>
@@ -1312,6 +1383,9 @@ export default function IntegrationsPage() {
                                                     {hasFileErrors(file) && (
                                                         <AlertCircle className="absolute -top-1 -right-1 h-3.5 w-3.5 text-error" />
                                                     )}
+                                                    {hasFileWarnings(file) && (
+                                                        <AlertTriangle className="absolute -top-1 -right-1 h-3.5 w-3.5 text-warning" />
+                                                    )}
                                                 </span>
                                             </button>
                                         </TooltipTrigger>
@@ -1381,6 +1455,9 @@ export default function IntegrationsPage() {
                                                 <Badge variant="error">
                                                     {t("dashboard.status.error")}
                                                 </Badge>
+                                            )}
+                                            {hasFileWarnings(file) && (
+                                                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                                             )}
                                         </div>
                                         <DropdownMenu>
@@ -1470,15 +1547,14 @@ export default function IntegrationsPage() {
                                                     saving ||
                                                     content ===
                                                         originalContent ||
-                                                    selectedDiagnostics.length >
-                                                        0
+                                                    selectedHasBlockingErrors
                                                 }
                                             >
                                                 <Save className="h-4 w-4" />
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            {selectedDiagnostics.length > 0
+                                            {selectedHasBlockingErrors
                                                 ? t("integrations.tooltip.save_disabled")
                                                 : t("integrations.tooltip.save_enabled")}
                                         </TooltipContent>
@@ -1517,7 +1593,7 @@ export default function IntegrationsPage() {
                             <div className="h-64 border-t border-border bg-surface/30 flex flex-col relative overflow-hidden">
                                 {selectedDiagnostics.length > 0 && (
                                     <div
-                                        className={`absolute bottom-0 left-0 right-0 bg-background/95 border-t border-error/30 z-10 transition-all duration-200 ease-out flex flex-col backdrop-blur-sm ${diagnosticsExpanded ? "h-full" : "h-10"}`}
+                                        className={`${diagnosticsPanelClass} ${diagnosticsExpanded ? "h-full" : "h-10"}`}
                                     >
                                         <div
                                             className="h-10 px-4 flex items-center justify-between cursor-pointer border-b border-border hover:bg-surface/50 transition-colors duration-150"
@@ -1527,9 +1603,13 @@ export default function IntegrationsPage() {
                                                 )
                                             }
                                         >
-                                            <div className="flex items-center gap-2 text-sm font-medium text-error">
-                                                <AlertCircle className="h-4 w-4" />
-                                                {t("integrations.validation_errors", {
+                                            <div className={diagnosticsHeaderTextClass}>
+                                                {diagnosticsHasErrors ? (
+                                                    <AlertCircle className="h-4 w-4" />
+                                                ) : (
+                                                    <AlertTriangle className="h-4 w-4" />
+                                                )}
+                                                {t(diagnosticsHeaderKey, {
                                                     count: selectedDiagnostics.length,
                                                 })}
                                             </div>
@@ -1538,7 +1618,7 @@ export default function IntegrationsPage() {
                                             />
                                         </div>
                                         {diagnosticsExpanded && (
-                                            <div className="flex-1 overflow-y-auto p-4 bg-error/5">
+                                            <div className={diagnosticsBodyClass}>
                                                 {selectedDiagnostics.map(
                                                     (diagnostic, index) => (
                                                         <DiagnosticItem
