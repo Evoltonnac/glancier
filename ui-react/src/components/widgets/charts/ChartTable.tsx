@@ -114,9 +114,9 @@ export function ChartTable({ widget, data }: ChartTableProps) {
             description={widget.description}
         >
             {state.kind === "ready" ? (
-                <div className="h-full overflow-auto rounded-md border border-border/40 bg-surface/20">
+                <div className="h-full flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-md border border-border/40 bg-surface/20">
                     <table className="w-full border-collapse text-sm">
-                        <thead className="bg-surface/60 text-left">
+                        <thead className="sticky top-0 z-10 bg-surface text-left">
                             <tr>
                                 {columns.map((column) => (
                                     <th

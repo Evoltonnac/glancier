@@ -57,7 +57,8 @@ export function BaseSourceCard({
         pillKey = "disabled";
     }
 
-    const pillClass = statusPillColorMap[pillKey] || statusPillColorMap.disabled;
+    const pillClass =
+        statusPillColorMap[pillKey] || statusPillColorMap.disabled;
 
     // Decide if we have data to show
     const hasWidgetData =
@@ -91,7 +92,7 @@ export function BaseSourceCard({
             {/* Content area — fills remaining card height */}
             <div className="relative z-10 flex-1 flex flex-col overflow-hidden min-h-0 qb-pad bg-surface/50">
                 {hasWidgetData && (
-                    <div className="flex flex-col qb-gap-2 h-full min-h-0">
+                    <div className="sdui-card-shell qb-gap-2">
                         {component.widgets!.map((widget, idx) => (
                             <WidgetRenderer
                                 key={idx}

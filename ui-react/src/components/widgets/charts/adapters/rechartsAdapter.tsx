@@ -28,7 +28,6 @@ import {
 
 const DEFAULT_PALETTE: ChartSemanticColor[] = [...CHART_SEMANTIC_COLORS];
 
-
 type ChartRow = Record<string, unknown>;
 
 type CartesianAdapterInput = {
@@ -211,7 +210,7 @@ function renderCartesianSeries({
 
     if (kind === "line") {
         return (
-            <ResponsiveContainer width="100%" height="100%" minHeight={240}>
+            <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                     {cartesianCommonElements(xField, legend)}
                     {seriesNodes}
@@ -222,7 +221,7 @@ function renderCartesianSeries({
 
     if (kind === "bar") {
         return (
-            <ResponsiveContainer width="100%" height="100%" minHeight={240}>
+            <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                     {cartesianCommonElements(xField, legend)}
                     {seriesNodes}
@@ -232,7 +231,7 @@ function renderCartesianSeries({
     }
 
     return (
-        <ResponsiveContainer width="100%" height="100%" minHeight={240}>
+        <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
                 {cartesianCommonElements(xField, legend)}
                 {seriesNodes}
@@ -264,7 +263,7 @@ export function renderPieChart({
     const valueField = getField(encoding.value);
 
     return (
-        <ResponsiveContainer width="100%" height="100%" minHeight={240}>
+        <ResponsiveContainer width="100%" height="100%">
             <PieChart>
                 <Tooltip />
                 {legend ? <Legend /> : null}
@@ -272,8 +271,10 @@ export function renderPieChart({
                     data={rows}
                     nameKey={labelField}
                     dataKey={valueField}
-                    innerRadius={donut ? 48 : 0}
-                    outerRadius={96}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={donut ? "60%" : 0}
+                    outerRadius="80%"
                 >
                     {rows.map((row, index) => (
                         <Cell

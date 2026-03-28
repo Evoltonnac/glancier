@@ -103,7 +103,9 @@ function createWidgetSchema(
             chartSchemaSet.table,
             // Actions
             ActionSetSchema.extend({
-                actions: z.array(z.union([ActionOpenUrlSchema, ActionCopySchema])),
+                actions: z.array(
+                    z.union([ActionOpenUrlSchema, ActionCopySchema]),
+                ),
             }),
             ActionOpenUrlSchema,
             ActionCopySchema,
@@ -158,8 +160,7 @@ function formatIssuePath(path: readonly PropertyKey[]): string {
                     : `.${segment.toString()}`;
             }
             return index === 0 ? segment : `.${segment}`;
-        },
-        )
+        })
         .join("");
 }
 
@@ -178,7 +179,9 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
     const [currentPage, setCurrentPage] = useState(1);
 
     // Extract array data from inline array
-    const sourceItems = Array.isArray(widget.data_source) ? widget.data_source : [];
+    const sourceItems = Array.isArray(widget.data_source)
+        ? widget.data_source
+        : [];
 
     let processedData = [...sourceItems];
 
@@ -236,7 +239,7 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
 
     return (
         <div className="flex flex-col w-full flex-1 min-h-0 qb-gap-4">
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                 <List
                     layout={widget.layout}
                     columns={widget.columns}
@@ -256,7 +259,7 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
                                         renderWidget: Widget,
                                         renderIndex: number,
                                     ) => (
-                                        <WidgetRendererImpl
+                                        <WidgetRenderer
                                             key={renderIndex}
                                             widget={renderWidget}
                                             data={itemData}
@@ -327,7 +330,8 @@ function WidgetRendererImpl({
         const primaryPath = primaryIssue
             ? formatIssuePath(primaryIssue.path)
             : "(root)";
-        const primaryMessage = primaryIssue?.message ?? "Unknown validation error";
+        const primaryMessage =
+            primaryIssue?.message ?? "Unknown validation error";
 
         console.error("Widget validation failed:", parseResult.error);
         console.error(
@@ -362,7 +366,7 @@ function WidgetRendererImpl({
                     align_y={validWidget.align_y}
                 >
                     {validWidget.items.map((item: Widget, index: number) => (
-                        <WidgetRendererImpl
+                        <WidgetRenderer
                             key={index}
                             widget={item}
                             data={data}
@@ -387,7 +391,7 @@ function WidgetRendererImpl({
                         >
                             {column.items.map(
                                 (item: Widget, itemIndex: number) => (
-                                    <WidgetRendererImpl
+                                    <WidgetRenderer
                                         key={itemIndex}
                                         widget={item}
                                         data={data}
@@ -440,7 +444,7 @@ function WidgetRendererImpl({
                     align_x={validWidget.align_x}
                 >
                     {validWidget.actions.map((action: any, index: number) => (
-                        <WidgetRendererImpl
+                        <WidgetRenderer
                             key={index}
                             widget={action}
                             data={data}
@@ -465,4 +469,77 @@ function WidgetRendererImpl({
     }
 }
 
-export const WidgetRenderer = memo(WidgetRendererImpl);
+interface WidgetLayoutMeta {
+    layoutType: "structural" | "content" | "container";
+    minRows?: number;
+    weight?: number;
+}
+
+const WIDGET_LAYOUT_REGISTRY: Record<string, WidgetLayoutMeta> = {
+    // Container types: flex-1 to fill parent, no rigid min-height
+    Container: { layoutType: "container" },
+    ColumnSet: { layoutType: "container" },
+    // Structural types: intrinsic size, no grow
+    TextBlock: { layoutType: "structural" },
+    FactSet: { layoutType: "structural" },
+    Image: { layoutType: "structural" },
+    Badge: { layoutType: "structural" },
+    Progress: { layoutType: "structural" },
+    ActionSet: { layoutType: "structural" },
+    "Action.OpenUrl": { layoutType: "structural" },
+    "Action.Copy": { layoutType: "structural" },
+    // Content types: flex-grow with rigid min-height baseline
+    List: { layoutType: "content", minRows: 2, weight: 1 },
+    "Chart.Line": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Bar": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Area": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Pie": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Table": { layoutType: "content", minRows: 3, weight: 2 },
+};
+
+function getWidgetLayoutMeta(type: string): WidgetLayoutMeta {
+    return WIDGET_LAYOUT_REGISTRY[type] || { layoutType: "structural" };
+}
+
+function WidgetWrapper({
+    widget,
+    data,
+    skipTemplateResolution = false,
+}: WidgetRendererProps) {
+    const type = getWidgetTypeLabel(widget);
+    const meta = getWidgetLayoutMeta(type);
+
+    // Container types (Container, ColumnSet) are layout wrappers themselves —
+    // no outer shell needed, they handle flex-1 internally.
+    if (meta.layoutType === "container") {
+        return (
+            <WidgetRendererImpl
+                widget={widget}
+                data={data}
+                skipTemplateResolution={skipTemplateResolution}
+            />
+        );
+    }
+
+    const style =
+        meta.layoutType === "content"
+            ? ({
+                  "--widget-weight": meta.weight || 1,
+                  "--widget-min-height-rows": meta.minRows || 1,
+              } as React.CSSProperties)
+            : undefined;
+
+    const className = `sdui-widget-shell sdui-widget-shell--${meta.layoutType} flex flex-col overflow-hidden`;
+
+    return (
+        <div className={className} style={style}>
+            <WidgetRendererImpl
+                widget={widget}
+                data={data}
+                skipTemplateResolution={skipTemplateResolution}
+            />
+        </div>
+    );
+}
+
+export const WidgetRenderer = memo(WidgetWrapper);

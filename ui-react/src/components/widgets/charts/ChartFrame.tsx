@@ -35,7 +35,7 @@ const loadingLabelByWidgetType: Record<ChartFrameType, string> = {
 
 function FallbackBody({ heading, body }: { heading: string; body: string }) {
     return (
-        <div className="flex h-full min-h-[220px] items-center justify-center">
+        <div className="flex h-full items-center justify-center">
             <div className="flex max-w-md flex-col items-center text-center qb-gap-2">
                 <h3 className="text-lg font-semibold leading-tight">
                     {heading}
@@ -90,7 +90,7 @@ export function ChartFrame({
         content = (
             <div
                 aria-label={loadingLabel}
-                className="flex h-full min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border/60 bg-surface/40 text-sm text-muted-foreground"
+                className="flex h-full items-center justify-center rounded-lg border border-dashed border-border/60 bg-surface/40 text-sm text-muted-foreground"
             >
                 {loadingLabel}
             </div>
@@ -105,7 +105,7 @@ export function ChartFrame({
     } else if (state.kind === "config_error") {
         const detail = describeChartConfigError(state);
         content = (
-            <div className="flex h-full min-h-[220px] items-center justify-center">
+            <div className="flex h-full items-center justify-center">
                 <div className="flex max-w-md flex-col items-center text-center qb-gap-2">
                     <h3 className="text-lg font-semibold leading-tight">
                         Invalid chart configuration
@@ -145,7 +145,7 @@ export function ChartFrame({
             )}
             <CardContent
                 className={cn(
-                    "flex-1 min-h-0 overflow-hidden pt-4",
+                    "flex flex-1 flex-col min-h-0 overflow-hidden pt-4",
                     state.kind === "ready" ? "pb-0" : "pb-4",
                 )}
             >

@@ -34,7 +34,7 @@ export function Container({
 }: ContainerComponentProps) {
     return (
         <div
-            className={`flex flex-col w-full ${layoutSpacingClassMap[spacing]} ${justifyClassMap[align_y]}`}
+            className={`flex flex-col flex-1 min-h-0 w-full ${layoutSpacingClassMap[spacing]} ${justifyClassMap[align_y]}`}
         >
             {children}
         </div>

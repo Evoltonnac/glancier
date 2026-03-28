@@ -11,23 +11,41 @@ This specification relies purely on **CSS Flexbox `flex-shrink: 0` + `min-height
 
 ## 2. Component Layout Categories (Widget Contract)
 
-All SDUI components must explicitly declare their layout metadata during rendering. They fall into two categories:
+All SDUI components must explicitly declare their layout metadata during rendering. They fall into three categories:
 
 ### 2.1 Structural Widgets
 - **Characteristics**: Height is basically fixed, driven by its internal text or basic elements. It should not expand to fill remaining space, nor should it be compressed.
-- **Representative Components**: `TextBlock`, `FactSet`, `ActionSet`, `Badge`, `Image`.
+- **Representative Components**: `TextBlock`, `FactSet`, `ActionSet`, `Badge`, `Image`, `Progress`.
 - **Behavioral Constraints**: In a Flex container, must behave as `flex-none` (`flex: 0 0 auto`).
 
-### 2.2 Content Widgets
+### 2.2 Container Widgets
+- **Characteristics**: Pure layout containers (`Container`, `ColumnSet`) that divide space for child widgets. They don't have an intrinsic minimum height baseline themselves but need to adapt to the parent's allocated space.
+- **Representative Components**: `Container`, `ColumnSet`.
+- **Behavioral Constraints**:
+  - Should **skip** the standard `sdui-widget-shell` wrapper to avoid redundant nesting.
+  - Must apply `flex: 1 1 0%` and `min-h-0` to their own root element to properly propagate height down to their children.
+
+### 2.3 Content Widgets
 - **Characteristics**: Responsible for displaying primary data, occupying the remaining space of the card. When multiple content widgets exist, they share the remaining space based on weight. Every component class has a strict "minimum usable height".
 - **Minimum Height Base**: Uses **Grid Row Height** as the base unit instead of absolute pixels. For example: `2` means 2 grid rows high. This allows components to adapt to different grid density settings.
 - **Representative Components**: `List`, `Chart.*`, `Progress` (in some scenarios).
 - **Behavioral Constraints**:
-  - In a Flex container, must behave as `flex: var(--widget-weight, 1) 0 0px` (shares space equally, refuses to shrink below baseline, ignores intrinsic height).
+  - In a Flex container, must behave as `flex: var(--widget-weight, 1) 0 0px` (shares space equally based on weight, refuses to shrink below baseline, ignores intrinsic height).
   - Must set `min-height: calc(var(--qb-grid-row-height) * var(--widget-min-height-rows))`.
-  - The internal wrapper must be a full Flex container (`flex flex-col overflow-hidden`) to provide a boundary for internal scrolling.
+  - To ensure `flex-grow` correctly fills remaining space in complex flex chains, the wrapper must apply `height: 0` (or `flex-basis: 0px`) and be a full Flex container (`flex flex-col overflow-hidden`).
+  - The internal scrollable area must apply `min-h-0` to provide a boundary for internal scrolling.
 
-## 3. The Card Shell Layout
+## 3. Component-Specific Implementation Guidelines
+
+### 3.1 Tables (`Chart.Table`)
+- To maintain context during scrolling, the `thead` must use `sticky top-0` positioning with a high `z-index` and a solid background color.
+
+### 3.2 Responsive Charts (`Chart.*`)
+- Do **not** use fixed pixel heights for charts.
+- Use Recharts `ResponsiveContainer` with `width="100%" height="100%"`.
+- For `PieChart`, use percentage strings for radii (e.g., `outerRadius="80%"` and `cx/cy="50%"`) to ensure the pie scales proportionally to the container dimensions.
+
+## 4. The Card Shell Layout
 
 The outer dimensions of a card are absolutely assigned by the Dashboard grid system. The root node inside the card (the Shell) is responsible for executing the fallback scrolling and space allocation.
 
