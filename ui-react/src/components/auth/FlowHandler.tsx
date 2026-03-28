@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SourceSummary } from "../../types/config";
+import type { InteractionField, InteractionFieldOption, SourceSummary } from "../../types/config";
 import {
     Dialog,
     DialogContent,
@@ -10,6 +10,14 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Switch } from "../ui/switch";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "../ui/select";
 import { AlertCircle, ExternalLink, Wrench, Monitor, Download } from "lucide-react";
 import { api } from "../../api/client";
 import { useI18n } from "../../i18n";
@@ -35,6 +43,7 @@ interface RuntimePortInfo {
 }
 
 type TrustScope = "source" | "global";
+type InteractionValue = string | boolean | string[];
 
 interface NetworkTrustInteractionData {
     confirm_kind: "network_trust";
@@ -55,7 +64,7 @@ export function FlowHandler({
     const inTauri = isTauri();
     const { t, getErrorCopyByCode } = useI18n();
     const sourceId = source?.id ?? null;
-    const [formData, setFormData] = useState<Record<string, string>>({});
+    const [formData, setFormData] = useState<Record<string, InteractionValue>>({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [deviceFlowData, setDeviceFlowData] = useState<DeviceFlowData | null>(
@@ -86,7 +95,50 @@ export function FlowHandler({
         : ["source", "global"];
     const supportsGlobalTrustScope = availableTrustScopes.includes("global");
 
-    const handleInputChange = (key: string, value: string) => {
+    const getFieldOptions = useCallback((field: InteractionField): InteractionFieldOption[] => {
+        if (!Array.isArray(field.options)) {
+            return [];
+        }
+        return field.options.filter(
+            (option): option is InteractionFieldOption =>
+                typeof option?.label === "string" && typeof option?.value === "string",
+        );
+    }, []);
+
+    const getFieldInitialValue = useCallback(
+        (field: InteractionField): InteractionValue => {
+            if (field.multiple || field.type === "multiselect") {
+                return Array.isArray(field.default)
+                    ? field.default.filter((item): item is string => typeof item === "string")
+                    : [];
+            }
+            if (
+                field.type === "switch" ||
+                field.type === "boolean" ||
+                field.value_type === "boolean"
+            ) {
+                return Boolean(field.default);
+            }
+            if (typeof field.default === "string") {
+                return field.default;
+            }
+            return "";
+        },
+        [],
+    );
+
+    const getFieldValue = useCallback(
+        (field: InteractionField): InteractionValue => {
+            const currentValue = formData[field.key];
+            if (currentValue !== undefined) {
+                return currentValue;
+            }
+            return getFieldInitialValue(field);
+        },
+        [formData, getFieldInitialValue],
+    );
+
+    const handleInputChange = (key: string, value: InteractionValue) => {
         setFormData((prev) => ({ ...prev, [key]: value }));
     };
 
@@ -117,10 +169,20 @@ export function FlowHandler({
     );
 
     const buildInteractionPayload = useCallback(
-        (fields: Array<{ key: string }>) => {
-            const payload: Record<string, string> = {};
+        (fields: Array<InteractionField>) => {
+            const payload: Record<string, InteractionValue> = {};
             fields.forEach((field) => {
-                const raw = formData[field.key];
+                const raw = getFieldValue(field);
+                if (Array.isArray(raw)) {
+                    if (raw.length > 0) {
+                        payload[field.key] = raw;
+                    }
+                    return;
+                }
+                if (typeof raw === "boolean") {
+                    payload[field.key] = raw;
+                    return;
+                }
                 if (typeof raw !== "string") {
                     return;
                 }
@@ -132,7 +194,7 @@ export function FlowHandler({
             });
             return payload;
         },
-        [formData],
+        [getFieldValue],
     );
     const missingRequiredFieldLabels = interaction
         ? getMissingRequiredFieldLabels(interaction.fields)
@@ -539,6 +601,167 @@ export function FlowHandler({
         t,
     ]);
 
+    const renderInputField = useCallback(
+        (field: InteractionField) => {
+            const fieldValue = getFieldValue(field);
+            const options = getFieldOptions(field);
+            const label = `${field.label}${field.required ? " *" : ""}`;
+
+            if (
+                field.type === "switch" ||
+                field.type === "boolean" ||
+                field.value_type === "boolean"
+            ) {
+                return (
+                    <div key={field.key} className="grid gap-2">
+                        <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+                            <label
+                                htmlFor={field.key}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                                {label}
+                            </label>
+                            <Switch
+                                id={field.key}
+                                aria-label={field.label}
+                                checked={Boolean(fieldValue)}
+                                onCheckedChange={(checked) =>
+                                    handleInputChange(field.key, checked)
+                                }
+                                disabled={loading}
+                            />
+                        </div>
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                    </div>
+                );
+            }
+
+            if (field.type === "radio") {
+                return (
+                    <fieldset key={field.key} className="grid gap-2">
+                        <legend className="text-sm font-medium leading-none">{label}</legend>
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                        <div className="grid gap-2">
+                            {options.map((option) => (
+                                <label
+                                    key={`${field.key}-${option.value}`}
+                                    className="flex items-center gap-2 text-sm"
+                                >
+                                    <input
+                                        type="radio"
+                                        name={field.key}
+                                        value={option.value}
+                                        checked={fieldValue === option.value}
+                                        onChange={() =>
+                                            handleInputChange(field.key, option.value)
+                                        }
+                                        disabled={loading}
+                                    />
+                                    <span>{option.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </fieldset>
+                );
+            }
+
+            if (field.multiple || field.type === "multiselect") {
+                const selectedValues = Array.isArray(fieldValue) ? fieldValue : [];
+                return (
+                    <fieldset key={field.key} className="grid gap-2">
+                        <legend className="text-sm font-medium leading-none">{label}</legend>
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                        <div className="grid gap-2">
+                            {options.map((option) => {
+                                const checked = selectedValues.includes(option.value);
+                                return (
+                                    <label
+                                        key={`${field.key}-${option.value}`}
+                                        className="flex items-center gap-2 text-sm"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            name={`${field.key}-${option.value}`}
+                                            checked={checked}
+                                            onChange={() => {
+                                                const nextValues = checked
+                                                    ? selectedValues.filter(
+                                                          (value) => value !== option.value,
+                                                      )
+                                                    : [...selectedValues, option.value];
+                                                handleInputChange(field.key, nextValues);
+                                            }}
+                                            disabled={loading}
+                                        />
+                                        <span>{option.label}</span>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </fieldset>
+                );
+            }
+
+            if (field.type === "select") {
+                const selectValue = typeof fieldValue === "string" ? fieldValue : "";
+                return (
+                    <div key={field.key} className="grid gap-2">
+                        <label
+                            htmlFor={field.key}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                            {label}
+                        </label>
+                        <Select
+                            value={selectValue || undefined}
+                            onValueChange={(value) => handleInputChange(field.key, value)}
+                            disabled={loading}
+                        >
+                            <SelectTrigger id={field.key} aria-label={field.label}>
+                                <SelectValue placeholder={field.description || field.label} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {options.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            }
+
+            return (
+                <div key={field.key} className="grid gap-2">
+                    <label
+                        htmlFor={field.key}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                        {label}
+                    </label>
+                    <Input
+                        id={field.key}
+                        type={field.type || "text"}
+                        placeholder={field.description}
+                        value={typeof fieldValue === "string" ? fieldValue : ""}
+                        onChange={(e) => handleInputChange(field.key, e.target.value)}
+                        required={field.required}
+                        disabled={loading}
+                        className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
+                    />
+                </div>
+            );
+        },
+        [getFieldOptions, getFieldValue, handleInputChange, loading],
+    );
+
     const renderContent = () => {
         if (!source || !interaction) {
             return null;
@@ -551,32 +774,7 @@ export function FlowHandler({
             case "input_text":
                 return (
                     <div className="space-y-4 py-4">
-                        {interaction.fields.map((field) => (
-                            <div key={field.key} className="grid gap-2">
-                                <label
-                                    htmlFor={field.key}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                >
-                                    {field.label}
-                                    {field.required ? " *" : ""}
-                                </label>
-                                <Input
-                                    id={field.key}
-                                    type={field.type || "text"}
-                                    placeholder={field.description}
-                                    value={formData[field.key] || ""}
-                                    onChange={(e) =>
-                                        handleInputChange(
-                                            field.key,
-                                            e.target.value,
-                                        )
-                                    }
-                                    required={field.required}
-                                    disabled={loading}
-                                    className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
-                                />
-                            </div>
-                        ))}
+                        {interaction.fields.map((field) => renderInputField(field))}
                     </div>
                 );
 
@@ -586,39 +784,7 @@ export function FlowHandler({
                         {/* Render client_id/client_secret input fields if present */}
                         {interaction.fields.length > 0 && (
                             <div className="w-full space-y-4">
-                                {interaction.fields.map((field) => (
-                                    <div
-                                        key={field.key}
-                                        className="grid gap-2"
-                                    >
-                                        <label
-                                            htmlFor={field.key}
-                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                        >
-                                            {field.label}
-                                            {field.required
-                                                ? " *"
-                                                : ""}
-                                        </label>
-                                        <Input
-                                            id={field.key}
-                                            type={field.type || "text"}
-                                            placeholder={field.description}
-                                            value={
-                                                formData[field.key] || ""
-                                            }
-                                            onChange={(e) =>
-                                                handleInputChange(
-                                                    field.key,
-                                                    e.target.value,
-                                                )
-                                            }
-                                            required={field.required}
-                                            disabled={loading}
-                                            className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
-                                        />
-                                    </div>
-                                ))}
+                                {interaction.fields.map((field) => renderInputField(field))}
                             </div>
                         )}
 

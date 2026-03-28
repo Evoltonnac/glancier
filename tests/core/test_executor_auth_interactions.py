@@ -148,6 +148,139 @@ async def test_api_key_whitespace_is_treated_as_missing(executor, secrets_contro
 
 
 @pytest.mark.asyncio
+async def test_form_interaction_keeps_optional_missing_fields_and_metadata(executor):
+    source = build_source_config(
+        source_id="auth-form-optional-fields",
+        name="Optional Form Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={
+                    "message": "Fill optional form fields",
+                    "fields": [
+                        {
+                            "key": "workspace",
+                            "label": "Workspace",
+                            "required": False,
+                            "type": "select",
+                            "options": [
+                                {"label": "Alpha", "value": "alpha"},
+                                {"label": "Beta", "value": "beta"},
+                            ],
+                            "default": "beta",
+                        },
+                        {
+                            "key": "notifications",
+                            "label": "Notifications",
+                            "required": False,
+                            "type": "switch",
+                            "default": True,
+                        },
+                    ],
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.step_id == "form"
+    assert state.interaction.message == "Fill optional form fields"
+    assert [field.key for field in state.interaction.fields] == [
+        "workspace",
+        "notifications",
+    ]
+    workspace_field = state.interaction.fields[0]
+    notifications_field = state.interaction.fields[1]
+    assert workspace_field.required is False
+    assert workspace_field.type == "select"
+    assert workspace_field.default == "beta"
+    assert workspace_field.options == [
+        {"label": "Alpha", "value": "alpha"},
+        {"label": "Beta", "value": "beta"},
+    ]
+    assert notifications_field.required is False
+    assert notifications_field.type == "switch"
+    assert notifications_field.default is True
+
+
+@pytest.mark.asyncio
+async def test_form_interaction_includes_required_and_optional_missing_fields(executor):
+    source = build_source_config(
+        source_id="auth-form-mixed-fields",
+        name="Mixed Form Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={
+                    "fields": [
+                        {"key": "tenant", "label": "Tenant", "required": True},
+                        {
+                            "key": "regions",
+                            "label": "Regions",
+                            "required": False,
+                            "type": "multiselect",
+                            "multiple": True,
+                            "options": [
+                                {"label": "US", "value": "us"},
+                                {"label": "EU", "value": "eu"},
+                            ],
+                        },
+                    ]
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert [field.key for field in state.interaction.fields] == ["tenant", "regions"]
+    assert state.interaction.fields[0].required is True
+    assert state.interaction.fields[1].required is False
+    assert state.interaction.fields[1].multiple is True
+
+
+@pytest.mark.asyncio
+async def test_form_interaction_includes_all_fields_for_large_forms(executor):
+    fields = [
+        {
+            "key": f"field_{index}",
+            "label": f"Field {index}",
+            "required": False,
+            "type": "text",
+        }
+        for index in range(1, 33)
+    ]
+    source = build_source_config(
+        source_id="auth-form-large-fields",
+        name="Large Form Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={"fields": fields},
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert len(state.interaction.fields) == 32
+    assert state.interaction.fields[-1].key == "field_32"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("oauth_args", "expected_interaction_type"),
     [

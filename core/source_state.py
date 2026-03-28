@@ -36,6 +36,9 @@ class InteractionField(BaseModel):
     description: Optional[str] = None
     required: bool = True
     default: Optional[Any] = None
+    options: List[Dict[str, Any]] = Field(default_factory=list)
+    multiple: bool = False
+    value_type: Optional[str] = None
 
 
 class InteractionRequest(BaseModel):

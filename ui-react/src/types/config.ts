@@ -52,6 +52,12 @@ export type InteractionType =
     | "retry"
     | "cookies_refresh";
 
+export interface InteractionFieldOption {
+    label: string;
+    value: string;
+    [key: string]: unknown;
+}
+
 export interface InteractionField {
     key: string;
     label: string;
@@ -59,6 +65,9 @@ export interface InteractionField {
     description?: string;
     required: boolean;
     default?: unknown;
+    options?: InteractionFieldOption[];
+    multiple?: boolean;
+    value_type?: string;
 }
 
 export interface InteractionRequest {

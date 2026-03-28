@@ -994,6 +994,9 @@ class Executor:
                     description=description if isinstance(description, str) else None,
                     required=True if required is None else bool(required),
                     default=default,
+                    options=raw_field.get("options") if isinstance(raw_field.get("options"), list) else [],
+                    multiple=bool(raw_field.get("multiple")),
+                    value_type=raw_field.get("value_type") if isinstance(raw_field.get("value_type"), str) else None,
                 )
             )
 

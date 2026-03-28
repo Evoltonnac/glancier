@@ -27,6 +27,10 @@ class BroadcastChannelMock {
     constructor(_name: string) {}
 }
 
+if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+}
+
 function createLocalStorageMock() {
     const store = new Map<string, string>();
     return {
@@ -197,6 +201,160 @@ describe("FlowHandler", () => {
         expect(apiMock.getDeviceFlowStatus).toHaveBeenCalledWith("source-1");
     });
 
+    it("renders optional typed fields and submits normalized values", async () => {
+        const onClose = vi.fn();
+        const onInteractSuccess = vi.fn();
+
+        render(
+            <FlowHandler
+                source={buildSource({
+                    type: "input_text",
+                    message: "Fill credentials",
+                    fields: [
+                        {
+                            key: "nickname",
+                            label: "Nickname",
+                            type: "text",
+                            required: false,
+                        },
+                        {
+                            key: "enabled",
+                            label: "Enabled",
+                            type: "switch",
+                            required: false,
+                            default: false,
+                            value_type: "boolean",
+                        },
+                        {
+                            key: "region",
+                            label: "Region",
+                            type: "select",
+                            required: false,
+                            default: "eu",
+                            options: [
+                                { label: "US", value: "us" },
+                                { label: "EU", value: "eu" },
+                            ],
+                        },
+                        {
+                            key: "plan",
+                            label: "Plan",
+                            type: "radio",
+                            required: false,
+                            options: [
+                                { label: "Free", value: "free" },
+                                { label: "Pro", value: "pro" },
+                            ],
+                        },
+                        {
+                            key: "scopes",
+                            label: "Scopes",
+                            type: "multiselect",
+                            required: false,
+                            multiple: true,
+                            options: [
+                                { label: "Read", value: "read" },
+                                { label: "Write", value: "write" },
+                                { label: "Admin", value: "admin" },
+                            ],
+                        },
+                    ],
+                })}
+                isOpen={true}
+                onClose={onClose}
+                onInteractSuccess={onInteractSuccess}
+            />,
+        );
+
+        expect(screen.getByLabelText("Nickname")).toBeInTheDocument();
+        expect(screen.getByRole("switch", { name: "Enabled" })).toBeInTheDocument();
+        expect(screen.getByRole("combobox", { name: "Region" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: "Pro" })).toBeInTheDocument();
+        expect(screen.getByRole("checkbox", { name: "Read" })).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText("Nickname"), {
+            target: { value: "  skywalker  " },
+        });
+        fireEvent.click(screen.getByRole("switch", { name: "Enabled" }));
+        fireEvent.click(screen.getByRole("radio", { name: "Pro" }));
+        fireEvent.click(screen.getByRole("checkbox", { name: "Read" }));
+        fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
+        fireEvent.click(screen.getByRole("combobox", { name: "Region" }));
+        fireEvent.click(await screen.findByText("US"));
+
+        fireEvent.click(screen.getByRole("button", { name: /Submit|提交/ }));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(apiMock.interact).toHaveBeenCalledWith("source-1", {
+            nickname: "skywalker",
+            enabled: true,
+            region: "us",
+            plan: "pro",
+            scopes: ["read", "admin"],
+        });
+        expect(onInteractSuccess).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("renders every field in large input_text forms without truncation", () => {
+        const fields = Array.from({ length: 35 }, (_, index) => ({
+            key: `field_${index + 1}`,
+            label: `Field ${index + 1}`,
+            type: "text",
+            required: false,
+        }));
+
+        render(
+            <FlowHandler
+                source={buildSource({
+                    type: "input_text",
+                    message: "Large form",
+                    fields,
+                })}
+                isOpen={true}
+                onClose={vi.fn()}
+                onInteractSuccess={vi.fn()}
+            />,
+        );
+
+        expect(screen.getAllByRole("textbox")).toHaveLength(35);
+        expect(screen.getByLabelText("Field 35")).toBeInTheDocument();
+    });
+
+    it("allows submitting optional empty fields without blocking", async () => {
+        render(
+            <FlowHandler
+                source={buildSource({
+                    type: "input_text",
+                    message: "Optional only",
+                    fields: [
+                        {
+                            key: "note",
+                            label: "Note",
+                            type: "text",
+                            required: false,
+                        },
+                    ],
+                })}
+                isOpen={true}
+                onClose={vi.fn()}
+                onInteractSuccess={vi.fn()}
+            />,
+        );
+
+        const submitButton = screen.getByRole("button", { name: /Submit|提交/ });
+        expect(submitButton).not.toBeDisabled();
+
+        fireEvent.click(submitButton);
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(apiMock.interact).toHaveBeenCalledWith("source-1", {});
+    });
+
     it("renders input form fields and blocks submit until required values are present", async () => {
         const onClose = vi.fn();
         const onInteractSuccess = vi.fn();
@@ -243,6 +401,7 @@ describe("FlowHandler", () => {
 
         expect(apiMock.interact).toHaveBeenCalledWith("source-1", {
             api_key: "sk-test-123",
+            region: "us",
         });
         expect(onInteractSuccess).toHaveBeenCalledTimes(1);
         expect(onClose).toHaveBeenCalledTimes(1);

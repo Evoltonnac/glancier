@@ -277,6 +277,12 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
                         "placeholder": {"type": "string"},
                         "required": {"type": "boolean"},
                         "default": {},
+                        "options": {
+                            "type": "array",
+                            "items": {"type": "object", "additionalProperties": True},
+                        },
+                        "multiple": {"type": "boolean"},
+                        "value_type": {"type": "string"},
                     },
                     "required": ["key"],
                     "additionalProperties": True,
@@ -287,6 +293,12 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
             "type": {"type": "string"},
             "required": {"type": "boolean"},
             "default": {},
+            "options": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "multiple": {"type": "boolean"},
+            "value_type": {"type": "string"},
             "defaults": {"type": "object", "additionalProperties": True},
             "message": {"type": "string"},
             "warning_message": {"type": "string"},
@@ -345,8 +357,18 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
                 "additionalProperties": {"type": "string", "minLength": 1},
             },
             "query": {"type": "string", "minLength": 1},
-            "timeout": {"type": "number", "minimum": 1},
-            "max_rows": {"type": "integer", "minimum": 1},
+            "timeout": {
+                "anyOf": [
+                    {"type": "number", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "max_rows": {
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
         },
         "required": ["connector", "credentials", "query"],
         "additionalProperties": True,
