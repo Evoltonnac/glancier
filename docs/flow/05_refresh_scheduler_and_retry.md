@@ -124,3 +124,12 @@ Retry policy note:
 - SQL timeout and contract/trust failures are deterministic, not transient transport failures.
 - They are intentionally not included in the automatic retry signature allowlist in Section 4.
 - Successful but truncated SQL responses (`sql_response.truncated=true`) are not failures and must not trigger retry metadata.
+
+## 12. MongoDB and Redis Runtime Contract Notes
+
+MongoDB (`use: mongodb`) and Redis (`use: redis`) step failures are also deterministic backend error surfaces:
+- MongoDB: `runtime.mongo_invalid_contract`, `runtime.mongo_connect_failed`, `runtime.mongo_auth_failed`, `runtime.mongo_query_failed`, `runtime.mongo_timeout`
+- Redis: `runtime.redis_invalid_contract`, `runtime.redis_connect_failed`, `runtime.redis_auth_failed`, `runtime.redis_query_failed`, `runtime.redis_timeout`
+
+Retry policy note:
+- These deterministic contract/connect/auth/query/timeout errors are not part of Section 4 retryable signature allowlist.

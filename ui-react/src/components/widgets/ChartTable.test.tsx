@@ -4,28 +4,7 @@ import { screen, within } from "@testing-library/react";
 import { render } from "../../test/render";
 import { ChartTable } from "./charts/ChartTable";
 
-function baseWidgetColumnsToFields(
-    columns: Array<{ field: string; format?: string }>,
-) {
-    return columns.map((column) => ({
-        name: column.field,
-        type:
-            column.format === "number" || column.format === "percent"
-                ? "float"
-                : column.format === "datetime"
-                  ? "datetime"
-                  : "text",
-    }));
-}
-
 describe("ChartTable", () => {
-    const sqlFields = baseWidgetColumnsToFields([
-        { field: "region", title: "Region Name", format: "text" },
-        { field: "revenue", title: "Revenue", format: "number" },
-        { field: "conversion_rate", title: "Conversion", format: "percent" },
-        { field: "created_at", title: "Created", format: "datetime" },
-    ]);
-
     const baseWidget = {
         type: "Chart.Table" as const,
         data_source: [
@@ -48,12 +27,14 @@ describe("ChartTable", () => {
                 created_at: "2026-03-23T08:15:00.000Z",
             },
         ],
-        columns: [
-            { field: "region", title: "Region Name", format: "text" },
-            { field: "revenue", title: "Revenue", format: "number" },
-            { field: "conversion_rate", title: "Conversion", format: "percent" },
-            { field: "created_at", title: "Created", format: "datetime" },
-        ],
+        encoding: {
+            columns: [
+                { field: "region", title: "Region Name", format: "text" },
+                { field: "revenue", title: "Revenue", format: "number" },
+                { field: "conversion_rate", title: "Conversion", format: "percent" },
+                { field: "created_at", title: "Created", format: "datetime" },
+            ],
+        },
         title: "Regional performance",
         description: "Dense SQL result inspection",
     };
@@ -62,11 +43,7 @@ describe("ChartTable", () => {
         render(
             <ChartTable
                 widget={baseWidget}
-                data={{
-                    sql_response: {
-                        fields: sqlFields,
-                    },
-                }}
+                data={{}}
             />,
         );
 
@@ -82,7 +59,7 @@ describe("ChartTable", () => {
                     sort_by: "revenue",
                     sort_order: "desc",
                 }}
-                data={{ sql_response: { fields: sqlFields } }}
+                data={{}}
             />,
         );
 
@@ -100,7 +77,7 @@ describe("ChartTable", () => {
                     sort_order: "desc",
                     limit: 2,
                 }}
-                data={{ sql_response: { fields: sqlFields } }}
+                data={{}}
             />,
         );
 
@@ -114,11 +91,7 @@ describe("ChartTable", () => {
         render(
             <ChartTable
                 widget={baseWidget}
-                data={{
-                    sql_response: {
-                        fields: sqlFields,
-                    },
-                }}
+                data={{}}
             />,
         );
 

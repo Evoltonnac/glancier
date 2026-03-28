@@ -43,7 +43,7 @@ async def test_execute_sql_step_select_returns_deterministic_envelope(tmp_path: 
         source,
         {
             "connector": {"profile": "sqlite"},
-            "credentials": {"database": str(db_path)},
+            "dsn": str(db_path),
             "query": "SELECT id, value FROM metrics ORDER BY id",
         },
         {},
@@ -96,7 +96,7 @@ async def test_execute_sql_step_uses_system_sql_guardrail_defaults_when_args_mis
         source,
         {
             "connector": {"profile": "sqlite"},
-            "credentials": {"database": str(db_path)},
+            "dsn": str(db_path),
             "query": "SELECT id, value FROM metrics ORDER BY id",
         },
         {},
@@ -136,7 +136,7 @@ async def test_execute_sql_step_args_override_system_sql_guardrail_defaults(tmp_
         source,
         {
             "connector": {"profile": "sqlite"},
-            "credentials": {"database": str(db_path)},
+            "dsn": str(db_path),
             "query": "SELECT id, value FROM metrics ORDER BY id",
             "timeout": 3,
             "max_rows": 2,
@@ -179,7 +179,7 @@ async def test_execute_sql_step_high_risk_query_requires_trust_before_execution(
             source,
             {
                 "connector": {"profile": "sqlite"},
-                "credentials": {"database": ":memory:"},
+                "dsn": ":memory:",
                 "query": "DELETE FROM metrics",
             },
             {},
@@ -211,7 +211,7 @@ async def test_executor_wires_sql_step_and_persists_output(executor, data_contro
                 use=StepType.SQL,
                 args={
                     "connector": {"profile": "sqlite"},
-                    "credentials": {"database": str(db_path)},
+                    "dsn": str(db_path),
                     "query": "SELECT id, value FROM metrics ORDER BY id",
                 },
                 outputs={"rows": "sql_response.rows"},
@@ -248,7 +248,7 @@ async def test_executor_sql_trust_gate_updates_suspended_state_with_sql_error_co
                 use=StepType.SQL,
                 args={
                     "connector": {"profile": "sqlite"},
-                    "credentials": {"database": ":memory:"},
+                    "dsn": ":memory:",
                     "query": "DELETE FROM metrics",
                 },
             )
@@ -322,7 +322,7 @@ async def test_execute_sql_step_timeout_maps_to_runtime_sql_timeout(
             source,
             {
                 "connector": {"profile": "sqlite"},
-                "credentials": {"database": ":memory:"},
+                "dsn": ":memory:",
                 "query": "SELECT 1",
                 "timeout": 0.001,
             },
@@ -357,7 +357,7 @@ async def test_execute_sql_step_max_row_limit_truncates_response(
         source,
         {
             "connector": {"profile": "sqlite"},
-            "credentials": {"database": str(db_path)},
+            "dsn": str(db_path),
             "query": "SELECT id, value FROM metrics ORDER BY id",
             "max_rows": 1,
         },
@@ -407,7 +407,7 @@ async def test_execute_sql_step_risk_denied_and_query_failures_use_stable_codes(
             source,
             {
                 "connector": {"profile": "sqlite"},
-                "credentials": {"database": str(db_path)},
+                "dsn": str(db_path),
                 "query": query,
             },
             {},
@@ -455,7 +455,7 @@ async def test_execute_sql_step_connect_and_auth_failures_use_stable_codes(
             source,
             {
                 "connector": {"profile": "sqlite"},
-                "credentials": {"database": ":memory:"},
+                "dsn": ":memory:",
                 "query": "SELECT 1",
             },
             {},
@@ -496,7 +496,7 @@ async def test_sql_connect_error_details_redact_dsn_password_and_tokens(
             source,
             {
                 "connector": {"profile": "sqlite"},
-                "credentials": {"database": ":memory:"},
+                "dsn": ":memory:",
                 "query": "SELECT 1",
             },
             {},
@@ -531,7 +531,7 @@ async def test_executor_sql_error_state_redacts_password_fragments(
                 use=StepType.SQL,
                 args={
                     "connector": {"profile": "sqlite"},
-                    "credentials": {"database": ":memory:"},
+                    "dsn": ":memory:",
                     "query": "SELECT 1",
                 },
             )

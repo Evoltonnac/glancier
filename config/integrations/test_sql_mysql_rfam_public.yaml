@@ -1,0 +1,125 @@
+name: "TEST - SQL MySQL Rfam Public Connectivity"
+description: "MySQL smoke test for Rfam public read-only database. Validates mysql connector reachability and deterministic SQL output mapping."
+flow:
+  - id: collect_rfam_mysql_inputs
+    use: form
+    args:
+      title: "Rfam Public MySQL Connectivity"
+      description: "Defaults target the official public read-only Rfam MySQL service."
+      message: "Confirm MySQL DSN/URI and SQL guardrails."
+      fields:
+        - key: "mysql_dsn"
+          label: "MySQL DSN / URI"
+          type: "text"
+          required: true
+          default: "mysql://rfamro@mysql-rfam-public.ebi.ac.uk:4497/Rfam"
+        - key: "sql_timeout_seconds"
+          label: "SQL Timeout Seconds"
+          type: "text"
+          required: false
+          default: "15"
+        - key: "sql_max_rows"
+          label: "SQL Max Rows"
+          type: "text"
+          required: false
+          default: "50"
+    secrets:
+      rfam_mysql_dsn: "mysql_dsn"
+    outputs:
+      rfam_mysql_timeout_seconds: "sql_timeout_seconds"
+      rfam_mysql_max_rows: "sql_max_rows"
+
+  - id: query_rfam_schema_tables
+    use: sql
+    args:
+      connector:
+        profile: "mysql"
+        options:
+          dialect: "mysql"
+      dsn: "{rfam_mysql_dsn}"
+      query: |
+        SELECT
+          TABLE_NAME,
+          TABLE_TYPE,
+          TABLE_ROWS
+        FROM information_schema.tables
+        WHERE table_schema = 'Rfam'
+        ORDER BY TABLE_NAME ASC
+      timeout: "{rfam_mysql_timeout_seconds}"
+      max_rows: "{rfam_mysql_max_rows}"
+    outputs:
+      rfam_table_rows: "sql_response.rows"
+      rfam_table_row_count: "sql_response.row_count"
+
+  - id: query_rfam_family_sample
+    use: sql
+    args:
+      connector:
+        profile: "mysql"
+        options:
+          dialect: "mysql"
+      dsn: "{rfam_mysql_dsn}"
+      query: |
+        SELECT
+          rfam_acc,
+          rfam_id,
+          description
+        FROM family
+        ORDER BY rfam_acc ASC
+        LIMIT 20
+      timeout: "{rfam_mysql_timeout_seconds}"
+      max_rows: "{rfam_mysql_max_rows}"
+    outputs:
+      rfam_family_rows: "sql_response.rows"
+      rfam_family_row_count: "sql_response.row_count"
+
+templates:
+  - id: "sql_mysql_rfam_public_connectivity"
+    type: "source_card"
+    ui:
+      title: "Rfam Public MySQL Connectivity"
+      icon: "SQL"
+    widgets:
+      - type: "Container"
+        spacing: "md"
+        items:
+          - type: "TextBlock"
+            text: "Schema rows loaded: {rfam_table_row_count} | family sample rows: {rfam_family_row_count}"
+            size: "sm"
+            tone: "muted"
+          - type: "Chart.Table"
+            title: "Rfam Schema Table Snapshot"
+            data_source: "{rfam_table_rows}"
+            encoding:
+              columns:
+                - field: "TABLE_NAME"
+                  title: "Table Name"
+                  format: "text"
+                - field: "TABLE_TYPE"
+                  title: "Table Type"
+                  format: "text"
+                - field: "TABLE_ROWS"
+                  title: "Approx Rows"
+                  format: "number"
+            sort_by: "TABLE_NAME"
+            sort_order: "asc"
+            limit: 50
+            empty_state: "No schema rows."
+          - type: "Chart.Table"
+            title: "Rfam Family Sample"
+            data_source: "{rfam_family_rows}"
+            encoding:
+              columns:
+                - field: "rfam_acc"
+                  title: "Rfam Accession"
+                  format: "text"
+                - field: "rfam_id"
+                  title: "Rfam ID"
+                  format: "text"
+                - field: "description"
+                  title: "Description"
+                  format: "text"
+            sort_by: "rfam_acc"
+            sort_order: "asc"
+            limit: 20
+            empty_state: "No family rows."

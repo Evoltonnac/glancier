@@ -360,6 +360,8 @@ const enMessages = {
   "error.copy.auth.invalid_credentials.description": "Authorization is invalid. Reconnect or update credentials, then retry.",
   "error.copy.auth.missing_credentials.title": "Credentials required",
   "error.copy.auth.missing_credentials.description": "Required credentials are missing. Complete authentication fields to continue.",
+  "error.copy.auth.missing_form_inputs.title": "Form inputs required",
+  "error.copy.auth.missing_form_inputs.description": "Required form fields are missing. Complete all required fields to continue.",
   "error.copy.auth.authorization_required.title": "Authorization required",
   "error.copy.auth.authorization_required.description": "This source needs authorization before data can be fetched.",
   "error.copy.auth.interactive_verification_required.title": "Verification required",
@@ -397,6 +399,7 @@ const enMessages = {
 
   "error.code.auth.invalid_credentials": "Authorization is invalid. Please reconnect or update credentials.",
   "error.code.auth.missing_credentials": "Required credentials are missing. Please complete the authentication fields.",
+  "error.code.auth.missing_form_inputs": "Required form fields are missing. Please complete all required fields.",
   "error.code.auth.authorization_required": "Authorization is required before data can be fetched.",
   "error.code.auth.interactive_verification_required": "Interactive verification is required to continue.",
   "error.code.auth.manual_webview_required": "A manual foreground step is required to complete this source.",

@@ -55,12 +55,16 @@ export function List({
 
         return (
             <div
-                className={`grid ${gridColsMap[columns] || gridColsMap[2]} ${spacingClass} w-full h-full content-start`}
+                className={`grid ${gridColsMap[columns] || gridColsMap[2]} ${spacingClass} w-full h-full min-h-0 content-start`}
             >
                 {children}
             </div>
         );
     }
 
-    return <div className={`flex flex-col w-full h-full ${spacingClass}`}>{children}</div>;
+    return (
+        <div className={`flex flex-col w-full h-full min-h-0 ${spacingClass}`}>
+            {children}
+        </div>
+    );
 }

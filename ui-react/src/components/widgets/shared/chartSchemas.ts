@@ -2,6 +2,23 @@ import { z } from "zod";
 
 import { SizeSchema } from "./commonProps";
 
+export const CHART_SEMANTIC_COLORS = [
+    "blue",
+    "orange",
+    "green",
+    "violet",
+    "red",
+    "cyan",
+    "amber",
+    "pink",
+    "teal",
+    "gold",
+    "slate",
+    "yellow",
+] as const;
+
+export const ChartSemanticColorSchema = z.enum(CHART_SEMANTIC_COLORS);
+
 const ChartFieldRefSchema = z.object({
     field: z.string().min(1),
 });
@@ -68,7 +85,7 @@ const ChartBaseSchema = z.object({
     title: z.string().optional(),
     description: z.string().optional(),
     legend: z.boolean().optional(),
-    colors: z.array(z.string()).optional(),
+    colors: z.array(ChartSemanticColorSchema).optional(),
     format: z.string().optional(),
     empty_state: z.string().optional(),
     size: SizeSchema.optional(),
@@ -101,16 +118,13 @@ export const ChartPieSchema = ChartBaseSchema.extend({
 
 export const ChartTableSchema = ChartBaseSchema.extend({
     type: z.literal("Chart.Table"),
-    encoding: z
-        .object({
-            columns: z.array(TableColumnSchema).optional(),
-        })
-        .default({}),
-    columns: z.array(TableColumnSchema).optional(),
+    encoding: z.object({
+        columns: z.array(TableColumnSchema).min(1),
+    }),
     sort_by: z.string().optional(),
     sort_order: z.enum(["asc", "desc"]).optional(),
     limit: z.number().int().positive().optional(),
-});
+}).strict();
 
 export const ChartWidgetSchema = z.discriminatedUnion("type", [
     ChartLineSchema,
@@ -143,16 +157,13 @@ export const RuntimeChartPieSchema = RuntimeChartBaseSchema.extend({
 
 export const RuntimeChartTableSchema = RuntimeChartBaseSchema.extend({
     type: z.literal("Chart.Table"),
-    encoding: z
-        .object({
-            columns: z.array(TableColumnSchema).optional(),
-        })
-        .default({}),
-    columns: z.array(TableColumnSchema).optional(),
+    encoding: z.object({
+        columns: z.array(TableColumnSchema).min(1),
+    }),
     sort_by: z.string().optional(),
     sort_order: z.enum(["asc", "desc"]).optional(),
     limit: z.number().int().positive().optional(),
-});
+}).strict();
 
 export const RuntimeChartWidgetSchema = z.discriminatedUnion("type", [
     RuntimeChartLineSchema,
@@ -163,9 +174,14 @@ export const RuntimeChartWidgetSchema = z.discriminatedUnion("type", [
 ]);
 
 export type ChartWidget = z.infer<typeof ChartWidgetSchema>;
+export type ChartSemanticColor = z.infer<typeof ChartSemanticColorSchema>;
 export type ChartLine = z.infer<typeof ChartLineSchema>;
 export type ChartBar = z.infer<typeof ChartBarSchema>;
 export type ChartArea = z.infer<typeof ChartAreaSchema>;
 export type ChartPie = z.infer<typeof ChartPieSchema>;
 export type ChartTable = z.infer<typeof ChartTableSchema>;
+export type RuntimeChartLine = z.infer<typeof RuntimeChartLineSchema>;
+export type RuntimeChartBar = z.infer<typeof RuntimeChartBarSchema>;
+export type RuntimeChartArea = z.infer<typeof RuntimeChartAreaSchema>;
+export type RuntimeChartPie = z.infer<typeof RuntimeChartPieSchema>;
 export type RuntimeChartTable = z.infer<typeof RuntimeChartTableSchema>;

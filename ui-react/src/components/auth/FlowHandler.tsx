@@ -238,7 +238,7 @@ export function FlowHandler({
         setFormData({});
         resetFlowState();
         setTrustScope("source");
-    }, [sourceId, resetFlowState]);
+    }, [sourceId, interaction?.step_id, resetFlowState]);
 
     // Track initial source ID and step ID when source changes
     useEffect(() => {
@@ -778,6 +778,13 @@ export function FlowHandler({
                     </div>
                 );
 
+            case "input_form":
+                return (
+                    <div className="space-y-4 py-4">
+                        {interaction.fields.map((field) => renderInputField(field))}
+                    </div>
+                );
+
             case "oauth_start":
                 return (
                     <div className="py-6 flex flex-col items-center gap-3">
@@ -990,10 +997,13 @@ export function FlowHandler({
     }
 
     const dialogTitle =
+        interaction.title ||
         sourceErrorCopy?.title ||
-        interaction.message ||
         t("flow.title.action_required_with_name", { name: source.name });
     const dialogDescription =
+        interaction.description ||
+        (isErrorState ? sourceErrorCopy?.description : null) ||
+        interaction.message ||
         sourceErrorCopy?.description ||
         (interaction.type === "oauth_start" ||
         interaction.type === "oauth_device_flow"

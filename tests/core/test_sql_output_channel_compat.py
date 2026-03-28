@@ -42,7 +42,7 @@ async def test_sql_outputs_mapping_reads_canonical_sql_response_paths(
                 use=StepType.SQL,
                 args={
                     "connector": {"profile": "sqlite"},
-                    "credentials": {"database": str(db_path)},
+                    "dsn": str(db_path),
                     "query": "SELECT id, value FROM metrics ORDER BY id",
                 },
                 outputs={
@@ -93,7 +93,7 @@ async def test_sql_context_mapping_keeps_alias_paths_readable_for_downstream_ste
                 use=StepType.SQL,
                 args={
                     "connector": {"profile": "sqlite"},
-                    "credentials": {"database": str(db_path)},
+                    "dsn": str(db_path),
                     "query": "SELECT id, value FROM metrics ORDER BY id",
                 },
                 outputs={

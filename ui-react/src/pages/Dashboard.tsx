@@ -432,6 +432,12 @@ export default function Dashboard() {
     const viewConfig: StoredView | null = resolvedActiveViewId
         ? (viewsById.get(resolvedActiveViewId) ?? null)
         : storeViewConfig;
+    const activeInteractionSource = useMemo(() => {
+        if (!interactSource) {
+            return null;
+        }
+        return sources.find((source) => source.id === interactSource.id) ?? interactSource;
+    }, [interactSource, sources]);
     const isDataLoading = swrLoading && swrSources.length === 0;
     const sourcesSnapshotRef = useRef<{
         sources: SourceSummary[];
@@ -2138,7 +2144,7 @@ export default function Dashboard() {
                                                                         handleDeleteWidget(item.id)
                                                                     }
                                                                 />
-                                                                <div className="w-full h-full flex flex-col [&>*]:flex-1 [&>*]:min-h-0">
+                                                                <div className="sdui-card-shell h-full w-full min-h-0 flex flex-col">
                                                                     <WidgetFallbackBoundary
                                                                         itemId={item.id}
                                                                         resetKey={resetKey}
@@ -2257,8 +2263,8 @@ export default function Dashboard() {
             />
 
             <FlowHandler
-                source={interactSource}
-                isOpen={!!interactSource}
+                source={activeInteractionSource}
+                isOpen={!!activeInteractionSource}
                 onClose={() => setInteractSource(null)}
                 onInteractSuccess={() => {
                     void coordinatorRef.current?.pollNow({

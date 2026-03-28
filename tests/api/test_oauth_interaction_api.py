@@ -390,6 +390,172 @@ def test_interact_oauth_code_exchange_succeeds_with_stale_pending_interaction_ty
     runtime["executor"].fetch_source.assert_called_once()
 
 
+def test_interact_input_form_succeeds_with_persisted_pending_interaction_after_restart():
+    source = make_stored_source("form-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["data_controller"] = SimpleNamespace(
+        get_latest=lambda _source_id: {
+            "source_id": "form-source",
+            "status": "suspended",
+            "interaction": {
+                "type": "input_form",
+                "source_id": "form-source",
+                "fields": [
+                    {"key": "username"},
+                    {"key": "password"},
+                ],
+            },
+        }
+    )
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: None,
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/form-source/interact",
+        json={
+            "username": "alice",
+            "password": "secret",
+        },
+    )
+
+    assert response.status_code == 200
+    runtime["secrets_controller"].set_secrets.assert_called_once_with(
+        "form-source",
+        {"username": "alice", "password": "secret"},
+    )
+    runtime["executor"]._update_state.assert_called_once()
+    runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_interact_input_form_prefers_persisted_pending_interaction_over_runtime_drift():
+    source = make_stored_source("form-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["data_controller"] = SimpleNamespace(
+        get_latest=lambda _source_id: {
+            "source_id": "form-source",
+            "status": "suspended",
+            "interaction": {
+                "type": "input_form",
+                "source_id": "form-source",
+                "fields": [
+                    {"key": "username"},
+                    {"key": "password"},
+                ],
+            },
+        }
+    )
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: SimpleNamespace(
+            interaction=SimpleNamespace(
+                type=InteractionType.INPUT_TEXT,
+                source_id="form-source",
+                fields=[SimpleNamespace(key="api_key")],
+            ),
+        ),
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/form-source/interact",
+        json={
+            "username": "alice",
+            "password": "secret",
+        },
+    )
+
+    assert response.status_code == 200
+    runtime["secrets_controller"].set_secrets.assert_called_once_with(
+        "form-source",
+        {"username": "alice", "password": "secret"},
+    )
+    runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_interact_input_form_rejects_extra_keys_against_persisted_pending_interaction():
+    source = make_stored_source("form-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["data_controller"] = SimpleNamespace(
+        get_latest=lambda _source_id: {
+            "source_id": "form-source",
+            "status": "suspended",
+            "interaction": {
+                "type": "input_form",
+                "source_id": "form-source",
+                "fields": [
+                    {"key": "username"},
+                ],
+            },
+        }
+    )
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: None,
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/form-source/interact",
+        json={
+            "username": "alice",
+            "unexpected_key": "boom",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "interaction_payload_invalid"
+    runtime["secrets_controller"].set_secrets.assert_not_called()
+
+
+def test_interact_input_form_without_any_pending_interaction_still_rejects():
+    source = make_stored_source("form-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["data_controller"] = SimpleNamespace(get_latest=lambda _source_id: None)
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: None,
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/form-source/interact",
+        json={
+            "username": "alice",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "interaction_source_mismatch"
+    runtime["secrets_controller"].set_secrets.assert_not_called()
+
+
 def test_oauth_callback_interact_resolves_source_id_by_opaque_state():
     source_a = make_stored_source("oauth-source-a", integration_id="oauth-integration")
     source_b = make_stored_source("oauth-source-b", integration_id="oauth-integration")

@@ -1,8 +1,11 @@
 import { ChartFrame } from "./ChartFrame";
-import { validateChartEncoding } from "../shared/chartFieldValidation";
+import {
+    deriveSqlFieldsFromRows,
+    validateChartEncoding,
+} from "../shared/chartFieldValidation";
 import { classifyChartState } from "../shared/chartState";
 import { formatChartTableValue } from "../shared/chartFormatting";
-import type { ChartTable as ChartTableWidget } from "../shared/chartSchemas";
+import type { RuntimeChartTable as ChartTableWidget } from "../shared/chartSchemas";
 
 interface ChartTableProps {
     widget: ChartTableWidget;
@@ -28,7 +31,10 @@ function compareTableValues(left: unknown, right: unknown): number {
 
     const leftDate = new Date(left as string | number);
     const rightDate = new Date(right as string | number);
-    if (!Number.isNaN(leftDate.getTime()) && !Number.isNaN(rightDate.getTime())) {
+    if (
+        !Number.isNaN(leftDate.getTime()) &&
+        !Number.isNaN(rightDate.getTime())
+    ) {
         const leftTime = leftDate.getTime();
         const rightTime = rightDate.getTime();
         return leftTime === rightTime ? 0 : leftTime > rightTime ? 1 : -1;
@@ -36,17 +42,28 @@ function compareTableValues(left: unknown, right: unknown): number {
 
     const leftText = String(left);
     const rightText = String(right);
-    return leftText.localeCompare(rightText, "en", { numeric: true, sensitivity: "base" });
+    return leftText.localeCompare(rightText, "en", {
+        numeric: true,
+        sensitivity: "base",
+    });
 }
 
-function getProcessedRows(rows: TableRow[], sortBy?: string, sortOrder: "asc" | "desc" = "asc", limit?: number) {
+function getProcessedRows(
+    rows: TableRow[],
+    sortBy?: string,
+    sortOrder: "asc" | "desc" = "asc",
+    limit?: number,
+) {
     let processedRows = [...rows];
 
     if (sortBy) {
         processedRows = processedRows
             .map((row, index) => ({ row, index }))
             .sort((left, right) => {
-                const comparison = compareTableValues(left.row[sortBy], right.row[sortBy]);
+                const comparison = compareTableValues(
+                    left.row[sortBy],
+                    right.row[sortBy],
+                );
                 if (comparison !== 0) {
                     return sortOrder === "desc" ? -comparison : comparison;
                 }
@@ -64,12 +81,14 @@ function getProcessedRows(rows: TableRow[], sortBy?: string, sortOrder: "asc" | 
 
 export function ChartTable({ widget, data }: ChartTableProps) {
     const sqlResponse = data.sql_response ?? {};
-    const rows = Array.isArray(widget.data_source) ? (widget.data_source as TableRow[]) : [];
-    const columns = widget.columns ?? widget.encoding.columns ?? [];
+    const rows = Array.isArray(widget.data_source)
+        ? (widget.data_source as TableRow[])
+        : [];
+    const columns = widget.encoding.columns ?? [];
     const encodingValidation = validateChartEncoding(
         widget.type,
         { columns },
-        Array.isArray(sqlResponse.fields) ? sqlResponse.fields : undefined,
+        deriveSqlFieldsFromRows(rows),
     );
     const state = classifyChartState({
         sourceStatus: sqlResponse.status,
@@ -79,7 +98,12 @@ export function ChartTable({ widget, data }: ChartTableProps) {
     });
     const processedRows =
         state.kind === "ready"
-            ? getProcessedRows(rows, widget.sort_by, widget.sort_order ?? "asc", widget.limit)
+            ? getProcessedRows(
+                  rows,
+                  widget.sort_by,
+                  widget.sort_order ?? "asc",
+                  widget.limit,
+              )
             : [];
 
     return (
@@ -107,13 +131,19 @@ export function ChartTable({ widget, data }: ChartTableProps) {
                         </thead>
                         <tbody>
                             {processedRows.map((row, rowIndex) => (
-                                <tr key={`${rowIndex}-${columns.map((column) => String(row[column.field] ?? "")).join("|")}`}>
+                                <tr
+                                    key={`${rowIndex}-${columns.map((column) => String(row[column.field] ?? "")).join("|")}`}
+                                    className="border-b border-border/30 last:border-b-0"
+                                >
                                     {columns.map((column) => (
                                         <td
                                             key={column.field}
-                                            className="border-b border-border/30 px-3 py-2 align-top text-muted-foreground last:border-b-0"
+                                            className="px-3 py-2 align-top text-muted-foreground"
                                         >
-                                            {formatChartTableValue(row[column.field], column.format)}
+                                            {formatChartTableValue(
+                                                row[column.field],
+                                                column.format,
+                                            )}
                                         </td>
                                     ))}
                                 </tr>

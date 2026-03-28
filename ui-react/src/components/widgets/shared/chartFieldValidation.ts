@@ -4,7 +4,7 @@ export type SqlFieldMetadata = {
 };
 
 export type ChartEncodingChannel = {
-    field: string;
+    field?: string;
 };
 
 export type ChartEncoding = Partial<{
@@ -27,11 +27,72 @@ export type ChartEncodingValidationResult =
               | "invalid_field_type";
           channel: string;
           field?: string;
+          path?: string;
       };
 
 const NUMERIC_TYPES = new Set(["integer", "float", "decimal", "number"]);
 const TEMPORAL_TYPES = new Set(["datetime", "date", "timestamp"]);
 const CATEGORICAL_TYPES = new Set(["text", "string", "boolean"]);
+
+function isNumericLike(value: unknown): boolean {
+    if (typeof value === "number") {
+        return Number.isFinite(value);
+    }
+
+    if (typeof value !== "string") {
+        return false;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+        return false;
+    }
+
+    return !Number.isNaN(Number(trimmed));
+}
+
+function inferFieldType(values: unknown[]): string | null {
+    const nonNullValues = values.filter((value) => value != null);
+    if (nonNullValues.length === 0) {
+        return null;
+    }
+
+    if (nonNullValues.every((value) => isNumericLike(value))) {
+        return "number";
+    }
+
+    if (nonNullValues.every((value) => typeof value === "boolean")) {
+        return "boolean";
+    }
+
+    if (
+        nonNullValues.every(
+            (value) =>
+                typeof value === "string" && !Number.isNaN(new Date(value).getTime()),
+        )
+    ) {
+        return "datetime";
+    }
+
+    return "string";
+}
+
+export function deriveSqlFieldsFromRows(
+    rows: Array<Record<string, unknown>> | undefined,
+): SqlFieldMetadata[] {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return [];
+    }
+
+    const fieldNames = Array.from(
+        new Set(rows.flatMap((row) => Object.keys(row ?? {}))),
+    );
+
+    return fieldNames.map((name) => ({
+        name,
+        type: inferFieldType(rows.map((row) => row?.[name])),
+    }));
+}
 
 function normalizeFieldType(type?: string | null): string {
     return String(type ?? "").trim().toLowerCase();
@@ -82,8 +143,13 @@ export function validateChartEncoding(
                 kind: "config_error",
                 code: "missing_required_channel",
                 channel,
+                path: `encoding.${channel}.field`,
             };
         }
+    }
+
+    if (chartType === "Chart.Table" && fieldIndex.size === 0) {
+        return { ok: true };
     }
 
     for (const channel of ["x", "y", "series", "value", "label"] as const) {
@@ -100,6 +166,7 @@ export function validateChartEncoding(
                 code: "unknown_field",
                 channel,
                 field: selected.field,
+                path: `encoding.${channel}.field`,
             };
         }
 
@@ -111,11 +178,12 @@ export function validateChartEncoding(
                 code: "invalid_field_type",
                 channel,
                 field: selected.field,
+                path: `encoding.${channel}.field`,
             };
         }
     }
 
-    for (const column of safeEncoding.columns ?? []) {
+    for (const [index, column] of (safeEncoding.columns ?? []).entries()) {
         if (!fieldIndex.has(column.field)) {
             return {
                 ok: false,
@@ -123,6 +191,7 @@ export function validateChartEncoding(
                 code: "unknown_field",
                 channel: "columns",
                 field: column.field,
+                path: `encoding.columns[${index}].field`,
             };
         }
     }

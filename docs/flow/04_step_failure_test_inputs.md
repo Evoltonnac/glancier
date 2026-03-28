@@ -67,7 +67,7 @@ Refresh scheduler retry architecture: [05_refresh_scheduler_and_retry.md](05_ref
 
 - Goal: validate deterministic SQL contract/runtime/trust failures for `use: sql`
 - Input baseline:
-  - connector profile + credentials reference
+  - connector profile + top-level connection string (`dsn`/`uri`, supported: `sqlite`, `postgresql`, `mysql`)
   - user-authored SQL query text
   - optional `timeout` / `max_rows` overrides
 - Expected SQL failure classes and `error_code` contracts:
@@ -87,7 +87,7 @@ Refresh scheduler retry architecture: [05_refresh_scheduler_and_retry.md](05_ref
 | Trust required | risk-class SQL (for example `DELETE`) with no allow decision | source status `suspended`, interaction `confirm`, `error_code=runtime.sql_risk_operation_requires_trust` |
 | Trust denied | risk-class SQL with deny decision | source status `error`, `error_code=runtime.sql_risk_operation_denied` |
 | Connect failure | bad DSN/path/host | source status `error`, `error_code=runtime.sql_connect_failed` |
-| Auth failure | invalid credential payload | source status `error`, `error_code=runtime.sql_auth_failed` |
+| Auth failure | invalid auth payload in DSN/URI | source status `error`, `error_code=runtime.sql_auth_failed` |
 | Query failure | syntactically valid but runtime-invalid query | source status `error`, `error_code=runtime.sql_query_failed` |
 | Timeout | low timeout against slow query | source status `error`, `error_code=runtime.sql_timeout` |
 
@@ -107,3 +107,30 @@ For successful SQL executions, verify normalized envelope metadata explicitly:
 4. Compatibility aliases remain consistent:
    - `sql_response.columns` mirrors `sql_response.fields[*].name`
    - `sql_response.execution_ms == sql_response.duration_ms`
+
+## 7. `test_fail_step_mongodb.yaml`
+
+- Goal: validate deterministic MongoDB contract/runtime failures for `use: mongodb`
+- Input baseline:
+  - top-level connection string (`uri`/`dsn`) + `database` + `collection`
+  - `operation` in (`find`, `aggregate`)
+  - operation-specific query args (`filter/projection/sort` or `pipeline`)
+- Expected MongoDB failure classes and `error_code` contracts:
+  - invalid step contract or unsupported operation: `runtime.mongo_invalid_contract`
+  - MongoDB connect failure: `runtime.mongo_connect_failed`
+  - MongoDB authentication failure: `runtime.mongo_auth_failed`
+  - MongoDB query failure: `runtime.mongo_query_failed`
+  - MongoDB timeout: `runtime.mongo_timeout`
+
+## 8. `test_fail_step_redis.yaml`
+
+- Goal: validate deterministic Redis contract/runtime failures for `use: redis`
+- Input baseline:
+  - top-level connection string (`uri`/`dsn`)
+  - read-only `command` + command-specific args (`key`, `keys`, `start`, `stop`, `withscores`)
+- Expected Redis failure classes and `error_code` contracts:
+  - invalid step contract or unsupported command: `runtime.redis_invalid_contract`
+  - Redis connect failure: `runtime.redis_connect_failed`
+  - Redis authentication failure: `runtime.redis_auth_failed`
+  - Redis query failure: `runtime.redis_query_failed`
+  - Redis timeout: `runtime.redis_timeout`

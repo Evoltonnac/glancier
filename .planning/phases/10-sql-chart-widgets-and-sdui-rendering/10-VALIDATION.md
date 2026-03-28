@@ -21,7 +21,7 @@ created: 2026-03-25
 | **Config file** | `/Users/xingminghua/Coding/evoltonnac/glanceus/ui-react/vitest.config.ts` |
 | **Quick run command** | `npm --prefix /Users/xingminghua/Coding/evoltonnac/glanceus/ui-react run test -- src/components/widgets/WidgetRenderer.test.tsx --run` |
 | **Full suite command** | `npm --prefix /Users/xingminghua/Coding/evoltonnac/glanceus/ui-react run test:core` |
-| **Estimated runtime** | ~60 seconds |
+| **Estimated runtime** | ~45-60 seconds (target focused checks <45s) |
 
 ---
 
@@ -30,7 +30,7 @@ created: 2026-03-25
 - **After every task commit:** Run `npm --prefix /Users/xingminghua/Coding/evoltonnac/glanceus/ui-react run test -- src/components/widgets/WidgetRenderer.test.tsx --run`
 - **After every plan wave:** Run `npm --prefix /Users/xingminghua/Coding/evoltonnac/glanceus/ui-react run test:core`
 - **Before `/gsd:verify-work`:** Full suite must be green
-- **Max feedback latency:** 60 seconds
+- **Max feedback latency:** <60 seconds (target 45 seconds with focused task commands)
 
 ---
 

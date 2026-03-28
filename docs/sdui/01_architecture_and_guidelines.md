@@ -114,19 +114,20 @@ To output literal template markers, use backslash escapes:
     series:
       field: "category"
   legend: true
-  colors: ["chart.blue", "chart.teal"]
+  colors: ["blue", "teal"]
   empty_state: "No chart data available"
 
 - type: "Chart.Table"
   data_source: "{sql_response.rows}"
   title: "Top regions"
-  columns:
-    - field: "label"
-      title: "Region"
-      format: "text"
-    - field: "amount"
-      title: "Revenue"
-      format: "number"
+  encoding:
+    columns:
+      - field: "label"
+        title: "Region"
+        format: "text"
+      - field: "amount"
+        title: "Revenue"
+        format: "number"
   sort_by: "amount"
   sort_order: "desc"
   limit: 10
@@ -147,14 +148,14 @@ Shared chart props:
 - `title`
 - `description`
 - `legend`
-- `colors`
+- `colors`: chart semantic color names only (`blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`); values cycle when series exceed 12; raw hex, CSS variables, and native color values are not supported
 - `format`
 - `empty_state`
 
 Per-chart required encoding channels:
 - `Chart.Line` / `Chart.Bar` / `Chart.Area`: `encoding.x`, `encoding.y`, optional `encoding.series`
-- `Chart.Pie`: `encoding.label`, `encoding.value`
-- `Chart.Table`: `columns.field` references must map to dataset fields; `encoding.columns` is supported for validation compatibility, but `columns` is the canonical authoring surface
+- `Chart.Pie`: `encoding.label`, `encoding.value`, optional `donut` (boolean)
+- `Chart.Table`: `encoding.columns[*].field` references must map to dataset fields; `sort_by`, `sort_order`, and `limit` remain top-level table controls
 
 Deterministic chart fallback states:
 - `loading`
@@ -179,7 +180,16 @@ For the same `spacing` token: **Layout >= Micro**. Current mapping:
 - Recommended baseline: `rounded-md border border-border/40 bg-surface/20`
 - Principle: grouping should be visible but not overpower content.
 
-## 6. Schema-First Constraints
+## 6. Widget Layout and Responsive Shell Contract
+
+To support discrete grid heights without JS calculations or squashed UI, Glanceus uses a CSS Flexbox `min-height` + `flex-shrink: 0` approach.
+
+- **Structural Widgets** (`TextBlock`, `FactSet`, etc.): Height is defined by content (`flex-none`).
+- **Content Widgets** (`List`, `Chart.*`, etc.): Share remaining space based on weight, with a rigid minimum height defined in grid rows (e.g. `2` rows).
+
+For implementation details and scroll strategies, see: [04_widget_layout_contract.md](04_widget_layout_contract.md).
+
+## 7. Schema-First Constraints
 
 1. Define schema first, then derive component props.
 2. Run schema `safeParse` before rendering.

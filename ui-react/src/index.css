@@ -31,6 +31,20 @@
     --success: 142.1 70.6% 45.3%; /* Emerald 500 */
     --error: 0 84.2% 60.2%; /* Red 500 */
 
+    /* Semantic Chart Colors */
+    --chart-blue: 221.2 83.2% 53.3%;
+    --chart-teal: 172.5 66% 50.4%;
+    --chart-green: 142.1 70.6% 45.3%;
+    --chart-cyan: 188.7 94.5% 42.7%;
+    --chart-yellow: 47.9 95.8% 53.1%;
+    --chart-gold: 38 92% 50%;
+    --chart-orange: 24.6 95% 53.1%;
+    --chart-amber: 37.7 92.1% 50.2%;
+    --chart-red: 0 84.2% 60.2%;
+    --chart-violet: 262.1 83.3% 57.8%;
+    --chart-pink: 330.4 81.2% 60.4%;
+    --chart-slate: 215.4 16.3% 46.9%;
+
     --radius: 0.5rem;
 
     /* GridStack grid row height tokens — keep in sync with GRID_ROW_HEIGHT / GRID_MARGIN in App.tsx */
@@ -87,6 +101,20 @@
     --warning: 24.6 95% 53.1%; /* Orange 500 */
     --success: 142.1 70.6% 45.3%; /* Emerald 500 */
     --error: 0 84.2% 60.2%; /* Red 500 */
+
+    /* Semantic Chart Colors */
+    --chart-blue: 213.1 93.9% 67.8%;
+    --chart-teal: 173.4 80.4% 40%;
+    --chart-green: 142.1 76.2% 36.3%;
+    --chart-cyan: 189.8 94.5% 57.8%;
+    --chart-yellow: 47.9 95.8% 53.1%;
+    --chart-gold: 42 96% 62%;
+    --chart-orange: 20.5 90.2% 48.2%;
+    --chart-amber: 43.3 96.4% 56.3%;
+    --chart-red: 0 72.2% 50.6%;
+    --chart-violet: 258.3 89.5% 66.3%;
+    --chart-pink: 329.7 85.5% 70.2%;
+    --chart-slate: 214.3 31.8% 65.9%;
 
     /* Card density - uses [data-density] selector to override */
     --qb-density: 1;
@@ -187,6 +215,35 @@
 .monaco-editor *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
+}
+
+/* ── SDUI card shell and layout contract ────────────────────────────── */
+.sdui-card-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sdui-widget-shell {
+  min-width: 0;
+}
+
+.sdui-widget-shell--structural {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+}
+
+.sdui-widget-shell--content {
+  flex: var(--widget-weight, 1) 0 0px;
+  min-height: calc(var(--qb-grid-row-height) * var(--widget-min-height-rows, 1));
+}
+
+.sdui-widget-shell--content > * {
+  min-height: 0;
 }
 
 /* ── Card header drag handle ───────────────────────────────────────── */

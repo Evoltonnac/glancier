@@ -115,7 +115,16 @@ vi.mock("../hooks/useScraper", () => ({
 }));
 
 vi.mock("../components/auth/FlowHandler", () => ({
-    FlowHandler: () => null,
+    FlowHandler: ({ source, isOpen }: { source: any; isOpen: boolean }) => (
+        <div
+            data-testid="mock-flow-handler"
+            data-open={isOpen ? "true" : "false"}
+            data-source-id={source?.id ?? ""}
+            data-step-id={source?.interaction?.step_id ?? ""}
+            data-field-count={String(source?.interaction?.fields?.length ?? 0)}
+            data-title={source?.interaction?.title ?? ""}
+        />
+    ),
 }));
 
 vi.mock("../components/ScraperStatusBanner", () => ({
@@ -123,7 +132,7 @@ vi.mock("../components/ScraperStatusBanner", () => ({
 }));
 
 vi.mock("../components/BaseSourceCard", () => ({
-    BaseSourceCard: () => <div data-testid="mock-base-source-card" />,
+    BaseSourceCard: () => <div data-testid="mock-base-source-card" className="mock-base-source-card" />,
 }));
 
 vi.mock("../components/AddWidgetDialog", () => ({
@@ -158,8 +167,8 @@ import ViewTabsBar from "../components/dashboard/ViewTabsBar";
 import enMessages from "../i18n/messages/en";
 import zhMessages from "../i18n/messages/zh";
 import { render } from "../test/render";
-import type { StoredView } from "../types/config";
 import Dashboard from "./Dashboard";
+import "../index.css";
 
 function makeView(id: string, name: string): StoredView {
     return {
@@ -214,6 +223,100 @@ function resetDashboardMocks(views: StoredView[], activeViewId: string | null) {
 }
 
 describe("tab bar and management panel", () => {
+    it("wraps dashboard widgets with the shared sdui card shell", async () => {
+        const viewWithWidget: StoredView = {
+            id: "view-shell",
+            name: "Shell View",
+            layout_columns: 12,
+            items: [
+                {
+                    id: "widget-1",
+                    template_id: "source_card",
+                    type: "source_card",
+                    x: 0,
+                    y: 0,
+                    w: 6,
+                    h: 4,
+                    source_id: null,
+                    props: { label: "Widget Shell" },
+                },
+            ],
+        };
+
+        resetDashboardMocks([viewWithWidget], "view-shell");
+
+        render(<Dashboard />);
+
+        const shell = await screen.findByText((_, element) =>
+            Boolean(
+                element?.classList.contains("sdui-card-shell") &&
+                    element.querySelector('[data-testid="mock-base-source-card"]'),
+            ),
+        );
+
+        expect(shell).toHaveClass("sdui-card-shell");
+        expect(shell).toHaveClass("h-full");
+        expect(shell).toHaveClass("w-full");
+        expect(shell).toHaveClass("min-h-0");
+    });
+
+    it("passes the freshest interaction source to FlowHandler", async () => {
+        const suspendedSource = {
+            id: "source-1",
+            name: "Test Source",
+            description: "test source",
+            enabled: true,
+            auth_type: "api_key",
+            has_data: false,
+            status: "suspended",
+            interaction: {
+                type: "input_text",
+                step_id: "collect_sqlite_inputs",
+                title: "SQLite Connection (Chinook)",
+                description: "Provide a local path to Chinook_Sqlite.sqlite.",
+                message: "Input SQLite path and SQL guardrails for this test source.",
+                fields: [
+                    { key: "chinook_db_path", label: "Chinook SQLite Path", type: "text", required: true },
+                    { key: "sql_timeout_seconds", label: "SQL Timeout Seconds", type: "text", required: false },
+                    { key: "sql_max_rows", label: "SQL Max Rows", type: "text", required: false },
+                ],
+            },
+        };
+
+        resetDashboardMocks([], null);
+        useSourcesMock.mockReturnValue({
+            sources: [suspendedSource],
+            dataMap: {},
+            isLoading: false,
+        });
+        storeState.interactSource = {
+            ...suspendedSource,
+            interaction: {
+                ...suspendedSource.interaction,
+                step_id: "api_key",
+                title: "API Key",
+                message: "Provide API key",
+                fields: [
+                    { key: "api_key", label: "API Key", type: "password", required: true },
+                ],
+            },
+        };
+
+        render(<Dashboard />);
+
+        await waitFor(() => {
+            const flowHandler = screen.getByTestId("mock-flow-handler");
+            expect(flowHandler).toHaveAttribute("data-open", "true");
+            expect(flowHandler).toHaveAttribute("data-source-id", "source-1");
+            expect(flowHandler).toHaveAttribute("data-step-id", "collect_sqlite_inputs");
+            expect(flowHandler).toHaveAttribute("data-field-count", "3");
+            expect(flowHandler).toHaveAttribute(
+                "data-title",
+                "SQLite Connection (Chinook)",
+            );
+        });
+    });
+
     it("renders Chrome-style tabs with active and inactive states", () => {
         const onSelectView = vi.fn();
         const onRenameView = vi.fn();

@@ -201,6 +201,106 @@ describe("FlowHandler", () => {
         expect(apiMock.getDeviceFlowStatus).toHaveBeenCalledWith("source-1");
     });
 
+    it("uses interaction title and description for dialog copy", async () => {
+        render(
+            <FlowHandler
+                source={buildSource({
+                    type: "input_text",
+                    title: "SQLite Connection (Chinook)",
+                    description: "Provide a local path to Chinook_Sqlite.sqlite.",
+                    message: "Input SQLite path and SQL guardrails for this test source.",
+                    fields: [
+                        {
+                            key: "chinook_db_path",
+                            label: "Chinook SQLite Path",
+                            type: "text",
+                            required: true,
+                        },
+                    ],
+                })}
+                isOpen={true}
+                onClose={vi.fn()}
+                onInteractSuccess={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByText("SQLite Connection (Chinook)")).toBeInTheDocument();
+        expect(
+            screen.getByText("Provide a local path to Chinook_Sqlite.sqlite."),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Input SQLite path and SQL guardrails for this test source."),
+        ).not.toBeInTheDocument();
+    });
+
+    it("resets rendered fields when the interaction step changes", () => {
+        const { rerender } = render(
+            <FlowHandler
+                source={buildSource({
+                    type: "input_text",
+                    step_id: "api_key",
+                    title: "API Key",
+                    message: "Provide API key",
+                    fields: [
+                        {
+                            key: "api_key",
+                            label: "API Key",
+                            type: "password",
+                            required: true,
+                        },
+                    ],
+                })}
+                isOpen={true}
+                onClose={vi.fn()}
+                onInteractSuccess={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByLabelText("API Key *")).toBeInTheDocument();
+        expect(screen.queryByLabelText("SQL Timeout Seconds")).not.toBeInTheDocument();
+
+        rerender(
+            <FlowHandler
+                source={buildSource({
+                    type: "input_text",
+                    step_id: "collect_sqlite_inputs",
+                    title: "SQLite Connection (Chinook)",
+                    description: "Provide a local path to Chinook_Sqlite.sqlite.",
+                    message: "Input SQLite path and SQL guardrails for this test source.",
+                    fields: [
+                        {
+                            key: "chinook_db_path",
+                            label: "Chinook SQLite Path",
+                            type: "text",
+                            required: true,
+                        },
+                        {
+                            key: "sql_timeout_seconds",
+                            label: "SQL Timeout Seconds",
+                            type: "text",
+                            required: false,
+                        },
+                        {
+                            key: "sql_max_rows",
+                            label: "SQL Max Rows",
+                            type: "text",
+                            required: false,
+                        },
+                    ],
+                })}
+                isOpen={true}
+                onClose={vi.fn()}
+                onInteractSuccess={vi.fn()}
+            />,
+        );
+
+        expect(screen.queryByLabelText("API Key *")).not.toBeInTheDocument();
+        expect(screen.getByLabelText("Chinook SQLite Path *")).toBeInTheDocument();
+        expect(screen.getByLabelText("SQL Timeout Seconds")).toBeInTheDocument();
+        expect(screen.getByLabelText("SQL Max Rows")).toBeInTheDocument();
+        expect(screen.getByText("SQLite Connection (Chinook)")).toBeInTheDocument();
+    });
+
     it("renders optional typed fields and submits normalized values", async () => {
         const onClose = vi.fn();
         const onInteractSuccess = vi.fn();
@@ -362,7 +462,7 @@ describe("FlowHandler", () => {
         render(
             <FlowHandler
                 source={buildSource({
-                    type: "input_text",
+                    type: "input_form",
                     message: "Fill credentials",
                     fields: [
                         {

@@ -21,8 +21,13 @@ import type {
     ChartEncoding,
     ChartEncodingChannel,
 } from "../../shared/chartFieldValidation";
+import {
+    CHART_SEMANTIC_COLORS,
+    type ChartSemanticColor,
+} from "../../shared/chartSchemas";
 
-const DEFAULT_PALETTE = ["blue", "teal", "green", "amber", "violet", "pink", "slate", "red"];
+const DEFAULT_PALETTE: ChartSemanticColor[] = [...CHART_SEMANTIC_COLORS];
+
 
 type ChartRow = Record<string, unknown>;
 
@@ -30,23 +35,42 @@ type CartesianAdapterInput = {
     rows: ChartRow[];
     encoding: ChartEncoding;
     legend?: boolean;
-    colors?: string[];
+    colors?: ChartSemanticColor[];
 };
 
 type PieAdapterInput = {
     rows: ChartRow[];
     encoding: ChartEncoding;
     legend?: boolean;
-    colors?: string[];
+    colors?: ChartSemanticColor[];
     donut?: boolean;
 };
 
 function getField(channel: ChartEncodingChannel | undefined): string {
-    return channel?.field ?? "";
+    return String(channel?.field ?? "").trim();
 }
 
-function getPalette(colors?: string[]): string[] {
+const CHART_COLOR_TOKEN_MAP: Record<ChartSemanticColor, string> = {
+    blue: "hsl(var(--chart-blue))",
+    teal: "hsl(var(--chart-teal))",
+    green: "hsl(var(--chart-green))",
+    cyan: "hsl(var(--chart-cyan))",
+    yellow: "hsl(var(--chart-yellow))",
+    gold: "hsl(var(--chart-gold))",
+    orange: "hsl(var(--chart-orange))",
+    amber: "hsl(var(--chart-amber))",
+    red: "hsl(var(--chart-red))",
+    violet: "hsl(var(--chart-violet))",
+    pink: "hsl(var(--chart-pink))",
+    slate: "hsl(var(--chart-slate))",
+};
+
+function getPalette(colors?: ChartSemanticColor[]): ChartSemanticColor[] {
     return colors && colors.length > 0 ? colors : DEFAULT_PALETTE;
+}
+
+function resolveSemanticColor(color: ChartSemanticColor): string {
+    return CHART_COLOR_TOKEN_MAP[color];
 }
 
 function uniqueSeriesValues(rows: ChartRow[], field?: string): string[] {
@@ -64,30 +88,40 @@ function uniqueSeriesValues(rows: ChartRow[], field?: string): string[] {
     );
 }
 
-function colorAt(index: number, colors?: string[]): string {
+function colorAt(index: number, colors?: ChartSemanticColor[]): string {
     const palette = getPalette(colors);
-    return palette[index % palette.length] ?? DEFAULT_PALETTE[0];
+    const colorName = palette[index % palette.length] ?? DEFAULT_PALETTE[0];
+    return resolveSemanticColor(colorName);
 }
 
-function CartesianCommon({
-    children,
-    xField,
-    legend,
-}: {
-    children: ReactNode;
-    xField: string;
-    legend?: boolean;
-}) {
-    return (
-        <>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={xField} />
-            <YAxis />
-            <Tooltip />
-            {legend ? <Legend /> : null}
-            {children}
-        </>
-    );
+function coerceNumericValue(value: unknown): number | null {
+    if (typeof value === "number") {
+        return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return null;
+        }
+        const parsed = Number(trimmed);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+}
+
+function cartesianCommonElements(
+    xField: string,
+    legend?: boolean,
+): ReactNode[] {
+    return [
+        <CartesianGrid key="grid" strokeDasharray="3 3" />,
+        <XAxis key="xaxis" dataKey={xField} />,
+        <YAxis key="yaxis" />,
+        <Tooltip key="tooltip" />,
+        ...(legend ? [<Legend key="legend" />] : []),
+    ];
 }
 
 function renderCartesianSeries({
@@ -101,57 +135,86 @@ function renderCartesianSeries({
     const yField = getField(encoding.y);
     const seriesField = getField(encoding.series);
     const seriesValues = uniqueSeriesValues(rows, seriesField);
+    const hasSeriesChannel = Boolean(seriesField) && seriesValues.length > 0;
     const palette = getPalette(colors);
+    const initializedSeriesDefaults = hasSeriesChannel
+        ? Object.fromEntries(seriesValues.map((seriesKey) => [seriesKey, null]))
+        : {};
+    const normalizedRows = rows.map((row) => ({
+        ...row,
+        [yField]: coerceNumericValue(row[yField]),
+    }));
 
     const renderSeriesNode = (seriesKey: string, index: number) => {
         const sharedProps = {
-            dataKey: seriesField ? seriesKey : yField,
+            dataKey: hasSeriesChannel ? seriesKey : yField,
             name: seriesKey,
-            stroke: palette[index % palette.length],
-            fill: palette[index % palette.length],
+            stroke: colorAt(index, palette),
+            fill: colorAt(index, palette),
         };
 
         if (kind === "line") {
-            return <Line key={seriesKey} type="monotone" {...sharedProps} dot={false} />;
+            return (
+                <Line
+                    key={seriesKey}
+                    type="monotone"
+                    {...sharedProps}
+                    dot={false}
+                    connectNulls={Boolean(seriesField)}
+                />
+            );
         }
 
         if (kind === "bar") {
             return <Bar key={seriesKey} {...sharedProps} />;
         }
 
-        return <Area key={seriesKey} type="monotone" {...sharedProps} fillOpacity={0.3} />;
+        return (
+            <Area
+                key={seriesKey}
+                type="monotone"
+                {...sharedProps}
+                fillOpacity={0.3}
+                connectNulls={Boolean(seriesField)}
+            />
+        );
     };
 
-    const chartData = seriesField
+    const chartData = hasSeriesChannel
         ? Array.from(
               rows.reduce((accumulator, row) => {
                   const xValue = row[xField];
                   const seriesValue = row[seriesField];
                   const yValue = row[yField];
                   const key = String(xValue ?? "");
-                  const existing = accumulator.get(key) ?? { [xField]: xValue };
+                  const existing = accumulator.get(key) ?? {
+                      [xField]: xValue,
+                      ...initializedSeriesDefaults,
+                  };
+                  const normalizedY = coerceNumericValue(yValue);
 
                   if (seriesValue !== null && seriesValue !== undefined) {
-                      existing[String(seriesValue)] = yValue;
+                      existing[String(seriesValue)] = normalizedY;
                   }
 
                   accumulator.set(key, existing);
                   return accumulator;
               }, new Map<string, ChartRow>()),
           ).map(([, value]) => value)
-        : rows;
+        : normalizedRows;
 
-    const seriesNodes = seriesField
-        ? seriesValues.map((seriesValue, index) => renderSeriesNode(seriesValue, index))
+    const seriesNodes = hasSeriesChannel
+        ? seriesValues.map((seriesValue, index) =>
+              renderSeriesNode(seriesValue, index),
+          )
         : [renderSeriesNode(yField, 0)];
 
     if (kind === "line") {
         return (
             <ResponsiveContainer width="100%" height="100%" minHeight={240}>
                 <LineChart data={chartData}>
-                    <CartesianCommon xField={xField} legend={legend}>
-                        {seriesNodes}
-                    </CartesianCommon>
+                    {cartesianCommonElements(xField, legend)}
+                    {seriesNodes}
                 </LineChart>
             </ResponsiveContainer>
         );
@@ -161,9 +224,8 @@ function renderCartesianSeries({
         return (
             <ResponsiveContainer width="100%" height="100%" minHeight={240}>
                 <BarChart data={chartData}>
-                    <CartesianCommon xField={xField} legend={legend}>
-                        {seriesNodes}
-                    </CartesianCommon>
+                    {cartesianCommonElements(xField, legend)}
+                    {seriesNodes}
                 </BarChart>
             </ResponsiveContainer>
         );
@@ -172,9 +234,8 @@ function renderCartesianSeries({
     return (
         <ResponsiveContainer width="100%" height="100%" minHeight={240}>
             <AreaChart data={chartData}>
-                <CartesianCommon xField={xField} legend={legend}>
-                    {seriesNodes}
-                </CartesianCommon>
+                {cartesianCommonElements(xField, legend)}
+                {seriesNodes}
             </AreaChart>
         </ResponsiveContainer>
     );
@@ -192,7 +253,13 @@ export function renderAreaChart(input: CartesianAdapterInput) {
     return renderCartesianSeries({ ...input, kind: "area" });
 }
 
-export function renderPieChart({ rows, encoding, legend, colors, donut }: PieAdapterInput) {
+export function renderPieChart({
+    rows,
+    encoding,
+    legend,
+    colors,
+    donut,
+}: PieAdapterInput) {
     const labelField = getField(encoding.label);
     const valueField = getField(encoding.value);
 

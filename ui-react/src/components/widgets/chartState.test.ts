@@ -65,6 +65,7 @@ describe("classifyChartState", () => {
                     code: "unknown_field",
                     channel: "y",
                     field: "missing_metric",
+                    path: "encoding.y.field",
                 },
             }),
         ).toEqual({
@@ -75,6 +76,7 @@ describe("classifyChartState", () => {
                 code: "unknown_field",
                 channel: "y",
                 field: "missing_metric",
+                path: "encoding.y.field",
             },
         });
     });

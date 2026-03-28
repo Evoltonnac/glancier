@@ -7,6 +7,7 @@ import hmac
 import os
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from fastapi import (
@@ -753,6 +754,29 @@ def _extract_network_trust_binding_data(interaction: InteractionRequest | Any) -
     return data
 
 
+def _normalize_persisted_interaction(interaction: Any) -> InteractionRequest | Any | None:
+    if isinstance(interaction, InteractionRequest):
+        return interaction
+    if not isinstance(interaction, dict):
+        return interaction
+
+    raw_fields = interaction.get("fields")
+    fields = []
+    if isinstance(raw_fields, list):
+        for raw_field in raw_fields:
+            if isinstance(raw_field, dict):
+                fields.append(SimpleNamespace(**raw_field))
+            else:
+                fields.append(raw_field)
+
+    return SimpleNamespace(
+        type=interaction.get("type"),
+        source_id=interaction.get("source_id"),
+        fields=fields,
+        data=interaction.get("data"),
+    )
+
+
 def create_stored_source_record(
     source: StoredSource,
     resource_manager,
@@ -1392,8 +1416,20 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
     if source is None:
         raise HTTPException(500, f"无法解析数据源 '{source_id}'")
 
+    try:
+        latest_data = (
+            _data_controller.get_latest(source_id)
+            if _data_controller is not None and hasattr(_data_controller, "get_latest")
+            else None
+        )
+    except StorageContractError as error:
+        return _storage_error_response(error)
+    persisted_interaction = None
+    if isinstance(latest_data, dict):
+        persisted_interaction = _normalize_persisted_interaction(latest_data.get("interaction"))
     state = _executor.get_source_state(source_id)
-    pending_interaction = getattr(state, "interaction", None) if state else None
+    runtime_interaction = getattr(state, "interaction", None) if state else None
+    pending_interaction = persisted_interaction if persisted_interaction is not None else runtime_interaction
 
     # Special Handling: OAuth Code Exchange (Client-Side Callback)
     interaction_type = (
@@ -1579,6 +1615,7 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
         pending_interaction,
         expected_interaction_types={
             InteractionType.INPUT_TEXT.value,
+            InteractionType.INPUT_FORM.value,
             InteractionType.COOKIES_REFRESH.value,
             InteractionType.CAPTCHA.value,
             InteractionType.CONFIRM.value,

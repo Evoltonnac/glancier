@@ -103,6 +103,55 @@ describe("chart schemas", () => {
         expect(validChart.success).toBe(true);
     });
 
+    it("accepts semantic chart colors and rejects raw color values", () => {
+        const validChart = ChartLineSchema.safeParse({
+            type: "Chart.Line",
+            data_source: "sql_response.rows",
+            encoding: {
+                x: { field: "ts" },
+                y: { field: "amount" },
+            },
+            colors: ["gold", "violet", "slate"],
+        });
+        expect(validChart.success).toBe(true);
+
+        const invalidHex = ChartLineSchema.safeParse({
+            type: "Chart.Line",
+            data_source: "sql_response.rows",
+            encoding: {
+                x: { field: "ts" },
+                y: { field: "amount" },
+            },
+            colors: ["#123456"],
+        });
+        expect(invalidHex.success).toBe(false);
+        expect(invalidHex.error?.issues.map((issue) => issue.path.join("."))).toContain(
+            "colors.0",
+        );
+
+        const invalidCssVar = ChartLineSchema.safeParse({
+            type: "Chart.Line",
+            data_source: "sql_response.rows",
+            encoding: {
+                x: { field: "ts" },
+                y: { field: "amount" },
+            },
+            colors: ["var(--brand)"],
+        });
+        expect(invalidCssVar.success).toBe(false);
+
+        const invalidLegacyName = ChartLineSchema.safeParse({
+            type: "Chart.Line",
+            data_source: "sql_response.rows",
+            encoding: {
+                x: { field: "ts" },
+                y: { field: "amount" },
+            },
+            colors: ["chart.blue"],
+        });
+        expect(invalidLegacyName.success).toBe(false);
+    });
+
     it("Chart.Table accepts columns entries and rejects unknown field references", () => {
         const validTable = ChartTableSchema.safeParse({
             type: "Chart.Table",
@@ -115,16 +164,21 @@ describe("chart schemas", () => {
                     { field: "count", format: "integer" },
                 ],
             },
-            columns: [
-                { field: "label", title: "Region" },
-                { field: "amount", title: "Revenue", format: "currency" },
-                { field: "count", format: "integer" },
-            ],
             sort_by: "amount",
             sort_order: "desc",
             limit: 3,
         });
         expect(validTable.success).toBe(true);
+
+        const invalidLegacyColumns = ChartTableSchema.safeParse({
+            type: "Chart.Table",
+            data_source: "sql_response.rows",
+            columns: [{ field: "label", title: "Region" }],
+            encoding: {
+                columns: [{ field: "label", title: "Region" }],
+            },
+        });
+        expect(invalidLegacyColumns.success).toBe(false);
 
         const invalidField = validateChartEncoding(
             "Chart.Table",
@@ -140,10 +194,23 @@ describe("chart schemas", () => {
             code: "unknown_field",
             channel: "columns",
             field: "missing_field",
+            path: "encoding.columns[0].field",
         });
     });
 
-    it("rejects unknown fields and incompatible numeric channels against sql_response.fields", () => {
+    it("Chart.Table treats empty data field metadata as empty-state-compatible", () => {
+        expect(
+            validateChartEncoding(
+                "Chart.Table",
+                {
+                    columns: [{ field: "label", title: "Region" }],
+                },
+                [],
+            ),
+        ).toEqual({ ok: true });
+    });
+
+    it("rejects unknown fields and incompatible numeric channels against data source fields", () => {
         expect(
             validateChartEncoding(
                 "Chart.Bar",
@@ -159,6 +226,7 @@ describe("chart schemas", () => {
             code: "unknown_field",
             channel: "y",
             field: "missing_metric",
+            path: "encoding.y.field",
         });
 
         expect(
@@ -176,10 +244,27 @@ describe("chart schemas", () => {
             code: "invalid_field_type",
             channel: "y",
             field: "category",
+            path: "encoding.y.field",
         });
 
         expect(sqlRows).toHaveLength(4);
         expect(ChartAreaSchema.shape.type.value).toBe("Chart.Area");
         expect(ChartBarSchema.shape.type.value).toBe("Chart.Bar");
+    });
+
+    it("derives field metadata directly from chart rows", () => {
+        expect(
+            validateChartEncoding(
+                "Chart.Bar",
+                {
+                    x: { field: "ts" },
+                    y: { field: "amount" },
+                },
+                [
+                    { name: "ts", type: "datetime" },
+                    { name: "amount", type: "number" },
+                ],
+            ),
+        ).toEqual({ ok: true });
     });
 });

@@ -848,7 +848,21 @@
             {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "blue",
+                  "orange",
+                  "green",
+                  "violet",
+                  "red",
+                  "cyan",
+                  "amber",
+                  "pink",
+                  "teal",
+                  "gold",
+                  "slate",
+                  "yellow"
+                ]
               }
             },
             {
@@ -986,7 +1000,21 @@
             {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "blue",
+                  "orange",
+                  "green",
+                  "violet",
+                  "red",
+                  "cyan",
+                  "amber",
+                  "pink",
+                  "teal",
+                  "gold",
+                  "slate",
+                  "yellow"
+                ]
               }
             },
             {
@@ -1124,7 +1152,21 @@
             {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "blue",
+                  "orange",
+                  "green",
+                  "violet",
+                  "red",
+                  "cyan",
+                  "amber",
+                  "pink",
+                  "teal",
+                  "gold",
+                  "slate",
+                  "yellow"
+                ]
               }
             },
             {
@@ -1262,7 +1304,21 @@
             {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "blue",
+                  "orange",
+                  "green",
+                  "violet",
+                  "red",
+                  "cyan",
+                  "amber",
+                  "pink",
+                  "teal",
+                  "gold",
+                  "slate",
+                  "yellow"
+                ]
               }
             },
             {
@@ -1391,7 +1447,21 @@
             {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "blue",
+                  "orange",
+                  "green",
+                  "violet",
+                  "red",
+                  "cyan",
+                  "amber",
+                  "pink",
+                  "teal",
+                  "gold",
+                  "slate",
+                  "yellow"
+                ]
               }
             },
             {
@@ -1429,12 +1499,12 @@
         "encoding": {
           "anyOf": [
             {
-              "default": {},
               "type": "object",
               "properties": {
                 "columns": {
                   "anyOf": [
                     {
+                      "minItems": 1,
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -1462,36 +1532,10 @@
                   ]
                 }
               },
+              "required": [
+                "columns"
+              ],
               "additionalProperties": false
-            },
-            {
-              "$ref": "#/$defs/templatedString"
-            }
-          ]
-        },
-        "columns": {
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "field": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "title": {
-                    "type": "string"
-                  },
-                  "format": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "field"
-                ],
-                "additionalProperties": false
-              }
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -1530,7 +1574,8 @@
       },
       "required": [
         "data_source",
-        "type"
+        "type",
+        "encoding"
       ],
       "additionalProperties": false
     },

@@ -22,7 +22,7 @@ Field semantics:
 | Field | Required | Type | Meaning |
 | --- | --- | --- | --- |
 | `id` | Yes | `string` | Unique step identifier in the flow. |
-| `use` | Yes | `StepType` | One of: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `sql`, `log`, `webview`. |
+| `use` | Yes | `StepType` | One of: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `sql`, `mongodb`, `redis`, `log`, `webview`. |
 | `run` | No | `string \| null` | Reserved field (not currently used by executor logic). |
 | `args` | No | `object` | Step-specific input arguments after `{var}` substitution. |
 | `outputs` | No | `map<string,string>` | Persist/display mappings (`target: source_path`). |
@@ -57,7 +57,9 @@ Non-blocking runtime steps:
 2. `extract`
 3. `script`
 4. `sql` (normal query path when trust check is already resolved)
-5. `log` (schema-defined; see status note below)
+5. `mongodb`
+6. `redis`
+7. `log` (schema-defined; see status note below)
 
 ## 3. Step Catalog
 
@@ -313,7 +315,7 @@ Purpose:
 
 Required `args`:
 - `connector.profile`
-- `credentials` (secret-backed connection fields)
+- connection string: `dsn` or `uri` (secret-backed)
 - `query`
 
 Optional `args`:
@@ -323,6 +325,7 @@ Optional `args`:
 
 Runtime contract:
 - Final SQL text is classified with SQLGlot AST before execution.
+- Connector profile runtime support (current): `sqlite`, `postgresql`, `mysql`.
 - High-risk or non-query statements require trust policy evaluation (`capability=sql`):
   - no trust decision -> suspend with `runtime.sql_risk_operation_requires_trust`
   - explicit deny -> fail with `runtime.sql_risk_operation_denied`
@@ -366,14 +369,80 @@ Typical mapping:
       profile: sqlite
       options:
         dialect: sqlite
-    credentials:
-      database: "{db_path}"
+    dsn: "{sqlite_dsn_or_path}"
     query: "SELECT value FROM metrics ORDER BY id"
     timeout: "{sql_timeout_override}"
     max_rows: "{sql_max_rows_override}"
   outputs:
     sql_rows: "sql_response.rows"
 ```
+
+### `mongodb`
+
+Purpose:
+- Execute read-only MongoDB operations through backend runtime (`find` / `aggregate`) and return deterministic document envelopes.
+
+Required `args`:
+- connection string: `uri` or `dsn` (secret-backed)
+- `database`
+- `collection`
+- `operation` (`find` or `aggregate`)
+
+Optional `args`:
+- `connector.profile` (when provided, must be `mongodb`)
+- `filter`, `projection`, `sort` (for `operation=find`)
+- `pipeline` (for `operation=aggregate`)
+- `timeout` (seconds)
+- `max_rows`
+
+Deterministic runtime MongoDB failure codes:
+- `runtime.mongo_invalid_contract`
+- `runtime.mongo_connect_failed`
+- `runtime.mongo_auth_failed`
+- `runtime.mongo_query_failed`
+- `runtime.mongo_timeout`
+
+Runtime output envelope:
+- `mongo_response.rows`
+- `mongo_response.fields`
+- `mongo_response.row_count`
+- `mongo_response.duration_ms`
+- `mongo_response.truncated`
+- `mongo_response.operation`
+- `mongo_response.timeout_seconds`
+- `mongo_response.max_rows`
+
+### `redis`
+
+Purpose:
+- Execute read-only Redis commands through backend runtime and return deterministic row envelopes.
+
+Required `args`:
+- connection string: `uri` or `dsn` (secret-backed)
+- `command` (currently: `get`, `mget`, `hgetall`, `lrange`, `zrange`, `smembers`)
+
+Optional `args`:
+- `connector.profile` (when provided, must be `redis`)
+- `key`, `keys`, `start`, `stop`, `withscores` (command-specific parameters; `withscores` applies to `zrange`, default `true`)
+- `timeout` (seconds)
+- `max_rows`
+
+Deterministic runtime Redis failure codes:
+- `runtime.redis_invalid_contract`
+- `runtime.redis_connect_failed`
+- `runtime.redis_auth_failed`
+- `runtime.redis_query_failed`
+- `runtime.redis_timeout`
+
+Runtime output envelope:
+- `redis_response.rows`
+- `redis_response.fields`
+- `redis_response.row_count`
+- `redis_response.duration_ms`
+- `redis_response.truncated`
+- `redis_response.command`
+- `redis_response.timeout_seconds`
+- `redis_response.max_rows`
 
 ### `log`
 

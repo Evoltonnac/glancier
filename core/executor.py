@@ -61,6 +61,12 @@ _WEBVIEW_RETRYABLE_KEYWORDS = (
     "timeout",
     "timed out",
 )
+_DB_ERROR_CODE_PREFIXES = ("runtime.sql_", "runtime.mongo_", "runtime.redis_")
+
+
+def _is_database_runtime_error_code(code: Any) -> bool:
+    normalized = str(code or "")
+    return any(normalized.startswith(prefix) for prefix in _DB_ERROR_CODE_PREFIXES)
 
 
 class Executor:
@@ -240,8 +246,8 @@ class Executor:
                 self._update_state(source.id, SourceStatus.ERROR, "No flow defined for source")
 
         except Exception as e:
-            is_sql_error = str(getattr(e, "code", "")).startswith("runtime.sql_")
-            if is_sql_error:
+            is_db_error = _is_database_runtime_error_code(getattr(e, "code", ""))
+            if is_db_error:
                 logger.error(
                     "[%s] Fetch failed: %s",
                     source.id,
@@ -290,7 +296,7 @@ class Executor:
                 default_summary="Fetch failed",
                 include_traceback=(
                     not isinstance(normalized_error, FlowExecutionError)
-                    and not str(getattr(normalized_error, "code", "")).startswith("runtime.sql_")
+                    and not _is_database_runtime_error_code(getattr(normalized_error, "code", ""))
                 ),
             )
             self._update_state(
@@ -340,7 +346,11 @@ class Executor:
                     execute_auth_step,
                     execute_extract_step,
                     execute_script_step,
+                    execute_mongodb_step,
+                    execute_redis_step,
                     execute_sql_step,
+                    MongoStepRuntimeError,
+                    RedisStepRuntimeError,
                     SqlStepRuntimeError,
                 )
 
@@ -352,6 +362,10 @@ class Executor:
                     output = await execute_extract_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.SCRIPT:
                     output = await execute_script_step(step, source, args, context, step_inputs, self)
+                elif step.use == StepType.MONGODB:
+                    output = await execute_mongodb_step(step, source, args, context, step_inputs, self)
+                elif step.use == StepType.REDIS:
+                    output = await execute_redis_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.SQL:
                     output = await execute_sql_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.WEBVIEW:
@@ -402,6 +416,8 @@ class Executor:
                         NetworkTrustRequiredError,
                         NetworkTargetDeniedError,
                         NetworkTargetInvalidError,
+                        MongoStepRuntimeError,
+                        RedisStepRuntimeError,
                         SqlStepRuntimeError,
                     ),
                 ) or getattr(step_error, "code", None) in {
@@ -582,6 +598,8 @@ class Executor:
         from core.steps.sql_step import (
             SqlStepRuntimeError,
         )
+        from core.steps.mongodb_step import MongoStepRuntimeError
+        from core.steps.redis_step import RedisStepRuntimeError
 
         if isinstance(
             error,
@@ -595,6 +613,8 @@ class Executor:
                 NetworkTrustRequiredError,
                 NetworkTargetDeniedError,
                 NetworkTargetInvalidError,
+                MongoStepRuntimeError,
+                RedisStepRuntimeError,
                 SqlStepRuntimeError,
             ),
         ):

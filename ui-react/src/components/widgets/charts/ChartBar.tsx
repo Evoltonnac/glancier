@@ -1,8 +1,11 @@
 import { ChartFrame } from "./ChartFrame";
 import { renderBarChart } from "./adapters/rechartsAdapter";
-import { validateChartEncoding } from "../shared/chartFieldValidation";
+import {
+    deriveSqlFieldsFromRows,
+    validateChartEncoding,
+} from "../shared/chartFieldValidation";
 import { classifyChartState } from "../shared/chartState";
-import type { ChartBar as ChartBarWidget } from "../shared/chartSchemas";
+import type { RuntimeChartBar as ChartBarWidget } from "../shared/chartSchemas";
 
 interface ChartBarProps {
     widget: ChartBarWidget;
@@ -15,7 +18,7 @@ export function ChartBar({ widget, data }: ChartBarProps) {
     const encodingValidation = validateChartEncoding(
         widget.type,
         widget.encoding,
-        Array.isArray(sqlResponse.fields) ? sqlResponse.fields : undefined,
+        deriveSqlFieldsFromRows(rows),
     );
     const state = classifyChartState({
         sourceStatus: sqlResponse.status,

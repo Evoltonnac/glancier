@@ -1,8 +1,11 @@
 import { ChartFrame } from "./ChartFrame";
 import { renderAreaChart } from "./adapters/rechartsAdapter";
-import { validateChartEncoding } from "../shared/chartFieldValidation";
+import {
+    deriveSqlFieldsFromRows,
+    validateChartEncoding,
+} from "../shared/chartFieldValidation";
 import { classifyChartState } from "../shared/chartState";
-import type { ChartArea as ChartAreaWidget } from "../shared/chartSchemas";
+import type { RuntimeChartArea as ChartAreaWidget } from "../shared/chartSchemas";
 
 interface ChartAreaProps {
     widget: ChartAreaWidget;
@@ -15,7 +18,7 @@ export function ChartArea({ widget, data }: ChartAreaProps) {
     const encodingValidation = validateChartEncoding(
         widget.type,
         widget.encoding,
-        Array.isArray(sqlResponse.fields) ? sqlResponse.fields : undefined,
+        deriveSqlFieldsFromRows(rows),
     );
     const state = classifyChartState({
         sourceStatus: sqlResponse.status,

@@ -58,4 +58,4 @@ This document defines supported expression syntax and safety boundaries for SDUI
 - `encoding.x.field: "ts"` with data resolved from `sql_response.fields`
 - `encoding.y.field: "amount"` with numeric field metadata from `sql_response.fields`
 - `encoding.label.field: "label"` and `encoding.value.field: "count"`
-- `columns[0].field: "label"` and `columns[1].field: "amount"` for `Chart.Table`
+- `encoding.columns[0].field: "label"` and `encoding.columns[1].field: "amount"` for `Chart.Table`

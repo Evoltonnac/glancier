@@ -138,6 +138,65 @@ Optional:
 - `thresholds.warning`
 - `thresholds.danger`
 
+#### `Chart.Line` / `Chart.Bar` / `Chart.Area`
+Required:
+- `type`: one of `Chart.Line`, `Chart.Bar`, `Chart.Area`
+- `data_source`
+- `encoding.x.field`
+- `encoding.y.field`
+
+Optional:
+- `encoding.series.field`
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+- `size`
+
+#### `Chart.Pie`
+Required:
+- `type: "Chart.Pie"`
+- `data_source`
+- `encoding.label.field`
+- `encoding.value.field`
+
+Optional:
+- `donut`: boolean
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+- `size`
+
+#### `Chart.Table`
+Required:
+- `type: "Chart.Table"`
+- `data_source`
+- `encoding.columns[*].field` (at least one column)
+
+Optional:
+- `encoding.columns[*].title`
+- `encoding.columns[*].format`
+- `sort_by`
+- `sort_order`: `asc` | `desc`
+- `limit`: positive number
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+- `size`
+
+Chart color contract:
+- `colors` must use semantic names only:
+  `blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`.
+- Do not use raw hex/CSS variable/native library color values.
+
 ### 3.5 Actions
 
 #### `ActionSet`
@@ -215,5 +274,6 @@ Do:
 
 Do not:
 - Use unsupported legacy widget names (`hero_metric`, `progress_bar`, `key_value_grid`, etc.).
+- Use legacy chart aliases such as `line_chart` or `bar_chart`.
 - Put auth/fetch orchestration logic into templates.
 - Rely on undocumented widget properties.

@@ -19,7 +19,7 @@ This document defines the **single source of truth** for supported SDUI componen
 
 ## 2. Containers (Data Containers)
 
-- `List`: array iterator container with filtering/sorting/pagination/layout support.
+- `List` **[Content, minHeightRows: 2]**: array iterator container with filtering/sorting/pagination/layout support.
 
 Common fields:
 - `data_source`: array data path
@@ -29,24 +29,24 @@ Common fields:
 
 ## 3. Elements (Atomic Elements)
 
-- `TextBlock`: generic text element, including numeric/status text.
+- `TextBlock` **[Structural]**: generic text element, including numeric/status text.
   - Common fields: `text`, `size`, `tone`, `align_x`, `weight`, `wrap`, `max_lines`
-- `FactSet`: key-value pairs (`label`/`value`).
+- `FactSet` **[Structural]**: key-value pairs (`label`/`value`).
   - Common fields: `facts`, `spacing` (`tone` can be set per fact)
-- `Image`: image or icon.
+- `Image` **[Structural]**: image or icon.
   - Common fields: `url`, `altText`, `size`
-- `Badge`: status badge.
+- `Badge` **[Structural]**: status badge.
   - Common fields: `text`, `size`, `tone`
 
 ## 4. Visualizations
 
-- `Progress`: progress/quota visualization (`bar` or `ring`).
+- `Progress` **[Structural/Content]**: progress/quota visualization (`bar` or `ring`). behaves as structural or content depending on container constraints.
   - Common fields: `value`, `label`, `style`, `size`, `tone`, `thresholds.warning`, `thresholds.danger`
-- `Chart.Line`: cartesian trend chart for ordered x/y data.
-- `Chart.Bar`: cartesian comparison chart for x/y data.
-- `Chart.Area`: filled cartesian trend chart for x/y data.
-- `Chart.Pie`: categorical share chart for `label` + `value` data.
-- `Chart.Table`: dense SQL result inspection table for selected columns.
+- `Chart.Line` **[Content, minHeightRows: 3]**: cartesian trend chart for ordered x/y data.
+- `Chart.Bar` **[Content, minHeightRows: 3]**: cartesian comparison chart for x/y data.
+- `Chart.Area` **[Content, minHeightRows: 3]**: filled cartesian trend chart for x/y data.
+- `Chart.Pie` **[Content, minHeightRows: 3]**: categorical share chart for `label` + `value` data.
+- `Chart.Table` **[Content, minHeightRows: 3]**: dense SQL result inspection table for selected columns.
 
 Shared chart fields:
 - `data_source`
@@ -54,14 +54,14 @@ Shared chart fields:
 - `title`
 - `description`
 - `legend`
-- `colors`
+- `colors`: semantic chart color names only (`blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`); values cycle when series exceed 12
 - `format`
 - `empty_state`
 
 Chart-specific field rules:
 - `Chart.Line` / `Chart.Bar` / `Chart.Area`: require `encoding.x` and `encoding.y`; support optional `encoding.series`
-- `Chart.Pie`: requires `encoding.label` and `encoding.value`
-- `Chart.Table`: requires `columns.field` references that resolve against dataset fields; supports `sort_by`, `sort_order`, and `limit`
+- `Chart.Pie`: requires `encoding.label` and `encoding.value`; supports optional `donut` boolean
+- `Chart.Table`: requires `encoding.columns[*].field` references that resolve against dataset fields; supports `sort_by`, `sort_order`, and `limit`
 
 Deterministic chart fallback states:
 - `loading`
@@ -71,11 +71,11 @@ Deterministic chart fallback states:
 
 ## 5. Actions
 
-- `ActionSet`: action container.
+- `ActionSet` **[Structural]**: action container.
   - Common fields: `actions`, `spacing`, `align_x`
-- `Action.OpenUrl`: open external URL.
+- `Action.OpenUrl` **[Structural]**: open external URL.
   - Common fields: `title`, `url`, `size`, `tone`
-- `Action.Copy`: copy text.
+- `Action.Copy` **[Structural]**: copy text.
   - Common fields: `title`, `text`, `size`, `tone`
 
 ## 6. Shared Enum Fields

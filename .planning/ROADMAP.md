@@ -64,9 +64,9 @@ Plans:
   3. User can see deterministic empty/loading/error fallback states on all new chart widgets, and dashboard rendering does not crash or white-screen on invalid/missing data.
 **Plans**: 3 plans
 Plans:
-- [ ] 10-01-PLAN.md — Establish chart schemas, SQL field-aware encoding validation, deterministic chart state classifier, and unified fallback frame with Wave 0 tests.
-- [ ] 10-02-PLAN.md — Implement Chart.Line/Chart.Bar/Chart.Area/Chart.Pie rendering through internal Recharts adapter and register widgets in WidgetRenderer.
-- [ ] 10-03-PLAN.md — Implement Chart.Table dense inspection widget, wire fallback behavior, and synchronize SDUI chart documentation.
+- [x] 10-01-PLAN.md — Establish chart schemas, SQL field-aware encoding validation, deterministic chart state classifier, and unified fallback frame with Wave 0 tests.
+- [x] 10-02-PLAN.md — Implement Chart.Line/Chart.Bar/Chart.Area/Chart.Pie rendering through internal Recharts adapter and register widgets in WidgetRenderer.
+- [x] 10-03-PLAN.md — Implement Chart.Table dense inspection widget, wire fallback behavior, and synchronize SDUI chart documentation.
 
 ### Phase 11: Authoring Usability and Diagnostics Hardening
 **Goal**: Users can author and troubleshoot SQL+chart workflows with faster feedback and stable dashboard state behavior.

@@ -119,7 +119,7 @@ async def test_sql_query_failure_uses_runtime_sql_query_failed_error_code(
                 use=StepType.SQL,
                 args={
                     "connector": {"profile": "sqlite"},
-                    "credentials": {"database": str(db_path)},
+                    "dsn": str(db_path),
                     "query": "SELECT * FROM missing_table",
                 },
             )

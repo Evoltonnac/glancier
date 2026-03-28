@@ -96,6 +96,8 @@ Supported `use` values:
 - `extract`
 - `script`
 - `sql`
+- `mongodb`
+- `redis`
 - `log`
 - `webview`
 
@@ -191,11 +193,34 @@ Design for resume safety:
 #### `sql`
 
 - Purpose: execute SQL queries through backend connector runtime.
-- Core args: `connector`, `credentials`, `query`; optional `timeout`, `max_rows`.
+- Core args: `connector.profile`, connection string (`dsn` or `uri`), `query`; optional `connector.options.dialect`, `timeout`, `max_rows`.
 - Runtime output envelope: `sql_response` (rows, columns, row_count, timing/guardrail metadata).
 - Authoring default: read/query-only SQL.
 - Write/mutation SQL must be explicitly user-requested, marked high risk, and documented as trust-gated before execution.
 - SQL risk checks are SQLGlot AST-based on final query text, and high-risk operations route to the authorization wall protocol.
+
+#### `mongodb`
+
+- Purpose: execute read-only MongoDB operations through backend runtime.
+- Core args: connection string (`dsn` or `uri`), `database`, `collection`, `operation` (`find` or `aggregate`).
+- Optional args:
+  - `connector.profile` (if provided, must be `mongodb`)
+  - `filter`, `projection`, `sort` (for `operation=find`)
+  - `pipeline` (for `operation=aggregate`)
+  - `timeout`, `max_rows`
+- Runtime output envelope: `mongo_response` (`rows`, `fields`, `row_count`, `duration_ms`, `truncated`, `operation`, `timeout_seconds`, `max_rows`).
+- Authoring default: read-only query operations; do not propose write operations.
+
+#### `redis`
+
+- Purpose: execute read-only Redis commands through backend runtime.
+- Core args: connection string (`dsn` or `uri`), `command` (`get`, `mget`, `hgetall`, `lrange`, `zrange`, `smembers`).
+- Optional args:
+  - `connector.profile` (if provided, must be `redis`)
+  - `key`, `keys`, `start`, `stop`, `withscores` (command-specific)
+  - `timeout`, `max_rows`
+- Runtime output envelope: `redis_response` (`rows`, `fields`, `row_count`, `duration_ms`, `truncated`, `command`, `timeout_seconds`, `max_rows`).
+- Authoring default: read-only command set only.
 
 #### `extract`
 
@@ -386,6 +411,23 @@ Minimal valid `List` snippet (`render` must be a widget array):
 - `Progress`
   - required: `type`, `value`
   - optional: `label`, `style` (`bar` | `ring`), `size`, `tone`, `show_percentage`, `thresholds.warning`, `thresholds.danger`
+
+- `Chart.Line` / `Chart.Bar` / `Chart.Area`
+  - required: `type`, `data_source`, `encoding.x.field`, `encoding.y.field`
+  - optional: `encoding.series.field`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+
+- `Chart.Pie`
+  - required: `type`, `data_source`, `encoding.label.field`, `encoding.value.field`
+  - optional: `donut` (boolean), `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+
+- `Chart.Table`
+  - required: `type`, `data_source`, `encoding.columns[*].field`
+  - optional: `encoding.columns[*].title`, `encoding.columns[*].format`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+
+Chart color constraints:
+- `colors` only accepts semantic names:
+  `blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`.
+- Do not use raw hex, CSS variables, or library-native color tokens.
 
 #### Actions
 

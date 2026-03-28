@@ -1,8 +1,11 @@
 import { ChartFrame } from "./ChartFrame";
 import { renderLineChart } from "./adapters/rechartsAdapter";
-import { validateChartEncoding } from "../shared/chartFieldValidation";
+import {
+    deriveSqlFieldsFromRows,
+    validateChartEncoding,
+} from "../shared/chartFieldValidation";
 import { classifyChartState } from "../shared/chartState";
-import type { ChartLine as ChartLineWidget } from "../shared/chartSchemas";
+import type { RuntimeChartLine as ChartLineWidget } from "../shared/chartSchemas";
 
 interface ChartLineProps {
     widget: ChartLineWidget;
@@ -15,7 +18,7 @@ export function ChartLine({ widget, data }: ChartLineProps) {
     const encodingValidation = validateChartEncoding(
         widget.type,
         widget.encoding,
-        Array.isArray(sqlResponse.fields) ? sqlResponse.fields : undefined,
+        deriveSqlFieldsFromRows(rows),
     );
     const state = classifyChartState({
         sourceStatus: sqlResponse.status,

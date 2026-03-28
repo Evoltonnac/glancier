@@ -178,9 +178,23 @@ def _resolve_sql_max_rows(args: dict[str, Any], *, default_max_rows: int) -> int
     return max(max_rows, _MIN_SQL_MAX_ROWS)
 
 
+def _resolve_sql_connection_string(args: dict[str, Any]) -> str:
+    for key in ("dsn", "uri"):
+        raw_value = args.get(key)
+        if not isinstance(raw_value, str):
+            continue
+        value = raw_value.strip()
+        if value:
+            return value
+    return ""
+
+
 def _is_auth_failure_message(message: str) -> bool:
     lowered = message.lower()
-    return any(token in lowered for token in ("auth", "password", "credential", "permission denied"))
+    return any(
+        token in lowered
+        for token in ("auth", "password", "credential", "permission denied", "access denied")
+    )
 
 
 def _evaluate_risk_operation_policy(
@@ -291,7 +305,7 @@ def _is_connect_failure_message(message: str) -> bool:
         token in lowered
         for token in (
             "unsupported sql connector profile",
-            "missing sql credential field",
+            "missing sql connection string",
             "unable to open database file",
             "could not connect",
             "connection refused",
@@ -299,6 +313,9 @@ def _is_connect_failure_message(message: str) -> bool:
             "name or service not known",
             "network is unreachable",
             "failed to resolve",
+            "can't connect to mysql server",
+            "unknown mysql server host",
+            "pymysql dependency is required for mysql profile",
         )
     )
 
@@ -397,7 +414,7 @@ async def execute_sql_step(
                 data=interaction_data,
             )
 
-    if profile not in {"sqlite", "postgresql"}:
+    if profile not in {"sqlite", "postgresql", "mysql"}:
         raise SqlConnectFailedError(
             source_id=source.id,
             step_id=step.id,
@@ -409,9 +426,7 @@ async def execute_sql_step(
     default_timeout_seconds, default_max_rows = _resolve_sql_runtime_defaults(executor)
     timeout_seconds = _resolve_sql_timeout(args, default_timeout_seconds=default_timeout_seconds)
     max_rows = _resolve_sql_max_rows(args, default_max_rows=default_max_rows)
-    credentials = args.get("credentials")
-    if not isinstance(credentials, dict):
-        credentials = {}
+    dsn = _resolve_sql_connection_string(args)
 
     started_at = time.monotonic()
     try:
@@ -419,7 +434,7 @@ async def execute_sql_step(
             asyncio.to_thread(
                 run_sql_query_for_profile,
                 profile,
-                credentials=credentials,
+                dsn=dsn,
                 query_text=query_text,
                 max_rows=max_rows,
             ),

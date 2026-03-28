@@ -493,10 +493,12 @@ describe("WidgetRenderer", () => {
                         type: "Chart.Table",
                         title: "SQL table",
                         data_source: "{sql_response.rows}",
-                        columns: [
-                            { field: "label", title: "Region", format: "text" },
-                            { field: "amount", title: "Revenue", format: "number" },
-                        ],
+                        encoding: {
+                            columns: [
+                                { field: "label", title: "Region", format: "text" },
+                                { field: "amount", title: "Revenue", format: "number" },
+                            ],
+                        },
                         sort_by: "amount",
                         sort_order: "desc",
                         limit: 1,
@@ -519,7 +521,9 @@ describe("WidgetRenderer", () => {
                         type: "Chart.Table",
                         title: "SQL table",
                         data_source: "{sql_response.rows}",
-                        columns: [{ field: "missing_metric", title: "Broken" }],
+                        encoding: {
+                            columns: [{ field: "missing_metric", title: "Broken" }],
+                        },
                     } as any
                 }
                 data={chartData}
@@ -534,7 +538,9 @@ describe("WidgetRenderer", () => {
                         type: "Chart.Table",
                         title: "SQL table",
                         data_source: "{sql_response.rows}",
-                        columns: [{ field: "label", title: "Region" }],
+                        encoding: {
+                            columns: [{ field: "label", title: "Region" }],
+                        },
                     } as any
                 }
                 data={{
@@ -554,7 +560,9 @@ describe("WidgetRenderer", () => {
                         type: "Chart.Table",
                         title: "SQL table",
                         data_source: "{sql_response.rows}",
-                        columns: [{ field: "label", title: "Region" }],
+                        encoding: {
+                            columns: [{ field: "label", title: "Region" }],
+                        },
                     } as any
                 }
                 data={{
@@ -575,7 +583,9 @@ describe("WidgetRenderer", () => {
                         type: "Chart.Table",
                         title: "SQL table",
                         data_source: "{sql_response.rows}",
-                        columns: [{ field: "label", title: "Region" }],
+                        encoding: {
+                            columns: [{ field: "label", title: "Region" }],
+                        },
                     } as any
                 }
                 data={{

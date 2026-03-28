@@ -360,6 +360,8 @@ const zhMessages = {
   "error.copy.auth.invalid_credentials.description": "鉴权信息已失效，请重新连接或更新凭证后重试。",
   "error.copy.auth.missing_credentials.title": "缺少凭证",
   "error.copy.auth.missing_credentials.description": "缺少必要凭证，请完成鉴权输入后继续。",
+  "error.copy.auth.missing_form_inputs.title": "缺少表单输入",
+  "error.copy.auth.missing_form_inputs.description": "缺少必填表单字段，请完成所有必填项后继续。",
   "error.copy.auth.authorization_required.title": "需要授权",
   "error.copy.auth.authorization_required.description": "该数据源需要先完成授权，才能继续拉取数据。",
   "error.copy.auth.interactive_verification_required.title": "需要验证",
@@ -397,6 +399,7 @@ const zhMessages = {
 
   "error.code.auth.invalid_credentials": "鉴权信息已失效，请重新连接或更新凭证。",
   "error.code.auth.missing_credentials": "缺少必要凭证，请完成鉴权输入后重试。",
+  "error.code.auth.missing_form_inputs": "缺少必填表单字段，请完成所有必填项后重试。",
   "error.code.auth.authorization_required": "需要先完成授权，才能继续拉取数据。",
   "error.code.auth.interactive_verification_required": "需要进行交互验证后才能继续。",
   "error.code.auth.manual_webview_required": "该数据源需要前台手动操作后才能继续。",

@@ -1,10 +1,21 @@
 import type { ReactNode } from "react";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../ui/card";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    CardDescription,
+} from "../../ui/card";
 import { cn } from "../../../lib/utils";
 import type { ChartState } from "../shared/chartState";
 
-type ChartFrameType = "Chart.Line" | "Chart.Bar" | "Chart.Area" | "Chart.Pie" | "Chart.Table";
+type ChartFrameType =
+    | "Chart.Line"
+    | "Chart.Bar"
+    | "Chart.Area"
+    | "Chart.Pie"
+    | "Chart.Table";
 
 interface ChartFrameProps {
     type: ChartFrameType;
@@ -26,14 +37,52 @@ function FallbackBody({ heading, body }: { heading: string; body: string }) {
     return (
         <div className="flex h-full min-h-[220px] items-center justify-center">
             <div className="flex max-w-md flex-col items-center text-center qb-gap-2">
-                <h3 className="text-lg font-semibold leading-tight">{heading}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
+                <h3 className="text-lg font-semibold leading-tight">
+                    {heading}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                    {body}
+                </p>
             </div>
         </div>
     );
 }
 
-export function ChartFrame({ type, state, title, description, children }: ChartFrameProps) {
+function describeChartConfigError(
+    state: Extract<ChartState, { kind: "config_error" }>,
+) {
+    const detail = state.detail;
+    if (detail.code === "missing_required_channel") {
+        return {
+            body: `Missing required field mapping for channel "${detail.channel}".`,
+            path: detail.path,
+        };
+    }
+
+    if (detail.code === "unknown_field") {
+        return {
+            body: detail.field
+                ? `Unknown field "${detail.field}" for channel "${detail.channel}".`
+                : `Unknown field mapping for channel "${detail.channel}".`,
+            path: detail.path,
+        };
+    }
+
+    return {
+        body: detail.field
+            ? `Field "${detail.field}" is incompatible with channel "${detail.channel}".`
+            : `Field mapping is incompatible with channel "${detail.channel}".`,
+        path: detail.path,
+    };
+}
+
+export function ChartFrame({
+    type,
+    state,
+    title,
+    description,
+    children,
+}: ChartFrameProps) {
     const loadingLabel = loadingLabelByWidgetType[type];
 
     let content: ReactNode;
@@ -54,11 +103,24 @@ export function ChartFrame({ type, state, title, description, children }: ChartF
             />
         );
     } else if (state.kind === "config_error") {
+        const detail = describeChartConfigError(state);
         content = (
-            <FallbackBody
-                heading="Invalid chart configuration"
-                body="One or more required fields are missing or incompatible for this chart type. Update the field mapping and try again."
-            />
+            <div className="flex h-full min-h-[220px] items-center justify-center">
+                <div className="flex max-w-md flex-col items-center text-center qb-gap-2">
+                    <h3 className="text-lg font-semibold leading-tight">
+                        Invalid chart configuration
+                    </h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                        {detail.body}
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                        Path:{" "}
+                        <code className="rounded bg-surface/60 px-1 py-0.5">
+                            {detail.path}
+                        </code>
+                    </p>
+                </div>
+            </div>
         );
     } else if (state.kind === "empty") {
         content = (
@@ -76,10 +138,17 @@ export function ChartFrame({ type, state, title, description, children }: ChartF
             {(title || description) && (
                 <CardHeader className="qb-gap-1 border-b border-border/40">
                     {title ? <CardTitle>{title}</CardTitle> : null}
-                    {description ? <CardDescription>{description}</CardDescription> : null}
+                    {description ? (
+                        <CardDescription>{description}</CardDescription>
+                    ) : null}
                 </CardHeader>
             )}
-            <CardContent className={cn("flex-1 min-h-0 pt-4", state.kind === "ready" ? "" : "pb-4")}>
+            <CardContent
+                className={cn(
+                    "flex-1 min-h-0 overflow-hidden pt-4",
+                    state.kind === "ready" ? "pb-0" : "pb-4",
+                )}
+            >
                 {content}
             </CardContent>
         </Card>

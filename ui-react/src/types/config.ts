@@ -44,6 +44,7 @@ export type SourceStatus =
 
 export type InteractionType =
     | "input_text"
+    | "input_form"
     | "oauth_start"
     | "oauth_device_flow"
     | "captcha"
@@ -75,6 +76,7 @@ export interface InteractionRequest {
     step_id?: string;
     source_id?: string;
     title?: string;
+    description?: string;
     message?: string;
     warning_message?: string;
     fields: InteractionField[];

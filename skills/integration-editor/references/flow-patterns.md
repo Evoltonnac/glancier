@@ -16,7 +16,7 @@ Refresh interval authoring rules:
 
 Required: `id`, `use`. Optional: `args`, `outputs`, `context`, `secrets`, `run`.
 
-Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `sql`, `log`, `webview`.
+Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `sql`, `mongodb`, `redis`, `log`, `webview`.
 
 ## Output Channels
 
@@ -86,7 +86,32 @@ Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, 
 - Write/mutation SQL should be treated as high-risk and require explicit runtime trust authorization before execution.
 - SQL query text is user-authored; runtime performs SQLGlot AST risk analysis on final query text before execution.
 - High-risk SQL operations route to the authorization wall protocol (`allow_once`, `allow_always`, `deny`).
-- For future connector parity (for example Mongo/GraphQL), apply the same risk classification + authorization fallback model.
+- MongoDB and Redis step authoring should also stay read-only and deterministic.
+
+## `sql`
+- Purpose: execute SQL queries through backend connector runtime.
+- Required args: `connector.profile`, `query`, and connection string (`dsn` or `uri`).
+- Optional args: `connector.options.dialect`, `timeout`, `max_rows`.
+- Runtime output envelope: `sql_response` (`rows`, `fields`, `row_count`, `duration_ms`, `truncated`, risk metadata, guardrail metadata).
+
+## `mongodb`
+- Purpose: execute read-only MongoDB operations.
+- Required args: connection string (`dsn` or `uri`), `database`, `collection`, `operation` (`find` or `aggregate`).
+- Optional args:
+  - `connector.profile` (if provided, must be `mongodb`)
+  - `filter`, `projection`, `sort` (for `find`)
+  - `pipeline` (for `aggregate`)
+  - `timeout`, `max_rows`
+- Runtime output envelope: `mongo_response` (`rows`, `fields`, `row_count`, `duration_ms`, `truncated`, `operation`, `timeout_seconds`, `max_rows`).
+
+## `redis`
+- Purpose: execute read-only Redis commands.
+- Required args: connection string (`dsn` or `uri`), `command` (`get`, `mget`, `hgetall`, `lrange`, `zrange`, `smembers`).
+- Optional args:
+  - `connector.profile` (if provided, must be `redis`)
+  - `key`, `keys`, `start`, `stop`, `withscores` (command-specific)
+  - `timeout`, `max_rows`
+- Runtime output envelope: `redis_response` (`rows`, `fields`, `row_count`, `duration_ms`, `truncated`, `command`, `timeout_seconds`, `max_rows`).
 
 ## `extract`
 - Purpose: extract fields from a structured object.

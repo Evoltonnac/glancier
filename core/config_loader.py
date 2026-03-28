@@ -168,6 +168,8 @@ class StepType(str, Enum):
     SCRIPT = "script"
     LOG = "log"
     SQL = "sql"
+    MONGODB = "mongodb"
+    REDIS = "redis"
     WEBVIEW = "webview"
 
 
@@ -358,11 +360,8 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
                 "required": ["profile"],
                 "additionalProperties": True,
             },
-            "credentials": {
-                "type": "object",
-                "minProperties": 1,
-                "additionalProperties": {"type": "string", "minLength": 1},
-            },
+            "dsn": {"type": "string", "minLength": 1},
+            "uri": {"type": "string", "minLength": 1},
             "query": {"type": "string", "minLength": 1},
             "timeout": {
                 "anyOf": [
@@ -377,7 +376,115 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
                 ]
             },
         },
-        "required": ["connector", "credentials", "query"],
+        "required": ["connector", "query"],
+        "anyOf": [
+            {"required": ["dsn"]},
+            {"required": ["uri"]},
+        ],
+        "additionalProperties": True,
+    },
+    StepType.MONGODB.value: {
+        "type": "object",
+        "properties": {
+            "connector": {
+                "type": "object",
+                "properties": {
+                    "profile": {"type": "string", "minLength": 1},
+                },
+                "required": ["profile"],
+                "additionalProperties": True,
+            },
+            "dsn": {"type": "string", "minLength": 1},
+            "uri": {"type": "string", "minLength": 1},
+            "database": {"type": "string", "minLength": 1},
+            "collection": {"type": "string", "minLength": 1},
+            "operation": {"type": "string", "enum": ["find", "aggregate"]},
+            "filter": {"type": "object", "additionalProperties": True},
+            "projection": {
+                "anyOf": [
+                    {"type": "object", "additionalProperties": True},
+                    {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                ]
+            },
+            "sort": {"type": "object", "additionalProperties": True},
+            "pipeline": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "timeout": {
+                "anyOf": [
+                    {"type": "number", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "max_rows": {
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+        },
+        "required": ["database", "collection", "operation"],
+        "anyOf": [
+            {"required": ["dsn"]},
+            {"required": ["uri"]},
+        ],
+        "additionalProperties": True,
+    },
+    StepType.REDIS.value: {
+        "type": "object",
+        "properties": {
+            "connector": {
+                "type": "object",
+                "properties": {
+                    "profile": {"type": "string", "minLength": 1},
+                },
+                "required": ["profile"],
+                "additionalProperties": True,
+            },
+            "dsn": {"type": "string", "minLength": 1},
+            "uri": {"type": "string", "minLength": 1},
+            "command": {"type": "string", "minLength": 1},
+            "key": {"type": "string", "minLength": 1},
+            "keys": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1},
+            },
+            "start": {
+                "anyOf": [
+                    {"type": "integer"},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "stop": {
+                "anyOf": [
+                    {"type": "integer"},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "withscores": {"type": "boolean"},
+            "timeout": {
+                "anyOf": [
+                    {"type": "number", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "max_rows": {
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+        },
+        "required": ["command"],
+        "anyOf": [
+            {"required": ["dsn"]},
+            {"required": ["uri"]},
+        ],
         "additionalProperties": True,
     },
     StepType.WEBVIEW.value: {

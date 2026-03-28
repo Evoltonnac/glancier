@@ -56,7 +56,13 @@ import { ActionCopy } from "./actions/ActionCopy";
  */
 function createWidgetSchema(
     listRenderSchemaFactory: (self: z.ZodTypeAny) => z.ZodTypeAny,
-    chartSchemaSet = {
+    chartSchemaSet: {
+        line: z.ZodTypeAny;
+        bar: z.ZodTypeAny;
+        area: z.ZodTypeAny;
+        pie: z.ZodTypeAny;
+        table: z.ZodTypeAny;
+    } = {
         line: ChartLineSchema,
         bar: ChartBarSchema,
         area: ChartAreaSchema,
@@ -66,8 +72,8 @@ function createWidgetSchema(
 ): z.ZodType<any> {
     let selfSchema: z.ZodType<any>;
 
-    selfSchema = z.lazy(() =>
-        z.discriminatedUnion("type", [
+    selfSchema = z.lazy(() => {
+        const widgetSchemas = [
             // Layouts
             ContainerSchema.extend({
                 items: z.array(selfSchema),
@@ -101,8 +107,9 @@ function createWidgetSchema(
             }),
             ActionOpenUrlSchema,
             ActionCopySchema,
-        ]),
-    );
+        ];
+        return z.discriminatedUnion("type", widgetSchemas as any);
+    });
 
     return selfSchema;
 }

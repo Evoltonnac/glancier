@@ -180,14 +180,14 @@ describe("chart widget foundations", () => {
                     y: { field: "amount" },
                 },
                 legend: false,
-                colors: ["#123456"],
+                colors: ["blue"],
             }),
         );
 
         expect(screen.getByTestId("BarChart")).toBeInTheDocument();
         expect(screen.getByTestId("Bar")).toHaveAttribute(
             "data-props",
-            expect.stringContaining('"fill":"#123456"'),
+            expect.stringContaining('"fill":"hsl(var(--chart-blue))"'),
         );
     });
 
