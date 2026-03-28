@@ -167,7 +167,7 @@ describe("chart widget foundations", () => {
         );
         expect(screen.getAllByTestId("Line")[0]).toHaveAttribute(
             "data-props",
-            expect.stringContaining('"stroke":"blue"'),
+            expect.stringContaining('"stroke":"hsl(var(--chart-blue))"'),
         );
     });
 
@@ -239,23 +239,23 @@ describe("chart widget foundations", () => {
         );
         expect(screen.getByTestId("Pie")).toHaveAttribute(
             "data-props",
-            expect.stringContaining('"innerRadius":48'),
+            expect.stringContaining('"innerRadius":"60%"'),
         );
         expect(screen.getAllByTestId("Cell")[6]).toHaveAttribute(
             "data-props",
-            expect.stringContaining('"fill":"slate"'),
+            expect.stringContaining('"fill":"hsl(var(--chart-amber))"'),
         );
     });
 
     it("renders fallback state assertions for empty, config error, runtime error, and loading", () => {
         const { rerender } = render(
-            <ChartFrame type="Chart.Line" state={{ kind: "loading" }} title="Fallback demo" />,
+            <ChartFrame type="Chart.Line" state={{ kind: "loading" }} />,
         );
 
         expect(screen.getByText(/loading/i)).toBeInTheDocument();
 
-        rerender(<ChartFrame type="Chart.Line" state={{ kind: "empty" }} title="Fallback demo" />);
-        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+        rerender(<ChartFrame type="Chart.Line" state={{ kind: "empty" }} />);
+        expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
 
         rerender(
             <ChartFrame
@@ -270,7 +270,6 @@ describe("chart widget foundations", () => {
                         field: "missing_metric",
                     },
                 }}
-                title="Fallback demo"
             />,
         );
         expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
@@ -287,7 +286,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Line",
                     data_source: readyData.sql_response.rows,
-                    title: "Revenue trend",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -299,7 +297,6 @@ describe("chart widget foundations", () => {
             />,
         );
 
-        expect(screen.getByText("Revenue trend")).toBeInTheDocument();
         expect(screen.getByTestId("LineChart")).toBeInTheDocument();
 
         rerender(
@@ -307,7 +304,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Line",
                     data_source: loadingData.sql_response.rows,
-                    title: "Revenue trend",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -323,7 +319,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Line",
                     data_source: runtimeErrorData.sql_response.rows,
-                    title: "Revenue trend",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -339,7 +334,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Line",
                     data_source: configErrorData.sql_response.rows,
-                    title: "Revenue trend",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "missing_metric" },
@@ -355,7 +349,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Line",
                     data_source: emptyData.sql_response.rows,
-                    title: "Revenue trend",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -364,7 +357,7 @@ describe("chart widget foundations", () => {
                 data={emptyData}
             />,
         );
-        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+        expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
     });
 
     it("renders bar widget ready state and fallback states", () => {
@@ -373,7 +366,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Bar",
                     data_source: readyData.sql_response.rows,
-                    title: "Revenue bars",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -390,7 +382,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Bar",
                     data_source: loadingData.sql_response.rows,
-                    title: "Revenue bars",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -406,7 +397,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Bar",
                     data_source: runtimeErrorData.sql_response.rows,
-                    title: "Revenue bars",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -422,7 +412,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Bar",
                     data_source: configErrorData.sql_response.rows,
-                    title: "Revenue bars",
                     encoding: {
                         x: { field: "missing_x" },
                         y: { field: "amount" },
@@ -438,7 +427,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Bar",
                     data_source: emptyData.sql_response.rows,
-                    title: "Revenue bars",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -447,7 +435,7 @@ describe("chart widget foundations", () => {
                 data={emptyData}
             />,
         );
-        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+        expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
     });
 
     it("renders area widget ready state and fallback states", () => {
@@ -456,7 +444,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Area",
                     data_source: readyData.sql_response.rows,
-                    title: "Revenue area",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -473,7 +460,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Area",
                     data_source: loadingData.sql_response.rows,
-                    title: "Revenue area",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -489,7 +475,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Area",
                     data_source: runtimeErrorData.sql_response.rows,
-                    title: "Revenue area",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -505,7 +490,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Area",
                     data_source: configErrorData.sql_response.rows,
-                    title: "Revenue area",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "category" },
@@ -521,7 +505,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Area",
                     data_source: emptyData.sql_response.rows,
-                    title: "Revenue area",
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -530,7 +513,7 @@ describe("chart widget foundations", () => {
                 data={emptyData}
             />,
         );
-        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+        expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
     });
 
     it("renders pie widget ready state, donut mode, and fallback states", () => {
@@ -544,7 +527,6 @@ describe("chart widget foundations", () => {
                         { ts: "2026-03-06T00:00:00Z", category: "Epsilon", amount: 6, label: "Northwest", count: 4 },
                         { ts: "2026-03-07T00:00:00Z", category: "Zeta", amount: 8, label: "Southeast", count: 6 },
                     ],
-                    title: "Regional mix",
                     donut: true,
                     encoding: {
                         label: { field: "label" },
@@ -559,7 +541,7 @@ describe("chart widget foundations", () => {
         expect(screen.getByTestId("PieChart")).toBeInTheDocument();
         expect(screen.getByTestId("Pie")).toHaveAttribute(
             "data-props",
-            expect.stringContaining('"innerRadius":48'),
+            expect.stringContaining('"innerRadius":"60%"'),
         );
 
         rerender(
@@ -567,7 +549,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Pie",
                     data_source: loadingData.sql_response.rows,
-                    title: "Regional mix",
                     donut: true,
                     encoding: {
                         label: { field: "label" },
@@ -584,7 +565,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Pie",
                     data_source: runtimeErrorData.sql_response.rows,
-                    title: "Regional mix",
                     donut: true,
                     encoding: {
                         label: { field: "label" },
@@ -601,7 +581,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Pie",
                     data_source: configErrorData.sql_response.rows,
-                    title: "Regional mix",
                     donut: true,
                     encoding: {
                         label: { field: "label" },
@@ -618,7 +597,6 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Pie",
                     data_source: emptyData.sql_response.rows,
-                    title: "Regional mix",
                     donut: true,
                     encoding: {
                         label: { field: "label" },
@@ -628,6 +606,6 @@ describe("chart widget foundations", () => {
                 data={emptyData}
             />,
         );
-        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+        expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
     });
 });

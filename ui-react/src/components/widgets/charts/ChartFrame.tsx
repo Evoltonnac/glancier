@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
 
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
-} from "../../ui/card";
-import { cn } from "../../../lib/utils";
+import { DataWidgetEmptyState } from "../shared/DataWidgetEmptyState";
 import type { ChartState } from "../shared/chartState";
 
 type ChartFrameType =
@@ -20,8 +13,6 @@ type ChartFrameType =
 interface ChartFrameProps {
     type: ChartFrameType;
     state: ChartState;
-    title?: string;
-    description?: string;
     children?: ReactNode;
 }
 
@@ -79,8 +70,6 @@ function describeChartConfigError(
 export function ChartFrame({
     type,
     state,
-    title,
-    description,
     children,
 }: ChartFrameProps) {
     const loadingLabel = loadingLabelByWidgetType[type];
@@ -123,36 +112,12 @@ export function ChartFrame({
             </div>
         );
     } else if (state.kind === "empty") {
-        content = (
-            <FallbackBody
-                heading="No chart data available"
-                body="This widget has no rows to visualize yet. Refresh the source or adjust the query to return chartable results."
-            />
-        );
+        content = <DataWidgetEmptyState kind="chart" />;
     } else {
         content = children;
     }
 
-    return (
-        <Card className="flex h-full min-h-0 flex-col overflow-hidden border-border bg-surface">
-            {(title || description) && (
-                <CardHeader className="qb-gap-1 border-b border-border/40">
-                    {title ? <CardTitle>{title}</CardTitle> : null}
-                    {description ? (
-                        <CardDescription>{description}</CardDescription>
-                    ) : null}
-                </CardHeader>
-            )}
-            <CardContent
-                className={cn(
-                    "flex flex-1 flex-col min-h-0 overflow-hidden pt-4",
-                    state.kind === "ready" ? "pb-0" : "pb-4",
-                )}
-            >
-                {content}
-            </CardContent>
-        </Card>
-    );
+    return <div className="flex h-full min-h-0 flex-col overflow-hidden">{content}</div>;
 }
 
 export { loadingLabelByWidgetType };

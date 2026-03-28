@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { memo, useEffect, useState } from "react";
+import { useI18n } from "../../i18n";
 import { evaluateTemplateExpression } from "../../lib/templateExpression";
 import { resolveWidgetParams } from "./shared/widgetParamResolver";
+import { DataWidgetEmptyState } from "./shared/DataWidgetEmptyState";
 
 // Import all widget schemas
 import { ContainerSchema } from "./layouts/Container";
@@ -176,6 +178,7 @@ interface ListWidgetRendererProps {
 }
 
 function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
+    const { t } = useI18n();
     const [currentPage, setCurrentPage] = useState(1);
 
     // Extract array data from inline array
@@ -237,6 +240,14 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
           )
         : processedData;
 
+    if (processedData.length === 0) {
+        return (
+            <div className="flex h-full w-full min-h-0 flex-1 overflow-hidden">
+                <DataWidgetEmptyState kind="list" />
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col w-full flex-1 min-h-0 qb-gap-4">
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
@@ -282,10 +293,13 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
                         disabled={currentPage === 1}
                         className="rounded border border-border px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Prev
+                        {t("widget.pagination.prev")}
                     </button>
                     <span className="text-muted-foreground">
-                        Page {currentPage} / {totalPages}
+                        {t("widget.pagination.page", {
+                            current: currentPage,
+                            total: totalPages,
+                        })}
                     </span>
                     <button
                         type="button"
@@ -297,7 +311,7 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
                         disabled={currentPage === totalPages}
                         className="rounded border border-border px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Next
+                        {t("widget.pagination.next")}
                     </button>
                 </div>
             )}

@@ -107,12 +107,7 @@ export function ChartTable({ widget, data }: ChartTableProps) {
             : [];
 
     return (
-        <ChartFrame
-            type="Chart.Table"
-            state={state}
-            title={widget.title}
-            description={widget.description}
-        >
+        <ChartFrame type="Chart.Table" state={state}>
             {state.kind === "ready" ? (
                 <div className="h-full flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-md border border-border/40 bg-surface/20">
                     <table className="w-full border-collapse text-sm">

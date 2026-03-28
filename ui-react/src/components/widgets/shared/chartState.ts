@@ -30,12 +30,12 @@ export function classifyChartState({
         return { kind: "runtime_error" };
     }
 
-    if (!encodingValidation.ok) {
-        return { kind: "config_error", detail: encodingValidation };
-    }
-
     if (!Array.isArray(rows) || rows.length === 0) {
         return { kind: "empty" };
+    }
+
+    if (!encodingValidation.ok) {
+        return { kind: "config_error", detail: encodingValidation };
     }
 
     return { kind: "ready" };

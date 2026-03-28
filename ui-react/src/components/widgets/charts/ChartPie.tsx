@@ -28,12 +28,7 @@ export function ChartPie({ widget, data }: ChartPieProps) {
     });
 
     return (
-        <ChartFrame
-            type="Chart.Pie"
-            state={state}
-            title={widget.title}
-            description={widget.description}
-        >
+        <ChartFrame type="Chart.Pie" state={state}>
             {state.kind === "ready"
                 ? renderPieChart({
                       rows,

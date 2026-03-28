@@ -35,8 +35,6 @@ describe("ChartTable", () => {
                 { field: "created_at", title: "Created", format: "datetime" },
             ],
         },
-        title: "Regional performance",
-        description: "Dense SQL result inspection",
     };
 
     it("renders selected columns in declared order with title overrides", () => {

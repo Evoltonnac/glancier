@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { SizeSchema } from "./commonProps";
-
 export const CHART_SEMANTIC_COLORS = [
     "blue",
     "orange",
@@ -82,13 +80,8 @@ const TableColumnSchema = z.object({
 
 const ChartBaseSchema = z.object({
     data_source: z.string().min(1),
-    title: z.string().optional(),
-    description: z.string().optional(),
     legend: z.boolean().optional(),
     colors: z.array(ChartSemanticColorSchema).optional(),
-    format: z.string().optional(),
-    empty_state: z.string().optional(),
-    size: SizeSchema.optional(),
 });
 
 const RuntimeChartBaseSchema = ChartBaseSchema.extend({

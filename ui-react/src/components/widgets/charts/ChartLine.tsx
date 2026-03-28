@@ -28,12 +28,7 @@ export function ChartLine({ widget, data }: ChartLineProps) {
     });
 
     return (
-        <ChartFrame
-            type="Chart.Line"
-            state={state}
-            title={widget.title}
-            description={widget.description}
-        >
+        <ChartFrame type="Chart.Line" state={state}>
             {state.kind === "ready"
                 ? renderLineChart({
                       rows,

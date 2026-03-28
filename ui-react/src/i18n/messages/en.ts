@@ -16,6 +16,13 @@ const enMessages = {
   "common.loadDataFailed": "Failed to load data",
   "common.retryLater": "Please retry later",
   "common.backgroundRetryQueued": "Background retry requested. You can open the browser window from the floating bar once the task starts.",
+  "widget.empty.chart.title": "No chart data",
+  "widget.empty.chart.description": "Nothing to display yet.",
+  "widget.empty.list.title": "No items",
+  "widget.empty.list.description": "Nothing to show yet.",
+  "widget.pagination.prev": "Prev",
+  "widget.pagination.next": "Next",
+  "widget.pagination.page": "Page {current} / {total}",
 
   "app.startup.starting": "Starting local engine",
   "app.startup.failed": "Backend failed to start: {error}",

@@ -2611,12 +2611,6 @@
           "type": "string",
           "minLength": 1
         },
-        "title": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
         "legend": {
           "anyOf": [
             {
@@ -2648,22 +2642,6 @@
                   "yellow"
                 ]
               }
-            },
-            {
-              "$ref": "#/$defs/SduitemplatedString"
-            }
-          ]
-        },
-        "format": {
-          "type": "string"
-        },
-        "empty_state": {
-          "type": "string"
-        },
-        "size": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SduisizeValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -2763,12 +2741,6 @@
           "type": "string",
           "minLength": 1
         },
-        "title": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
         "legend": {
           "anyOf": [
             {
@@ -2800,22 +2772,6 @@
                   "yellow"
                 ]
               }
-            },
-            {
-              "$ref": "#/$defs/SduitemplatedString"
-            }
-          ]
-        },
-        "format": {
-          "type": "string"
-        },
-        "empty_state": {
-          "type": "string"
-        },
-        "size": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SduisizeValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -2915,12 +2871,6 @@
           "type": "string",
           "minLength": 1
         },
-        "title": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
         "legend": {
           "anyOf": [
             {
@@ -2952,22 +2902,6 @@
                   "yellow"
                 ]
               }
-            },
-            {
-              "$ref": "#/$defs/SduitemplatedString"
-            }
-          ]
-        },
-        "format": {
-          "type": "string"
-        },
-        "empty_state": {
-          "type": "string"
-        },
-        "size": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SduisizeValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -3067,12 +3001,6 @@
           "type": "string",
           "minLength": 1
         },
-        "title": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
         "legend": {
           "anyOf": [
             {
@@ -3104,22 +3032,6 @@
                   "yellow"
                 ]
               }
-            },
-            {
-              "$ref": "#/$defs/SduitemplatedString"
-            }
-          ]
-        },
-        "format": {
-          "type": "string"
-        },
-        "empty_state": {
-          "type": "string"
-        },
-        "size": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SduisizeValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -3210,12 +3122,6 @@
           "type": "string",
           "minLength": 1
         },
-        "title": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
         "legend": {
           "anyOf": [
             {
@@ -3247,22 +3153,6 @@
                   "yellow"
                 ]
               }
-            },
-            {
-              "$ref": "#/$defs/SduitemplatedString"
-            }
-          ]
-        },
-        "format": {
-          "type": "string"
-        },
-        "empty_state": {
-          "type": "string"
-        },
-        "size": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SduisizeValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"

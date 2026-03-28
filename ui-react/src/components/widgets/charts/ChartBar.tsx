@@ -28,12 +28,7 @@ export function ChartBar({ widget, data }: ChartBarProps) {
     });
 
     return (
-        <ChartFrame
-            type="Chart.Bar"
-            state={state}
-            title={widget.title}
-            description={widget.description}
-        >
+        <ChartFrame type="Chart.Bar" state={state}>
             {state.kind === "ready"
                 ? renderBarChart({
                       rows,

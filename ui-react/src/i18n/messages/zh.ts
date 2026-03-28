@@ -16,6 +16,13 @@ const zhMessages = {
   "common.loadDataFailed": "加载数据失败",
   "common.retryLater": "请稍后再试",
   "common.backgroundRetryQueued": "已请求后台重试抓取，任务启动后可在悬浮条中打开浏览器窗口。",
+  "widget.empty.chart.title": "暂无图表数据",
+  "widget.empty.chart.description": "当前没有可展示内容。",
+  "widget.empty.list.title": "暂无条目",
+  "widget.empty.list.description": "当前没有可展示内容。",
+  "widget.pagination.prev": "上一页",
+  "widget.pagination.next": "下一页",
+  "widget.pagination.page": "第 {current} / {total} 页",
 
   "app.startup.starting": "正在启动本地引擎",
   "app.startup.failed": "启动后端失败：{error}",

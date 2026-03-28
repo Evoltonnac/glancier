@@ -28,12 +28,7 @@ export function ChartArea({ widget, data }: ChartAreaProps) {
     });
 
     return (
-        <ChartFrame
-            type="Chart.Area"
-            state={state}
-            title={widget.title}
-            description={widget.description}
-        >
+        <ChartFrame type="Chart.Area" state={state}>
             {state.kind === "ready"
                 ? renderAreaChart({
                       rows,

@@ -178,21 +178,21 @@ describe("WidgetRenderer", () => {
             />,
         );
 
-        expect(screen.getByText("Page 1 / 2")).toBeInTheDocument();
+        expect(screen.getByText("第 1 / 2 页")).toBeInTheDocument();
         expect(screen.getByText("Key 1")).toBeInTheDocument();
         expect(screen.getByText("Key 2")).toBeInTheDocument();
         expect(screen.queryByText("Key 3")).toBeNull();
 
-        fireEvent.click(screen.getByRole("button", { name: "Next" }));
+        fireEvent.click(screen.getByRole("button", { name: "下一页" }));
 
-        expect(screen.getByText("Page 2 / 2")).toBeInTheDocument();
+        expect(screen.getByText("第 2 / 2 页")).toBeInTheDocument();
         expect(screen.getByText("Key 3")).toBeInTheDocument();
         expect(screen.queryByText("Key 1")).toBeNull();
-        expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
 
-        fireEvent.click(screen.getByRole("button", { name: "Prev" }));
-        expect(screen.getByText("Page 1 / 2")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Prev" })).toBeDisabled();
+        fireEvent.click(screen.getByRole("button", { name: "上一页" }));
+        expect(screen.getByText("第 1 / 2 页")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
     });
 
     it("formats decimal display via expression", () => {
@@ -274,19 +274,20 @@ describe("WidgetRenderer", () => {
         expect(screen.getByText("~ $100.12 per gram")).toBeInTheDocument();
     });
 
-    it("filters list items with expression engine", () => {
+    it("renders empty state for lists with no items after filtering", () => {
         render(
             <WidgetRenderer
                 widget={
                     {
                         type: "List",
                         data_source: [
-                            { name: "Key 1", active: true, percent: 90 },
-                            { name: "Key 2", active: false, percent: 95 },
-                            { name: "Key 3", active: true, percent: 70 },
+                            { name: "Key 1", active: false },
+                            { name: "Key 2", active: false },
                         ],
                         item_alias: "key_item",
-                        filter: "key_item.active && key_item.percent >= 80",
+                        filter: "key_item.active",
+                        pagination: true,
+                        page_size: 2,
                         render: [
                             {
                                 type: "TextBlock",
@@ -299,9 +300,10 @@ describe("WidgetRenderer", () => {
             />,
         );
 
-        expect(screen.getByText("Key 1")).toBeInTheDocument();
-        expect(screen.queryByText("Key 2")).toBeNull();
-        expect(screen.queryByText("Key 3")).toBeNull();
+        expect(screen.getByText("暂无条目")).toBeInTheDocument();
+        expect(screen.getByText("当前没有可展示内容。")).toBeInTheDocument();
+        expect(screen.queryByText(/第 1/i)).toBeNull();
+        expect(screen.queryByRole("button", { name: "下一页" })).toBeNull();
     });
 
     it("applies TextBlock multi-line clamp styles", () => {
@@ -359,7 +361,7 @@ describe("WidgetRenderer", () => {
         expect(textBlock).toHaveClass("text-warning");
         expect(textBlock).toHaveClass("text-right");
 
-        const container = textBlock.parentElement;
+        const container = textBlock.parentElement?.parentElement;
         expect(container).toHaveClass("qb-gap-2");
         expect(container).toHaveClass("justify-center");
     });
@@ -392,7 +394,7 @@ describe("WidgetRenderer", () => {
         const factSet = screen.getByText("CPU:").closest("div.flex.flex-col");
         expect(factSet).not.toBeNull();
         expect(factSet).toHaveClass("qb-gap-3");
-        expect(factSet?.parentElement).toHaveClass("qb-gap-4");
+        expect(factSet?.parentElement?.parentElement).toHaveClass("qb-gap-4");
     });
 
     it("resolves list layout params from templates", () => {
@@ -491,7 +493,6 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "Chart.Table",
-                        title: "SQL table",
                         data_source: "{sql_response.rows}",
                         encoding: {
                             columns: [
@@ -508,7 +509,6 @@ describe("WidgetRenderer", () => {
             />,
         );
 
-        expect(screen.getByText("SQL table")).toBeInTheDocument();
         expect(screen.getByRole("columnheader", { name: "Region" })).toBeInTheDocument();
         expect(screen.getByRole("columnheader", { name: "Revenue" })).toBeInTheDocument();
         expect(screen.getByText("South")).toBeInTheDocument();
@@ -519,7 +519,6 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "Chart.Table",
-                        title: "SQL table",
                         data_source: "{sql_response.rows}",
                         encoding: {
                             columns: [{ field: "missing_metric", title: "Broken" }],
@@ -536,7 +535,6 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "Chart.Table",
-                        title: "SQL table",
                         data_source: "{sql_response.rows}",
                         encoding: {
                             columns: [{ field: "label", title: "Region" }],
@@ -551,14 +549,13 @@ describe("WidgetRenderer", () => {
                 }}
             />,
         );
-        expect(screen.getByText("No chart data available")).toBeInTheDocument();
+        expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
 
         rerender(
             <WidgetRenderer
                 widget={
                     {
                         type: "Chart.Table",
-                        title: "SQL table",
                         data_source: "{sql_response.rows}",
                         encoding: {
                             columns: [{ field: "label", title: "Region" }],
@@ -581,7 +578,6 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "Chart.Table",
-                        title: "SQL table",
                         data_source: "{sql_response.rows}",
                         encoding: {
                             columns: [{ field: "label", title: "Region" }],
@@ -624,7 +620,6 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "Chart.Line",
-                        title: "Template trend",
                         data_source: "{sql_response.rows}",
                         legend: "{showLegend}",
                         encoding: {
@@ -638,7 +633,6 @@ describe("WidgetRenderer", () => {
             />,
         );
 
-        expect(screen.getByText("Template trend")).toBeInTheDocument();
         expect(screen.getByTestId("LineChart")).toBeInTheDocument();
 
         rerender(
@@ -646,7 +640,6 @@ describe("WidgetRenderer", () => {
                 widget={
                     {
                         type: "Chart.Bar",
-                        title: "Bars",
                         data_source: "{sql_response.rows}",
                         encoding: {
                             x: { field: "ts" },
@@ -657,14 +650,13 @@ describe("WidgetRenderer", () => {
                 data={chartData}
             />,
         );
-        expect(screen.getByText("Bars")).toBeInTheDocument();
+        expect(screen.getByTestId("BarChart")).toBeInTheDocument();
 
         rerender(
             <WidgetRenderer
                 widget={
                     {
                         type: "Chart.Area",
-                        title: "Area",
                         data_source: "{sql_response.rows}",
                         encoding: {
                             x: { field: "ts" },
@@ -675,14 +667,13 @@ describe("WidgetRenderer", () => {
                 data={chartData}
             />,
         );
-        expect(screen.getByText("Area")).toBeInTheDocument();
+        expect(screen.getByTestId("AreaChart")).toBeInTheDocument();
 
         rerender(
             <WidgetRenderer
                 widget={
                     {
                         type: "Chart.Pie",
-                        title: "Mix",
                         data_source: "{sql_response.rows}",
                         donut: "{useDonut}",
                         encoding: {
@@ -694,7 +685,7 @@ describe("WidgetRenderer", () => {
                 data={{ ...chartData, useDonut: true }}
             />,
         );
-        expect(screen.getByText("Mix")).toBeInTheDocument();
+        expect(screen.getByTestId("PieChart")).toBeInTheDocument();
 
         rerender(
             <WidgetRenderer

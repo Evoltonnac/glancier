@@ -66,7 +66,6 @@ describe("chart schemas", () => {
         const validChart = ChartLineSchema.safeParse({
             type: "Chart.Line",
             data_source: "sql_response.rows",
-            title: "Revenue",
             encoding: {
                 x: { field: "ts" },
                 y: { field: "amount" },
@@ -156,7 +155,6 @@ describe("chart schemas", () => {
         const validTable = ChartTableSchema.safeParse({
             type: "Chart.Table",
             data_source: "sql_response.rows",
-            title: "Top regions",
             encoding: {
                 columns: [
                     { field: "label", title: "Region" },
