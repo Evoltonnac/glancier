@@ -334,6 +334,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Container",
                         spacing: "{compact ? 'sm' : 'lg'}",
+                        align_x: "{cross_align}",
                         align_y: "{vertical_align}",
                         items: [
                             {
@@ -348,6 +349,7 @@ describe("WidgetRenderer", () => {
                 }
                 data={{
                     compact: true,
+                    cross_align: "end",
                     vertical_align: "center",
                     text_size: "lg",
                     text_tone: "warning",
@@ -364,6 +366,7 @@ describe("WidgetRenderer", () => {
         const container = textBlock.parentElement?.parentElement;
         expect(container).toHaveClass("qb-gap-2");
         expect(container).toHaveClass("justify-center");
+        expect(container).toHaveClass("items-end");
     });
 
     it("uses larger layout spacing than micro spacing for the same token", () => {
@@ -411,6 +414,8 @@ describe("WidgetRenderer", () => {
                         layout: "{layout_mode}",
                         columns: "{column_count}",
                         spacing: "{gap_size}",
+                        align_x: "{list_horizontal_align}",
+                        align_y: "{list_vertical_align}",
                         render: [
                             {
                                 type: "TextBlock",
@@ -423,6 +428,8 @@ describe("WidgetRenderer", () => {
                     layout_mode: "grid",
                     column_count: 3,
                     gap_size: "lg",
+                    list_horizontal_align: "end",
+                    list_vertical_align: "center",
                 }}
             />,
         );
@@ -431,12 +438,86 @@ describe("WidgetRenderer", () => {
         expect(listGrid).not.toBeNull();
         expect(listGrid).toHaveClass("lg:grid-cols-3");
         expect(listGrid).toHaveClass("qb-gap-4");
+        expect(listGrid).toHaveClass("justify-items-end");
+        expect(listGrid).toHaveClass("content-center");
 
         const listItem = screen.getByText("Item A").closest("div.rounded-md");
         expect(listItem).not.toBeNull();
         expect(listItem).toHaveClass("border");
         expect(listItem).toHaveClass("border-border/40");
         expect(listItem).toHaveClass("bg-surface/20");
+    });
+
+    it("applies dual-axis alignment on ColumnSet and Column layouts", () => {
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "ColumnSet",
+                        align_x: "end",
+                        align_y: "center",
+                        columns: [
+                            {
+                                type: "Column",
+                                align_x: "center",
+                                align_y: "end",
+                                items: [
+                                    {
+                                        type: "TextBlock",
+                                        text: "Aligned",
+                                    },
+                                ],
+                            },
+                        ],
+                    } as any
+                }
+                data={{}}
+            />,
+        );
+
+        const row = document.querySelector(
+            "div.flex.flex-row.justify-end.items-center",
+        );
+        expect(row).not.toBeNull();
+
+        const column = document.querySelector(
+            "div.flex.flex-col.justify-end.items-center",
+        );
+        expect(column).not.toBeNull();
+    });
+
+    it("lets color override tone on supported widgets", () => {
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Container",
+                        items: [
+                            {
+                                type: "TextBlock",
+                                text: "Colored text",
+                                tone: "warning",
+                                color: "blue",
+                            },
+                            {
+                                type: "Badge",
+                                text: "Colored badge",
+                                tone: "danger",
+                                color: "amber",
+                            },
+                        ],
+                    } as any
+                }
+                data={{}}
+            />,
+        );
+
+        const textBlock = screen.getByText("Colored text");
+        expect(textBlock).toHaveClass("text-warning");
+        expect(textBlock.getAttribute("style")).toContain("--chart-blue");
+
+        const badge = screen.getByText("Colored badge");
+        expect(badge.getAttribute("style")).toContain("--chart-amber");
     });
 
     it("shows validation fallback when templated enum values are invalid", () => {

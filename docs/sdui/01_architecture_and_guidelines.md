@@ -36,13 +36,19 @@ Field meanings:
 - `ui`: card-level metadata (`title`, `icon`, ...)
 - `widgets`: SDUI widget tree entry
 
-## 3. Shared Widget Props
+## 3. Shared Widget Field System
 
-All widgets expose a minimal common prop model:
+Widgets share a common enum system, but not every widget exposes every field:
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
+
+Color contract:
+- On supported non-chart widgets, `color` overrides `tone`.
+- Charts keep `colors` as the array form of the same semantic color enum.
+- Do not use raw hex, CSS variables, or library-native color values in templates.
 
 Constraints:
 - Legacy values are not supported (`small/default/large`, `compact/relaxed`, etc.).

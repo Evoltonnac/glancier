@@ -1,21 +1,12 @@
 import { z } from "zod";
+import {
+    SEMANTIC_COLORS,
+    SemanticColorSchema,
+    type SemanticColor,
+} from "./semanticColors";
 
-export const CHART_SEMANTIC_COLORS = [
-    "blue",
-    "orange",
-    "green",
-    "violet",
-    "red",
-    "cyan",
-    "amber",
-    "pink",
-    "teal",
-    "gold",
-    "slate",
-    "yellow",
-] as const;
-
-export const ChartSemanticColorSchema = z.enum(CHART_SEMANTIC_COLORS);
+export const CHART_SEMANTIC_COLORS = SEMANTIC_COLORS;
+export const ChartSemanticColorSchema = SemanticColorSchema;
 
 const ChartFieldRefSchema = z.object({
     field: z.string().min(1),
@@ -167,7 +158,7 @@ export const RuntimeChartWidgetSchema = z.discriminatedUnion("type", [
 ]);
 
 export type ChartWidget = z.infer<typeof ChartWidgetSchema>;
-export type ChartSemanticColor = z.infer<typeof ChartSemanticColorSchema>;
+export type ChartSemanticColor = SemanticColor;
 export type ChartLine = z.infer<typeof ChartLineSchema>;
 export type ChartBar = z.infer<typeof ChartBarSchema>;
 export type ChartArea = z.infer<typeof ChartAreaSchema>;

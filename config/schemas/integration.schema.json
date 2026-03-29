@@ -1820,6 +1820,23 @@
         "danger"
       ]
     },
+    "SduicolorValue": {
+      "type": "string",
+      "enum": [
+        "blue",
+        "orange",
+        "green",
+        "violet",
+        "red",
+        "cyan",
+        "amber",
+        "pink",
+        "teal",
+        "gold",
+        "slate",
+        "yellow"
+      ]
+    },
     "SduialignValue": {
       "type": "string",
       "enum": [
@@ -1871,6 +1888,16 @@
             {
               "$ref": "#/$defs/SduialignValue",
               "default": "start"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "align_x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduialignValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -1974,6 +2001,16 @@
                         "$ref": "#/$defs/SduitemplatedString"
                       }
                     ]
+                  },
+                  "align_x": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SduialignValue"
+                      },
+                      {
+                        "$ref": "#/$defs/SduitemplatedString"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2004,6 +2041,16 @@
             {
               "$ref": "#/$defs/SduialignValue",
               "default": "start"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "align_y": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduialignValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -2090,6 +2137,26 @@
             {
               "$ref": "#/$defs/SduispacingValue",
               "default": "md"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "align_x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduialignValue"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "align_y": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduialignValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -2233,6 +2300,16 @@
             }
           ]
         },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduicolorValue"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
         "align_x": {
           "anyOf": [
             {
@@ -2337,6 +2414,16 @@
                         "$ref": "#/$defs/SduitemplatedString"
                       }
                     ]
+                  },
+                  "color": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SduicolorValue"
+                      },
+                      {
+                        "$ref": "#/$defs/SduitemplatedString"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2356,6 +2443,16 @@
             {
               "$ref": "#/$defs/SduispacingValue",
               "default": "md"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduicolorValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -2460,6 +2557,16 @@
               "$ref": "#/$defs/SduitemplatedString"
             }
           ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduicolorValue"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
         }
       },
       "required": [
@@ -2541,6 +2648,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/SduitoneValue"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduicolorValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -3315,6 +3432,16 @@
                             "$ref": "#/$defs/SduitemplatedString"
                           }
                         ]
+                      },
+                      "color": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/SduicolorValue"
+                          },
+                          {
+                            "$ref": "#/$defs/SduitemplatedString"
+                          }
+                        ]
                       }
                     },
                     "required": [
@@ -3360,6 +3487,16 @@
                           {
                             "$ref": "#/$defs/SduitoneValue",
                             "default": "default"
+                          },
+                          {
+                            "$ref": "#/$defs/SduitemplatedString"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/SduicolorValue"
                           },
                           {
                             "$ref": "#/$defs/SduitemplatedString"
@@ -3453,6 +3590,16 @@
               "$ref": "#/$defs/SduitemplatedString"
             }
           ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduicolorValue"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
         }
       },
       "required": [
@@ -3498,6 +3645,16 @@
             {
               "$ref": "#/$defs/SduitoneValue",
               "default": "default"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduicolorValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -3579,6 +3736,16 @@
             {
               "$ref": "#/$defs/SduispacingValue",
               "default": "md"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "align_x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SduialignValue"
             },
             {
               "$ref": "#/$defs/SduitemplatedString"

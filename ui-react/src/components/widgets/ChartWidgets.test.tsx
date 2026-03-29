@@ -274,9 +274,7 @@ describe("chart widget foundations", () => {
         );
         expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
 
-        rerender(
-            <ChartFrame type="Chart.Line" state={{ kind: "runtime_error" }} title="Fallback demo" />,
-        );
+        rerender(<ChartFrame type="Chart.Line" state={{ kind: "runtime_error" }} />);
         expect(screen.getByText(/This chart cannot be shown right now\./)).toBeInTheDocument();
     });
 

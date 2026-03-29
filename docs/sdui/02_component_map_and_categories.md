@@ -11,11 +11,11 @@ This document defines the **single source of truth** for supported SDUI componen
 ## 1. Layouts (Structure Containers)
 
 - `Container`: vertical flow container for section grouping.
-  - Common fields: `items`, `spacing`, `align_y`
+  - Common fields: `items`, `spacing`, `align_x`, `align_y`
 - `ColumnSet`: horizontal column layout; direct children must be `Column`.
-  - Common fields: `columns`, `spacing`, `align_x`
+  - Common fields: `columns`, `spacing`, `align_x`, `align_y`
 - `Column`: column container with `auto` / `stretch` / numeric weight width.
-  - Common fields: `items`, `width`, `spacing`, `align_y`
+  - Common fields: `items`, `width`, `spacing`, `align_x`, `align_y`
 
 ## 2. Containers (Data Containers)
 
@@ -25,23 +25,24 @@ Common fields:
 - `data_source`: array data path
 - `item_alias`: list item alias
 - `render`: child widget template per item
+- `align_x` / `align_y`
 - `filter` / `sort_by` / `sort_order` / `limit` / `pagination` / `page_size`
 
 ## 3. Elements (Atomic Elements)
 
 - `TextBlock` **[Structural]**: generic text element, including numeric/status text.
-  - Common fields: `text`, `size`, `tone`, `align_x`, `weight`, `wrap`, `max_lines`
+  - Common fields: `text`, `size`, `tone`, `color`, `align_x`, `weight`, `wrap`, `max_lines`
 - `FactSet` **[Structural]**: key-value pairs (`label`/`value`).
-  - Common fields: `facts`, `spacing` (`tone` can be set per fact)
+  - Common fields: `facts`, `spacing`, `color` (`color` / `tone` can be set per fact, and per-fact `color` overrides per-fact `tone`)
 - `Image` **[Structural]**: image or icon.
   - Common fields: `url`, `altText`, `size`
 - `Badge` **[Structural]**: status badge.
-  - Common fields: `text`, `size`, `tone`
+  - Common fields: `text`, `size`, `tone`, `color`
 
 ## 4. Visualizations
 
 - `Progress` **[Structural/Content]**: progress/quota visualization (`bar` or `ring`). behaves as structural or content depending on container constraints.
-  - Common fields: `value`, `label`, `style`, `size`, `tone`, `thresholds.warning`, `thresholds.danger`
+  - Common fields: `value`, `label`, `style`, `size`, `tone`, `color`, `thresholds.warning`, `thresholds.danger`
 - `Chart.Line` **[Content, minHeightRows: 3]**: cartesian trend chart for ordered x/y data.
 - `Chart.Bar` **[Content, minHeightRows: 3]**: cartesian comparison chart for x/y data.
 - `Chart.Area` **[Content, minHeightRows: 3]**: filled cartesian trend chart for x/y data.
@@ -74,15 +75,16 @@ Deterministic chart fallback states:
 - `ActionSet` **[Structural]**: action container.
   - Common fields: `actions`, `spacing`, `align_x`
 - `Action.OpenUrl` **[Structural]**: open external URL.
-  - Common fields: `title`, `url`, `size`, `tone`
+  - Common fields: `title`, `url`, `size`, `tone`, `color`
 - `Action.Copy` **[Structural]**: copy text.
-  - Common fields: `title`, `text`, `size`, `tone`
+  - Common fields: `title`, `text`, `size`, `tone`, `color`
 
 ## 6. Shared Enum Fields
 
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
 
 ## 7. Non-Current SDUI Components (Legacy Names)

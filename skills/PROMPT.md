@@ -351,9 +351,14 @@ templates:
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
 
 Do not use legacy enum values.
+
+Color rule:
+- On supported non-chart widgets, `color` overrides `tone`.
+- For charts, use `colors` as the array form of the same semantic color enum.
 
 ### Widget Catalog
 
@@ -361,21 +366,21 @@ Do not use legacy enum values.
 
 - `Container`
   - required: `type`, `items`
-  - optional: `spacing`, `align_y`
+  - optional: `spacing`, `align_x`, `align_y`
 
 - `ColumnSet`
   - required: `type`, `columns`
-  - optional: `spacing`, `align_x`
+  - optional: `spacing`, `align_x`, `align_y`
 
 - `Column`
   - required: `type`, `items`
-  - optional: `width` (`auto` | `stretch` | positive number), `align_y`, `spacing`
+  - optional: `width` (`auto` | `stretch` | positive number), `align_x`, `align_y`, `spacing`
 
 #### Data Container
 
 - `List`
   - required: `type`, `data_source`, `item_alias`, `render`
-  - optional: `layout` (`col` | `grid`), `columns` (1..6), `spacing`, `filter`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `pagination`, `page_size`
+  - optional: `layout` (`col` | `grid`), `columns` (1..6), `spacing`, `align_x`, `align_y`, `filter`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `pagination`, `page_size`
 
 Minimal valid `List` snippet (`render` must be a widget array):
 
@@ -392,11 +397,12 @@ Minimal valid `List` snippet (`render` must be a widget array):
 
 - `TextBlock`
   - required: `type`, `text`
-  - optional: `size`, `weight` (`normal` | `medium` | `semibold` | `bold`), `tone`, `align_x`, `wrap`, `max_lines`
+  - optional: `size`, `weight` (`normal` | `medium` | `semibold` | `bold`), `tone`, `color`, `align_x`, `wrap`, `max_lines`
 
 - `FactSet`
   - required: `type`, `facts`
-  - optional: `spacing`
+  - optional: `spacing`, `color`
+  - fact entries support `tone` and `color`; per-fact `color` overrides per-fact `tone`
 
 - `Image`
   - required: `type`, `url`
@@ -404,13 +410,13 @@ Minimal valid `List` snippet (`render` must be a widget array):
 
 - `Badge`
   - required: `type`, `text`
-  - optional: `tone`, `size`
+  - optional: `tone`, `color`, `size`
 
 #### Visualization
 
 - `Progress`
   - required: `type`, `value`
-  - optional: `label`, `style` (`bar` | `ring`), `size`, `tone`, `show_percentage`, `thresholds.warning`, `thresholds.danger`
+  - optional: `label`, `style` (`bar` | `ring`), `size`, `tone`, `color`, `show_percentage`, `thresholds.warning`, `thresholds.danger`
 
 - `Chart.Line` / `Chart.Bar` / `Chart.Area`
   - required: `type`, `data_source`, `encoding.x.field`, `encoding.y.field`
@@ -437,11 +443,11 @@ Chart color constraints:
 
 - `Action.OpenUrl`
   - required: `type`, `title`, `url`
-  - optional: `size`, `tone`
+  - optional: `size`, `tone`, `color`
 
 - `Action.Copy`
   - required: `type`, `title`, `text`
-  - optional: `size`, `tone`
+  - optional: `size`, `tone`, `color`
 
 ### Expression Rules
 

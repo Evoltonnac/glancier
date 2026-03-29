@@ -3,6 +3,8 @@ import {
     SizeSchema,
     ToneSchema,
     toneProgressClassMap,
+    SemanticColorSchema,
+    resolveSemanticColor,
 } from "../shared/commonProps";
 
 /**
@@ -15,6 +17,7 @@ export const ProgressSchema = z.object({
     style: z.enum(["bar", "ring"]).default("bar"),
     size: SizeSchema.default("md"),
     tone: ToneSchema.optional(),
+    color: SemanticColorSchema.optional(),
     show_percentage: z.boolean().default(true),
     thresholds: z
         .object({
@@ -56,11 +59,15 @@ export function Progress({
     style = "bar",
     size = "md",
     tone,
+    color,
     show_percentage = true,
     thresholds,
 }: ProgressProps) {
-    const resolvedTone = tone || getAutoTone(value, thresholds);
-    const progressColorClass = toneProgressClassMap[resolvedTone];
+    const resolvedTone = color ? undefined : tone || getAutoTone(value, thresholds);
+    const progressColorClass = resolvedTone
+        ? toneProgressClassMap[resolvedTone]
+        : undefined;
+    const colorValue = color ? resolveSemanticColor(color) : undefined;
 
     if (style === "ring") {
         const ring = ringConfigMap[size];
@@ -90,7 +97,8 @@ export function Progress({
                             strokeDasharray={circumference}
                             strokeDashoffset={offset}
                             strokeLinecap="round"
-                            className={progressColorClass.replace("bg-", "text-")}
+                            className={progressColorClass?.replace("bg-", "text-")}
+                            style={colorValue ? { color: colorValue } : undefined}
                         />
                     </svg>
                     {show_percentage && (
@@ -116,8 +124,11 @@ export function Progress({
                 className={`w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden ${barHeightMap[size]}`}
             >
                 <div
-                    className={`h-full ${progressColorClass} transition-all duration-300`}
-                    style={{ width: `${value}%` }}
+                    className={`h-full ${progressColorClass || ""} transition-all duration-300`}
+                    style={{
+                        width: `${value}%`,
+                        ...(colorValue ? { backgroundColor: colorValue } : {}),
+                    }}
                 />
             </div>
         </div>

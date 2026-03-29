@@ -4,6 +4,7 @@ import {
     AlignSchema,
     SpacingSchema,
     justifyClassMap,
+    itemsAlignClassMap,
     layoutSpacingClassMap,
 } from "../shared/commonProps";
 
@@ -20,6 +21,7 @@ export const ColumnSchema = z.object({
         .default("auto"),
     align_y: AlignSchema.default("start"),
     spacing: SpacingSchema.default("md"),
+    align_x: AlignSchema.optional(),
 });
 
 export type ColumnProps = z.infer<typeof ColumnSchema>;
@@ -28,6 +30,7 @@ interface ColumnComponentProps {
     width?: "auto" | "stretch" | number;
     align_y?: z.infer<typeof AlignSchema>;
     spacing?: z.infer<typeof SpacingSchema>;
+    align_x?: z.infer<typeof AlignSchema>;
     children: ReactNode;
 }
 
@@ -35,6 +38,7 @@ export function Column({
     width = "auto",
     align_y = "start",
     spacing = "md",
+    align_x,
     children,
 }: ColumnComponentProps) {
     const widthClass =
@@ -49,7 +53,9 @@ export function Column({
 
     return (
         <div
-            className={`flex flex-col ${widthClass} ${layoutSpacingClassMap[spacing]} ${justifyClassMap[align_y]}`}
+            className={`flex flex-col ${widthClass} ${layoutSpacingClassMap[spacing]} ${justifyClassMap[align_y]} ${
+                align_x ? itemsAlignClassMap[align_x] : ""
+            }`}
             style={style}
         >
             {children}

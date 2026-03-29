@@ -14,9 +14,14 @@ Use only these values:
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
 
 Avoid legacy values such as `small/default/large` or old alignment aliases.
+
+Color rule:
+- On supported non-chart widgets, `color` overrides `tone`.
+- Charts keep `colors` as the array form of the same semantic color enum.
 
 ## 3. Widget Catalog
 
@@ -29,6 +34,7 @@ Required:
 
 Optional:
 - `spacing`
+- `align_x`
 - `align_y`
 
 #### `ColumnSet`
@@ -39,6 +45,7 @@ Required:
 Optional:
 - `spacing`
 - `align_x`
+- `align_y`
 
 #### `Column`
 Required:
@@ -47,6 +54,7 @@ Required:
 
 Optional:
 - `width`: `auto` | `stretch` | positive number
+- `align_x`
 - `align_y`
 - `spacing`
 
@@ -74,6 +82,8 @@ Optional:
 - `layout`: `col` | `grid`
 - `columns`: 1..6
 - `spacing`
+- `align_x`
+- `align_y`
 - `filter`: expression string
 - `sort_by`: string path
 - `sort_order`: `asc` | `desc`
@@ -92,6 +102,7 @@ Optional:
 - `size`
 - `weight`: `normal` | `medium` | `semibold` | `bold`
 - `tone`
+- `color`
 - `align_x`
 - `wrap`: boolean
 - `max_lines`: number
@@ -99,10 +110,11 @@ Optional:
 #### `FactSet`
 Required:
 - `type: "FactSet"`
-- `facts`: array of `{ label, value, tone? }`
+- `facts`: array of `{ label, value, tone?, color? }`
 
 Optional:
 - `spacing`
+- `color`
 
 #### `Image`
 Required:
@@ -120,6 +132,7 @@ Required:
 
 Optional:
 - `tone`
+- `color`
 - `size`
 
 ### 3.4 Visualization
@@ -134,6 +147,7 @@ Optional:
 - `style`: `bar` | `ring`
 - `size`
 - `tone`
+- `color`
 - `show_percentage`: boolean
 - `thresholds.warning`
 - `thresholds.danger`
@@ -217,6 +231,7 @@ Required:
 Optional:
 - `size`
 - `tone`
+- `color`
 
 #### `Action.Copy`
 Required:
@@ -227,6 +242,7 @@ Required:
 Optional:
 - `size`
 - `tone`
+- `color`
 
 ## 4. Template Expression Rules
 

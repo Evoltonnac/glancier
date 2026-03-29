@@ -157,13 +157,13 @@ export type SduiWidgetType =
 
 export interface SduiWidgetBase {
     type: SduiWidgetType;
-    area?: string;
 }
 
 export interface SduiContainerWidget extends SduiWidgetBase {
     type: "Container";
     items: SduiWidget[];
     spacing?: "none" | "sm" | "md" | "lg";
+    align_x?: "start" | "center" | "end";
     align_y?: "start" | "center" | "end";
 }
 
@@ -172,12 +172,14 @@ export interface SduiColumnSetWidget extends SduiWidgetBase {
     columns: SduiColumnWidget[];
     spacing?: "none" | "sm" | "md" | "lg";
     align_x?: "start" | "center" | "end";
+    align_y?: "start" | "center" | "end";
 }
 
 export interface SduiColumnWidget extends SduiWidgetBase {
     type: "Column";
     items: SduiWidget[];
     width?: "auto" | "stretch" | number;
+    align_x?: "start" | "center" | "end";
     align_y?: "start" | "center" | "end";
     spacing?: "none" | "sm" | "md" | "lg";
 }
@@ -190,6 +192,8 @@ export interface SduiListWidget extends SduiWidgetBase {
     layout?: "col" | "grid";
     columns?: number;
     spacing?: "none" | "sm" | "md" | "lg";
+    align_x?: "start" | "center" | "end";
+    align_y?: "start" | "center" | "end";
     filter?: string;
     sort_by?: string;
     sort_order?: "asc" | "desc";
@@ -204,6 +208,19 @@ export interface SduiTextBlockWidget extends SduiWidgetBase {
     size?: "sm" | "md" | "lg" | "xl";
     weight?: "normal" | "medium" | "semibold" | "bold";
     tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+    color?:
+        | "blue"
+        | "orange"
+        | "green"
+        | "violet"
+        | "red"
+        | "cyan"
+        | "amber"
+        | "pink"
+        | "teal"
+        | "gold"
+        | "slate"
+        | "yellow";
     align_x?: "start" | "center" | "end";
     wrap?: boolean;
     max_lines?: number;
@@ -215,8 +232,34 @@ export interface SduiFactSetWidget extends SduiWidgetBase {
         label: string | number;
         value: string | number;
         tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+        color?:
+            | "blue"
+            | "orange"
+            | "green"
+            | "violet"
+            | "red"
+            | "cyan"
+            | "amber"
+            | "pink"
+            | "teal"
+            | "gold"
+            | "slate"
+            | "yellow";
     }>;
     spacing?: "none" | "sm" | "md" | "lg";
+    color?:
+        | "blue"
+        | "orange"
+        | "green"
+        | "violet"
+        | "red"
+        | "cyan"
+        | "amber"
+        | "pink"
+        | "teal"
+        | "gold"
+        | "slate"
+        | "yellow";
 }
 
 export interface SduiImageWidget extends SduiWidgetBase {
@@ -231,6 +274,19 @@ export interface SduiBadgeWidget extends SduiWidgetBase {
     text: string | number;
     tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
     size?: "sm" | "md" | "lg" | "xl";
+    color?:
+        | "blue"
+        | "orange"
+        | "green"
+        | "violet"
+        | "red"
+        | "cyan"
+        | "amber"
+        | "pink"
+        | "teal"
+        | "gold"
+        | "slate"
+        | "yellow";
 }
 
 export interface SduiProgressWidget extends SduiWidgetBase {
@@ -240,6 +296,19 @@ export interface SduiProgressWidget extends SduiWidgetBase {
     style?: "bar" | "ring";
     size?: "sm" | "md" | "lg" | "xl";
     tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+    color?:
+        | "blue"
+        | "orange"
+        | "green"
+        | "violet"
+        | "red"
+        | "cyan"
+        | "amber"
+        | "pink"
+        | "teal"
+        | "gold"
+        | "slate"
+        | "yellow";
     show_percentage?: boolean;
     thresholds?: {
         warning?: number | string;
@@ -253,6 +322,19 @@ export interface SduiActionOpenUrlWidget extends SduiWidgetBase {
     url: string;
     size?: "sm" | "md" | "lg" | "xl";
     tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+    color?:
+        | "blue"
+        | "orange"
+        | "green"
+        | "violet"
+        | "red"
+        | "cyan"
+        | "amber"
+        | "pink"
+        | "teal"
+        | "gold"
+        | "slate"
+        | "yellow";
 }
 
 export interface SduiActionCopyWidget extends SduiWidgetBase {
@@ -261,6 +343,19 @@ export interface SduiActionCopyWidget extends SduiWidgetBase {
     text: string;
     size?: "sm" | "md" | "lg" | "xl";
     tone?: "default" | "muted" | "info" | "success" | "warning" | "danger";
+    color?:
+        | "blue"
+        | "orange"
+        | "green"
+        | "violet"
+        | "red"
+        | "cyan"
+        | "amber"
+        | "pink"
+        | "teal"
+        | "gold"
+        | "slate"
+        | "yellow";
 }
 
 export interface SduiActionSetWidget extends SduiWidgetBase {

@@ -1,4 +1,10 @@
+import type { CSSProperties } from "react";
 import { z } from "zod";
+import {
+    SemanticColorSchema,
+    type SemanticColor,
+    resolveSemanticColor,
+} from "./semanticColors";
 
 export const SpacingSchema = z.enum(["none", "sm", "md", "lg"]);
 export type Spacing = z.infer<typeof SpacingSchema>;
@@ -19,6 +25,9 @@ export type Tone = z.infer<typeof ToneSchema>;
 export const AlignSchema = z.enum(["start", "center", "end"]);
 export type Align = z.infer<typeof AlignSchema>;
 
+export { SemanticColorSchema, resolveSemanticColor };
+export type { SemanticColor };
+
 export const layoutSpacingClassMap: Record<Spacing, string> = {
     none: "gap-0",
     sm: "qb-gap-2",
@@ -37,6 +46,24 @@ export const justifyClassMap: Record<Align, string> = {
     start: "justify-start",
     center: "justify-center",
     end: "justify-end",
+};
+
+export const itemsAlignClassMap: Record<Align, string> = {
+    start: "items-start",
+    center: "items-center",
+    end: "items-end",
+};
+
+export const justifyItemsClassMap: Record<Align, string> = {
+    start: "justify-items-start",
+    center: "justify-items-center",
+    end: "justify-items-end",
+};
+
+export const contentAlignClassMap: Record<Align, string> = {
+    start: "content-start",
+    center: "content-center",
+    end: "content-end",
 };
 
 export const textAlignClassMap: Record<Align, string> = {
@@ -98,3 +125,41 @@ export const toneProgressClassMap: Record<Tone, string> = {
     warning: "bg-warning",
     danger: "bg-error",
 };
+
+const semanticSurfaceForegroundMap: Record<SemanticColor, string> = {
+    blue: "hsl(0 0% 100%)",
+    orange: "hsl(var(--foreground))",
+    green: "hsl(0 0% 100%)",
+    violet: "hsl(0 0% 100%)",
+    red: "hsl(0 0% 100%)",
+    cyan: "hsl(var(--foreground))",
+    amber: "hsl(var(--foreground))",
+    pink: "hsl(0 0% 100%)",
+    teal: "hsl(0 0% 100%)",
+    gold: "hsl(var(--foreground))",
+    slate: "hsl(0 0% 100%)",
+    yellow: "hsl(var(--foreground))",
+};
+
+export function resolveTextColorStyle(
+    color?: SemanticColor,
+): CSSProperties | undefined {
+    if (!color) {
+        return undefined;
+    }
+    return {
+        color: resolveSemanticColor(color),
+    };
+}
+
+export function resolveSurfaceColorStyle(
+    color?: SemanticColor,
+): CSSProperties | undefined {
+    if (!color) {
+        return undefined;
+    }
+    return {
+        backgroundColor: resolveSemanticColor(color),
+        color: semanticSurfaceForegroundMap[color],
+    };
+}

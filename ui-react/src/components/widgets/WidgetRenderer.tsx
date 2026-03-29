@@ -251,6 +251,8 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
                     layout={widget.layout}
                     columns={widget.columns}
                     spacing={widget.spacing}
+                    align_x={widget.align_x}
+                    align_y={widget.align_y}
                 >
                     {pageData.map((item, index) => {
                         // Create item-specific data context
@@ -374,6 +376,7 @@ function WidgetRendererImpl({
                 <Container
                     spacing={validWidget.spacing}
                     align_y={validWidget.align_y}
+                    align_x={validWidget.align_x}
                 >
                     {validWidget.items.map((item: Widget, index: number) => (
                         <WidgetRenderer
@@ -391,6 +394,7 @@ function WidgetRendererImpl({
                 <ColumnSet
                     spacing={validWidget.spacing}
                     align_x={validWidget.align_x}
+                    align_y={validWidget.align_y}
                 >
                     {validWidget.columns.map((column: any, index: number) => (
                         <Column
@@ -398,6 +402,7 @@ function WidgetRendererImpl({
                             width={column.width}
                             align_y={column.align_y}
                             spacing={column.spacing}
+                            align_x={column.align_x}
                         >
                             {column.items.map(
                                 (item: Widget, itemIndex: number) => (

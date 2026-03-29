@@ -115,6 +115,12 @@ Do not author `id` in integration YAML files. Runtime `id` comes from the filena
 5. Produce or update YAML deterministically, respecting mode scope.
 6. Apply fallback disclosure and optional-final validation status in the final response.
 
+## SDUI Authoring Notes
+
+- `color` is the shared semantic color field for supported non-chart widgets and overrides `tone` when both are present.
+- `Chart.*` widgets keep `colors` as the array form of the same semantic color enum.
+- Layout widgets may expose both `align_x` and `align_y`; do not assume only one axis is available.
+
 ## Simple Complete YAML Example
 
 Use this as a minimal but end-to-end baseline (auth -> fetch -> parse -> render):

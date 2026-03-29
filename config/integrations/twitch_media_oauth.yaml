@@ -238,7 +238,7 @@ templates:
                 - type: "Progress"
                   value: "{live_ratio}"
                   label: "Live {live_ratio}% ({live_count}/{followed_total_count})"
-                  tone: "success"
+                  color: "blue"
                   thresholds:
                       warning: 25
                       danger: 60
@@ -261,6 +261,7 @@ templates:
                                           text: "{stream.user_name}"
                                           size: "md"
                                           weight: "semibold"
+                                          color: "blue"
                                           max_lines: 1
                                         - type: "TextBlock"
                                           text: "{stream.subtitle}"

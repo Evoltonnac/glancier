@@ -4,6 +4,8 @@ import {
     ToneSchema,
     microSpacingClassMap,
     toneTextClassMap,
+    SemanticColorSchema,
+    resolveTextColorStyle,
 } from "../shared/commonProps";
 
 /**
@@ -15,17 +17,19 @@ export const FactSchema = z.object({
     label: z.union([z.string(), z.number()]),
     value: z.union([z.string(), z.number()]),
     tone: ToneSchema.optional(),
+    color: SemanticColorSchema.optional(),
 });
 
 export const FactSetSchema = z.object({
     type: z.literal("FactSet"),
     facts: z.array(FactSchema),
     spacing: SpacingSchema.default("md"),
+    color: SemanticColorSchema.optional(),
 });
 
 export type FactSetProps = z.infer<typeof FactSetSchema>;
 
-export function FactSet({ facts, spacing = "md" }: FactSetProps) {
+export function FactSet({ facts, spacing = "md", color }: FactSetProps) {
     return (
         <div className={`flex flex-col ${microSpacingClassMap[spacing]}`}>
             {facts.map(
@@ -34,6 +38,7 @@ export function FactSet({ facts, spacing = "md" }: FactSetProps) {
                         label: string | number;
                         value: string | number;
                         tone?: z.infer<typeof ToneSchema>;
+                        color?: z.infer<typeof SemanticColorSchema>;
                     },
                     index: number,
                 ) => (
@@ -41,6 +46,7 @@ export function FactSet({ facts, spacing = "md" }: FactSetProps) {
                         <span className="text-sm text-muted-foreground shrink-0">{fact.label}:</span>
                         <span
                             className={`text-sm font-medium text-right truncate ${toneTextClassMap[fact.tone || "default"]}`}
+                            style={resolveTextColorStyle(fact.color || color)}
                         >
                             {fact.value}
                         </span>

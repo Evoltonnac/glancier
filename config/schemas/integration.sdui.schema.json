@@ -36,6 +36,23 @@
         "danger"
       ]
     },
+    "colorValue": {
+      "type": "string",
+      "enum": [
+        "blue",
+        "orange",
+        "green",
+        "violet",
+        "red",
+        "cyan",
+        "amber",
+        "pink",
+        "teal",
+        "gold",
+        "slate",
+        "yellow"
+      ]
+    },
     "alignValue": {
       "type": "string",
       "enum": [
@@ -87,6 +104,16 @@
             {
               "$ref": "#/$defs/alignValue",
               "default": "start"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "align_x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/alignValue"
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -190,6 +217,16 @@
                         "$ref": "#/$defs/templatedString"
                       }
                     ]
+                  },
+                  "align_x": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/alignValue"
+                      },
+                      {
+                        "$ref": "#/$defs/templatedString"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -220,6 +257,16 @@
             {
               "$ref": "#/$defs/alignValue",
               "default": "start"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "align_y": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/alignValue"
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -306,6 +353,26 @@
             {
               "$ref": "#/$defs/spacingValue",
               "default": "md"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "align_x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/alignValue"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "align_y": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/alignValue"
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -449,6 +516,16 @@
             }
           ]
         },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/colorValue"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
         "align_x": {
           "anyOf": [
             {
@@ -553,6 +630,16 @@
                         "$ref": "#/$defs/templatedString"
                       }
                     ]
+                  },
+                  "color": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/colorValue"
+                      },
+                      {
+                        "$ref": "#/$defs/templatedString"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -572,6 +659,16 @@
             {
               "$ref": "#/$defs/spacingValue",
               "default": "md"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/colorValue"
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -676,6 +773,16 @@
               "$ref": "#/$defs/templatedString"
             }
           ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/colorValue"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
         }
       },
       "required": [
@@ -757,6 +864,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/toneValue"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/colorValue"
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -1531,6 +1648,16 @@
                             "$ref": "#/$defs/templatedString"
                           }
                         ]
+                      },
+                      "color": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/colorValue"
+                          },
+                          {
+                            "$ref": "#/$defs/templatedString"
+                          }
+                        ]
                       }
                     },
                     "required": [
@@ -1576,6 +1703,16 @@
                           {
                             "$ref": "#/$defs/toneValue",
                             "default": "default"
+                          },
+                          {
+                            "$ref": "#/$defs/templatedString"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/colorValue"
                           },
                           {
                             "$ref": "#/$defs/templatedString"
@@ -1669,6 +1806,16 @@
               "$ref": "#/$defs/templatedString"
             }
           ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/colorValue"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
         }
       },
       "required": [
@@ -1714,6 +1861,16 @@
             {
               "$ref": "#/$defs/toneValue",
               "default": "default"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/colorValue"
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -1795,6 +1952,16 @@
             {
               "$ref": "#/$defs/spacingValue",
               "default": "md"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "align_x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/alignValue"
             },
             {
               "$ref": "#/$defs/templatedString"

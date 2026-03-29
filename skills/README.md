@@ -28,4 +28,5 @@ GitHub folder URL:
 - Keep `integration-editor/` as the canonical skill source.
 - Update `PROMPT.md` when skill behavior or references change.
 - Keep `PROMPT.md` and `integration-editor/references/flow-patterns.md` aligned when runtime behavior changes.
+- Keep SDUI field contracts aligned for shared `color`, chart `colors`, and layout alignment semantics.
 - Frontend bundles `PROMPT.md` directly via raw import (`ui-react/src/constants/integrationSkillPrompt.ts`), so no prompt text copy should be maintained in code.

@@ -61,6 +61,7 @@ const SHARED_ENUM_VALUES = {
   spacingValue: ["none", "sm", "md", "lg"],
   sizeValue: ["sm", "md", "lg", "xl"],
   toneValue: ["default", "muted", "info", "success", "warning", "danger"],
+  colorValue: ["blue", "orange", "green", "violet", "red", "cyan", "amber", "pink", "teal", "gold", "slate", "yellow"],
   alignValue: ["start", "center", "end"],
 };
 const ENUM_ANNOTATION_KEYS = [
@@ -404,6 +405,10 @@ export function buildSduiSchemaFragment() {
     toneValue: {
       type: "string",
       enum: SHARED_ENUM_VALUES.toneValue,
+    },
+    colorValue: {
+      type: "string",
+      enum: SHARED_ENUM_VALUES.colorValue,
     },
     alignValue: {
       type: "string",
