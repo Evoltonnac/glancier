@@ -19,11 +19,11 @@ All SDUI components must explicitly declare their layout metadata during renderi
 - **Behavioral Constraints**: In a Flex container, must behave as `flex-none` (`flex: 0 0 auto`).
 
 ### 2.2 Container Widgets
-- **Characteristics**: Pure layout containers (`Container`, `ColumnSet`) that divide space for child widgets. They don't have an intrinsic minimum height baseline themselves but need to adapt to the parent's allocated space.
+- **Characteristics**: Pure layout containers (`Container`, `ColumnSet`, `Column`) that divide space for child widgets. They don't have an intrinsic minimum height baseline themselves but need to adapt to the parent's allocated space.
 - **Representative Components**: `Container`, `ColumnSet`.
 - **Behavioral Constraints**:
   - Should **skip** the standard `sdui-widget-shell` wrapper to avoid redundant nesting.
-  - Must apply `flex: 1 1 0%` and `min-h-0` to their own root element to properly propagate height down to their children.
+  - Must apply `flex: 1 0 auto` (or `flex-grow shrink-0 basis-auto` in Tailwind) and `min-h-0` to their own root element to fill available space while ensuring they **never** shrink below their content's intrinsic height.
 
 ### 2.3 Content Widgets
 - **Characteristics**: Responsible for displaying primary data, occupying the remaining space of the card. When multiple content widgets exist, they share the remaining space based on weight. Every component class has a strict "minimum usable height".

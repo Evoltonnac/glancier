@@ -486,7 +486,7 @@ interface WidgetLayoutMeta {
 }
 
 const WIDGET_LAYOUT_REGISTRY: Record<string, WidgetLayoutMeta> = {
-    // Container types: flex-1 to fill parent, no rigid min-height
+    // Container types: flex: 1 0 auto to fill parent and prevent compression
     Container: { layoutType: "container" },
     ColumnSet: { layoutType: "container" },
     // Structural types: intrinsic size, no grow
@@ -520,7 +520,7 @@ function WidgetWrapper({
     const meta = getWidgetLayoutMeta(type);
 
     // Container types (Container, ColumnSet) are layout wrappers themselves —
-    // no outer shell needed, they handle flex-1 internally.
+    // no outer shell needed, they handle flex: 1 0 auto internally.
     if (meta.layoutType === "container") {
         return (
             <WidgetRendererImpl

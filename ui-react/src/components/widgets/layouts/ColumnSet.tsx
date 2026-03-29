@@ -35,7 +35,7 @@ export function ColumnSet({
 }: ColumnSetComponentProps) {
     return (
         <div
-            className={`flex flex-row flex-1 min-h-0 w-full ${layoutSpacingClassMap[spacing]} ${justifyClassMap[align_x]}`}
+            className={`flex flex-row flex-grow shrink-0 basis-auto min-h-0 w-full ${layoutSpacingClassMap[spacing]} ${justifyClassMap[align_x]}`}
         >
             {children}
         </div>

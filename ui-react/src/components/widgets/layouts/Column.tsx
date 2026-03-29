@@ -16,11 +16,7 @@ export const ColumnSchema = z.object({
     type: z.literal("Column"),
     items: z.array(z.any()),
     width: z
-        .union([
-            z.literal("auto"),
-            z.literal("stretch"),
-            z.number().positive(),
-        ])
+        .union([z.literal("auto"), z.literal("stretch"), z.number().positive()])
         .default("auto"),
     align_y: AlignSchema.default("start"),
     spacing: SpacingSchema.default("md"),
@@ -42,9 +38,14 @@ export function Column({
     children,
 }: ColumnComponentProps) {
     const widthClass =
-        width === "auto" ? "flex-shrink-0" : width === "stretch" ? "flex-1" : "";
+        width === "auto"
+            ? "flex-shrink-0"
+            : width === "stretch"
+              ? "flex-grow shrink-0 basis-auto"
+              : "";
 
-    const style = typeof width === "number" ? { flex: width } : undefined;
+    const style =
+        typeof width === "number" ? { flex: `${width} 0 auto` } : undefined;
 
     return (
         <div
