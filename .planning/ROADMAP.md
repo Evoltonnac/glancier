@@ -12,7 +12,7 @@ This roadmap covers milestone v1.2 only: risk-operation trust authorization and 
 - [x] **Phase 7: Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor** - Add extensible trust authorization for risky connection targets with source-aware persistence and lifecycle cleanup, and refactor `http` step from hard private-target block to trust-gate flow.
 - [x] **Phase 8: SQL Step Contracts and Safety Guardrails** - Define and enforce secure `use: sql` contracts, guardrails, and deterministic SQL error handling.
 - [x] **Phase 9: SQL Runtime and Integration Data Normalization** - Execute SQL across supported connectors and emit stable normalized Integration Data for templates/widgets.
-- [x] **Phase 10: SQL Chart Widgets and SDUI Rendering** - Add SQL-backed chart widgets with schema-validated field mapping and resilient fallback rendering. (completed 2011-03-25)
+- [x] **Phase 10: SQL Chart Widgets and SDUI Rendering** - Add SQL-backed chart widgets with schema-validated field mapping and resilient fallback rendering. (completed 2026-03-25)
 
 ## Phase Details
 

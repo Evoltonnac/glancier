@@ -45,14 +45,30 @@ interface RuntimePortInfo {
 type TrustScope = "source" | "global";
 type InteractionValue = string | boolean | string[];
 
-interface NetworkTrustInteractionData {
-    confirm_kind: "network_trust";
+interface TrustInteractionDataBase {
+    confirm_kind: "network_trust" | "db_operation_risk";
     target_key?: string;
     target_value?: string;
     target_type?: string;
-    target_class?: string;
     available_scopes?: TrustScope[];
 }
+
+interface NetworkTrustInteractionData extends TrustInteractionDataBase {
+    confirm_kind: "network_trust";
+    target_class?: string;
+}
+
+interface DatabaseOperationRiskInteractionData extends TrustInteractionDataBase {
+    confirm_kind: "db_operation_risk";
+    profile?: string;
+    statement_types?: string[];
+    risk_reasons?: string[];
+    query_preview?: string;
+}
+
+type TrustInteractionData =
+    | NetworkTrustInteractionData
+    | DatabaseOperationRiskInteractionData;
 
 export function FlowHandler({
     source,
@@ -85,13 +101,22 @@ export function FlowHandler({
     const isErrorState = source?.status === "error";
     const isSuspendedState = source?.status === "suspended";
     const sourceErrorCopy = getErrorCopyByCode(source?.error_code);
-    const networkTrustData: NetworkTrustInteractionData | null =
+    const trustInteractionData: TrustInteractionData | null =
         interaction?.type === "confirm" &&
-        interaction.data?.confirm_kind === "network_trust"
-            ? (interaction.data as NetworkTrustInteractionData)
+        (interaction.data?.confirm_kind === "network_trust" ||
+            interaction.data?.confirm_kind === "db_operation_risk")
+            ? (interaction.data as TrustInteractionData)
             : null;
-    const availableTrustScopes = Array.isArray(networkTrustData?.available_scopes)
-        ? networkTrustData.available_scopes
+    const networkTrustData =
+        trustInteractionData?.confirm_kind === "network_trust"
+            ? trustInteractionData
+            : null;
+    const dbOperationRiskData =
+        trustInteractionData?.confirm_kind === "db_operation_risk"
+            ? trustInteractionData
+            : null;
+    const availableTrustScopes = Array.isArray(trustInteractionData?.available_scopes)
+        ? trustInteractionData.available_scopes
         : ["source", "global"];
     const supportsGlobalTrustScope = availableTrustScopes.includes("global");
 
@@ -141,6 +166,14 @@ export function FlowHandler({
     const handleInputChange = (key: string, value: InteractionValue) => {
         setFormData((prev) => ({ ...prev, [key]: value }));
     };
+
+    const formatRiskList = (values?: string[]) =>
+        Array.isArray(values)
+            ? values
+                  .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                  .map((value) => value.replaceAll("_", " "))
+                  .join(", ")
+            : "";
 
     const hasEffectiveValue = useCallback((value: unknown): boolean => {
         if (value === null || value === undefined) {
@@ -419,10 +452,10 @@ export function FlowHandler({
 
     const submitTrustDecision = useCallback(
         async (decision: "allow_once" | "allow_always" | "deny") => {
-            if (!source || !interaction || !networkTrustData) return;
+            if (!source || !interaction || !trustInteractionData) return;
 
             const targetKey =
-                networkTrustData.target_key || networkTrustData.target_value;
+                trustInteractionData.target_key || trustInteractionData.target_value;
             if (!targetKey) {
                 setError(t("flow.error.interaction_failed"));
                 return;
@@ -448,11 +481,11 @@ export function FlowHandler({
         [
             handleClose,
             interaction,
-            networkTrustData,
             onInteractSuccess,
             source,
             supportsGlobalTrustScope,
             t,
+            trustInteractionData,
             trustScope,
         ],
     );
@@ -910,6 +943,93 @@ export function FlowHandler({
                         </div>
                     );
                 }
+                if (dbOperationRiskData?.confirm_kind === "db_operation_risk") {
+                    const hasWriteRisk = Array.isArray(dbOperationRiskData.risk_reasons)
+                        ? dbOperationRiskData.risk_reasons.includes("non_select_statement")
+                        : false;
+                    const statementTypes = formatRiskList(dbOperationRiskData.statement_types);
+                    const riskReasons = formatRiskList(dbOperationRiskData.risk_reasons);
+                    const connectorTarget =
+                        dbOperationRiskData.profile ||
+                        dbOperationRiskData.target_key ||
+                        dbOperationRiskData.target_value ||
+                        "";
+                    return (
+                        <div className="py-4 space-y-4 text-sm">
+                            <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                                <div className="font-medium">
+                                    {t(
+                                        hasWriteRisk
+                                            ? "flow.db_operation_risk.prompt.write"
+                                            : "flow.db_operation_risk.prompt.generic",
+                                    )}
+                                </div>
+                                <div className="mt-1 text-muted-foreground">
+                                    {t("flow.db_operation_risk.connector", {
+                                        connector: connectorTarget,
+                                    })}
+                                </div>
+                                {dbOperationRiskData.query_preview && (
+                                    <div className="mt-1 break-all text-xs text-muted-foreground">
+                                        {t("flow.db_operation_risk.query_preview", {
+                                            query: dbOperationRiskData.query_preview,
+                                        })}
+                                    </div>
+                                )}
+                                {statementTypes && (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                        {t("flow.db_operation_risk.statement_types", {
+                                            types: statementTypes,
+                                        })}
+                                    </div>
+                                )}
+                                {riskReasons && (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                        {t("flow.db_operation_risk.risk_reasons", {
+                                            reasons: riskReasons,
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {supportsGlobalTrustScope && (
+                                <div className="space-y-2">
+                                    <div className="text-xs text-muted-foreground">
+                                        {t("flow.network_trust.scope.label")}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "source"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("source")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.source")}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "global"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("global")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.global")}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
                 return (
                     <div className="py-4 text-sm text-center">
                         {t("flow.confirm.message", { name: source.name })}
@@ -1056,8 +1176,7 @@ export function FlowHandler({
                 {renderContent()}
 
                 <DialogFooter>
-                    {interaction.type === "confirm" &&
-                        networkTrustData?.confirm_kind === "network_trust" && (
+                    {interaction.type === "confirm" && trustInteractionData && (
                             <>
                                 <Button
                                     type="button"
@@ -1084,8 +1203,7 @@ export function FlowHandler({
                                 </Button>
                             </>
                         )}
-                    {!(interaction.type === "confirm" &&
-                        networkTrustData?.confirm_kind === "network_trust") &&
+                    {!(interaction.type === "confirm" && trustInteractionData) &&
                         interaction.type !== "oauth_start" &&
                         interaction.type !== "oauth_device_flow" &&
                         interaction.type !== "webview_scrape" && (

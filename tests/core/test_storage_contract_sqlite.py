@@ -185,6 +185,39 @@ def test_trust_rule_repo_upsert_query_delete_and_policy_precedence(tmp_path):
         assert fallback_resolution.decision == TrustDecision.PROMPT
         assert fallback_resolution.reason == "default"
 
+        policy.grant_allow_once(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        first_allow_once = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        second_allow_once = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        assert first_allow_once.decision == TrustDecision.ALLOW
+        assert first_allow_once.reason == "allow_once"
+        assert second_allow_once.decision == TrustDecision.ALLOW
+        assert second_allow_once.reason == "allow_once"
+
+        policy.clear_allow_once_for_source(source_id="source-alpha")
+        cleared_resolution = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        assert cleared_resolution.decision == TrustDecision.DENY
+        assert cleared_resolution.reason == "source_rule"
+
         assert trust_repo.delete_rule(
             capability="http",
             scope_type=TrustScopeType.GLOBAL.value,

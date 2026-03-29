@@ -231,7 +231,17 @@ class Executor:
             async with self._fetch_semaphore:
                 await self._fetch_source_once(source)
         finally:
+            self._clear_completed_allow_once_grants(source.id)
             await self._clear_source_inflight(source.id)
+
+    def _clear_completed_allow_once_grants(self, source_id: str) -> None:
+        policy = self._network_trust_policy
+        if policy is None or not hasattr(policy, "clear_allow_once_for_source"):
+            return
+        state = self.get_source_state(source_id)
+        if state.status == SourceStatus.SUSPENDED:
+            return
+        policy.clear_allow_once_for_source(source_id=source_id)
 
     async def _fetch_source_once(self, source: SourceConfig):
         try:
@@ -1085,7 +1095,7 @@ class Executor:
 
         if isinstance(error, SqlRiskOperationTrustRequiredError):
             interaction_data = dict(error.data or {})
-            interaction_data.setdefault("confirm_kind", "network_trust")
+            interaction_data.setdefault("confirm_kind", "db_operation_risk")
             interaction_data.setdefault("actions", ["allow_once", "allow_always", "deny"])
             interaction_data.setdefault("available_scopes", ["source", "global"])
             return InteractionRequest(

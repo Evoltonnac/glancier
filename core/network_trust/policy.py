@@ -76,7 +76,7 @@ class NetworkTrustPolicy:
         target_type: str,
         target_value: str,
     ) -> TrustResolution:
-        if self._consume_allow_once(
+        if self._has_allow_once(
             capability=capability,
             source_id=source_id,
             target_type=target_type,
@@ -117,7 +117,16 @@ class NetworkTrustPolicy:
             reason="default",
         )
 
-    def _consume_allow_once(
+    def clear_allow_once_for_source(self, *, source_id: str) -> None:
+        normalized_source_id = source_id.strip()
+        if not normalized_source_id:
+            return
+        with self._ephemeral_lock:
+            self._ephemeral_allow_once = {
+                key for key in self._ephemeral_allow_once if key[1] != normalized_source_id
+            }
+
+    def _has_allow_once(
         self,
         *,
         capability: str,
@@ -132,10 +141,7 @@ class NetworkTrustPolicy:
             target_value=target_value,
         )
         with self._ephemeral_lock:
-            if key not in self._ephemeral_allow_once:
-                return False
-            self._ephemeral_allow_once.remove(key)
-            return True
+            return key in self._ephemeral_allow_once
 
     @staticmethod
     def _build_ephemeral_key(

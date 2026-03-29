@@ -97,7 +97,6 @@ templates:
             size: "sm"
             tone: "muted"
           - type: "Chart.Table"
-            title: "EDB Base Sample"
             data_source: "{edb_base_rows}"
             encoding:
               columns:
@@ -110,9 +109,7 @@ templates:
             sort_by: "_id"
             sort_order: "asc"
             limit: 20
-            empty_state: "No base sample rows."
           - type: "Chart.Table"
-            title: "EDB Base Summary"
             data_source: "{edb_summary_rows}"
             encoding:
               columns:
@@ -120,4 +117,3 @@ templates:
                   title: "Record Count"
                   format: "number"
             limit: 5
-            empty_state: "No summary rows."

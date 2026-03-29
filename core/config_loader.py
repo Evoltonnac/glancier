@@ -355,7 +355,26 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
                 "type": "object",
                 "properties": {
                     "profile": {"type": "string", "minLength": 1},
-                    "options": {"type": "object", "additionalProperties": True},
+                    "options": {
+                        "type": "object",
+                        "properties": {
+                            "dialect": {
+                                "type": "string",
+                                "enum": [
+                                    "postgres",
+                                    "mysql",
+                                    "sqlite",
+                                    "duckdb",
+                                    "clickhouse",
+                                    "snowflake",
+                                    "bigquery",
+                                    "redshift",
+                                    "oracle"
+                                ]
+                            }
+                        },
+                        "additionalProperties": True,
+                    },
                 },
                 "required": ["profile"],
                 "additionalProperties": True,

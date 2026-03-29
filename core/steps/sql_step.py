@@ -5,14 +5,18 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from core.log_redaction import sanitize_log_reason
-from core.network_trust.models import TrustDecision, TrustResolution
+from core.network_trust.models import TrustDecision
 from core.sql.contracts import SqlContractValidationError, classify_sql_contract
 from core.sql.normalization import build_normalized_sql_response, build_sql_fields
 from core.sql.runtime_adapters import run_sql_query_for_profile
+from core.steps.db_trust import (
+    TrustBinding,
+    enforce_database_network_trust,
+    evaluate_trust_binding,
+)
 
 if TYPE_CHECKING:
     from core.config_loader import SourceConfig, StepConfig
@@ -41,14 +45,6 @@ _REQUIRED_SQL_RESPONSE_KEYS = (
     "columns",
     "execution_ms",
 )
-
-
-@dataclass(slots=True)
-class _SqlTrustBinding:
-    target_type: str
-    target_value: str
-    decision: TrustDecision
-    decision_source: str
 
 
 class SqlStepRuntimeError(RuntimeError):
@@ -111,18 +107,24 @@ def _normalize_connector_profile(args: dict[str, Any]) -> str:
     return str(connector.get("profile") or "").strip().lower()
 
 
-def _resolve_sql_dialect(args: dict[str, Any]) -> str | None:
+def _resolve_sql_dialect(args: dict[str, Any], *, profile: str | None = None) -> str | None:
     connector = args.get("connector")
-    if not isinstance(connector, dict):
-        return None
-    options = connector.get("options")
-    if not isinstance(options, dict):
-        return None
-    dialect = options.get("dialect")
-    if not isinstance(dialect, str):
-        return None
-    normalized = dialect.strip().lower()
-    return normalized or None
+    if isinstance(connector, dict):
+        options = connector.get("options")
+        if isinstance(options, dict):
+            dialect = options.get("dialect")
+            if isinstance(dialect, str):
+                normalized = dialect.strip().lower()
+                if normalized:
+                    return normalized
+
+    if profile:
+        p = str(profile).strip().lower()
+        if p == "postgresql":
+            return "postgres"
+        if p in {"mysql", "sqlite", "oracle", "duckdb", "clickhouse", "snowflake", "bigquery", "redshift"}:
+            return p
+    return None
 
 
 def _resolve_sql_runtime_defaults(executor: "Executor") -> tuple[float, int]:
@@ -197,47 +199,10 @@ def _is_auth_failure_message(message: str) -> bool:
     )
 
 
-def _evaluate_risk_operation_policy(
-    *,
-    profile: str,
-    source: "SourceConfig",
-    executor: "Executor",
-) -> _SqlTrustBinding:
-    target_type = "connector_profile"
-    target_value = profile or "unknown"
-    trust_policy = getattr(executor, "_network_trust_policy", None)
-    if trust_policy is None or not hasattr(trust_policy, "evaluate"):
-        return _SqlTrustBinding(
-            target_type=target_type,
-            target_value=target_value,
-            decision=TrustDecision.PROMPT,
-            decision_source="default",
-        )
-
-    resolution = trust_policy.evaluate(
-        capability="sql",
-        source_id=source.id,
-        target_type=target_type,
-        target_value=target_value,
-    )
-    if not isinstance(resolution, TrustResolution):
-        return _SqlTrustBinding(
-            target_type=target_type,
-            target_value=target_value,
-            decision=TrustDecision.PROMPT,
-            decision_source="default",
-        )
-    return _SqlTrustBinding(
-        target_type=target_type,
-        target_value=target_value,
-        decision=resolution.decision,
-        decision_source=resolution.reason,
-    )
-
-
 def _build_risk_interaction_data(
     *,
-    binding: _SqlTrustBinding,
+    binding: TrustBinding,
+    profile: str,
     query_text: str,
     statement_types: list[str],
     risk_reasons: list[str],
@@ -246,8 +211,9 @@ def _build_risk_interaction_data(
     if len(preview) > _MAX_QUERY_PREVIEW_LENGTH:
         preview = f"{preview[:_MAX_QUERY_PREVIEW_LENGTH]}..."
     return {
-        "confirm_kind": "network_trust",
+        "confirm_kind": "db_operation_risk",
         "capability": "sql",
+        "profile": profile or "unknown",
         "target_type": binding.target_type,
         "target_value": binding.target_value,
         "target_key": binding.target_value,
@@ -367,8 +333,9 @@ async def execute_sql_step(
     executor: "Executor",
 ) -> dict[str, Any]:
     _ = (context, outputs)
+    profile = _normalize_connector_profile(args)
     query_text = str(args.get("query") or "")
-    dialect = _resolve_sql_dialect(args)
+    dialect = _resolve_sql_dialect(args, profile=profile)
     try:
         classification = classify_sql_contract(query_text, dialect=dialect)
     except SqlContractValidationError as error:
@@ -380,17 +347,38 @@ async def execute_sql_step(
             details=error.details,
         ) from error
 
+    if profile not in {"sqlite", "postgresql", "mysql"}:
+        raise SqlConnectFailedError(
+            source_id=source.id,
+            step_id=step.id,
+            code="runtime.sql_connect_failed",
+            summary="SQL connection failed.",
+            details=f"Unsupported SQL connector profile: {profile or 'unknown'}",
+        )
+
+    dsn = _resolve_sql_connection_string(args)
+    enforce_database_network_trust(
+        capability="sql",
+        profile=profile,
+        connection_string=dsn,
+        source=source,
+        step=step,
+        executor=executor,
+    )
+
     statement_types = list(classification.statement_types)
     risk_reasons = list(classification.risk_reasons)
-    profile = _normalize_connector_profile(args)
     if classification.requires_trust:
-        binding = _evaluate_risk_operation_policy(
-            profile=profile,
+        binding = evaluate_trust_binding(
+            capability="sql",
             source=source,
             executor=executor,
+            target_type="connector_profile",
+            target_value=profile or "unknown",
         )
         interaction_data = _build_risk_interaction_data(
             binding=binding,
+            profile=profile,
             query_text=query_text,
             statement_types=statement_types,
             risk_reasons=risk_reasons,
@@ -414,19 +402,9 @@ async def execute_sql_step(
                 data=interaction_data,
             )
 
-    if profile not in {"sqlite", "postgresql", "mysql"}:
-        raise SqlConnectFailedError(
-            source_id=source.id,
-            step_id=step.id,
-            code="runtime.sql_connect_failed",
-            summary="SQL connection failed.",
-            details=f"Unsupported SQL connector profile: {profile or 'unknown'}",
-        )
-
     default_timeout_seconds, default_max_rows = _resolve_sql_runtime_defaults(executor)
     timeout_seconds = _resolve_sql_timeout(args, default_timeout_seconds=default_timeout_seconds)
     max_rows = _resolve_sql_max_rows(args, default_max_rows=default_max_rows)
-    dsn = _resolve_sql_connection_string(args)
 
     started_at = time.monotonic()
     try:

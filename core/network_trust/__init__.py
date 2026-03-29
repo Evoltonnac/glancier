@@ -1,3 +1,4 @@
+from .database import ClassifiedDatabaseTarget, classify_database_connection_target
 from .models import (
     ClassifiedNetworkTarget,
     ConnectionTrustRule,
@@ -13,6 +14,7 @@ from .models import (
 from .policy import NetworkTrustPolicy
 
 __all__ = [
+    "ClassifiedDatabaseTarget",
     "ClassifiedNetworkTarget",
     "ConnectionTrustRule",
     "NetworkTargetClass",
@@ -24,4 +26,5 @@ __all__ = [
     "TrustDecision",
     "TrustResolution",
     "TrustScopeType",
+    "classify_database_connection_target",
 ]

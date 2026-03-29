@@ -9,6 +9,7 @@ import pytest
 
 from core.config_loader import StepType
 from core.network_trust.models import TrustDecision, TrustResolution
+from core.network_trust.policy import NetworkTrustPolicy
 from core.source_state import InteractionType, SourceStatus
 from core.steps.sql_step import execute_sql_step
 from tests.factories import build_source_config, build_step
@@ -189,7 +190,7 @@ async def test_execute_sql_step_high_risk_query_requires_trust_before_execution(
 
     error = exc_info.value
     assert getattr(error, "code", None) == "runtime.sql_risk_operation_requires_trust"
-    assert getattr(error, "data", {}).get("confirm_kind") == "network_trust"
+    assert getattr(error, "data", {}).get("confirm_kind") == "db_operation_risk"
 
 
 @pytest.mark.asyncio
@@ -262,7 +263,7 @@ async def test_executor_sql_trust_gate_updates_suspended_state_with_sql_error_co
     assert state.interaction is not None
     assert state.interaction.type == InteractionType.CONFIRM
     assert state.interaction.data is not None
-    assert state.interaction.data.get("confirm_kind") == "network_trust"
+    assert state.interaction.data.get("confirm_kind") == "db_operation_risk"
 
     suspended_calls = [
         call.kwargs
@@ -271,6 +272,92 @@ async def test_executor_sql_trust_gate_updates_suspended_state_with_sql_error_co
     ]
     assert suspended_calls
     assert suspended_calls[-1]["error_code"] == "runtime.sql_risk_operation_requires_trust"
+
+
+@pytest.mark.asyncio
+async def test_sql_step_allow_once_survives_multi_gate_retry_until_fetch_completes(
+    executor,
+    data_controller,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import core.steps.sql_step as sql_step_module
+
+    class _EmptyTrustRepo:
+        def find_rule(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(
+        sql_step_module,
+        "run_sql_query_for_profile",
+        lambda *_args, **_kwargs: {
+            "columns": ["affected_rows"],
+            "rows": [{"affected_rows": 1}],
+            "has_more_rows": False,
+            "db_type_hints": {"affected_rows": "integer"},
+        },
+    )
+
+    policy = NetworkTrustPolicy(
+        rule_repository=_EmptyTrustRepo(),
+        default_policy_resolver=lambda: "prompt",
+    )
+    executor._network_trust_policy = policy
+    source = build_source_config(
+        source_id="sql-multi-gate-allow-once",
+        flow=[
+            build_step(
+                step_id="sql-step",
+                use=StepType.SQL,
+                args={
+                    "connector": {"profile": "postgresql"},
+                    "dsn": "postgresql://demo:secret@localhost:5432/demo",
+                    "query": "DELETE FROM metrics WHERE id = 1",
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.data is not None
+    assert state.interaction.data["confirm_kind"] == "network_trust"
+
+    policy.grant_allow_once(
+        capability="sql",
+        source_id=source.id,
+        target_type="host_port",
+        target_value="localhost:5432",
+    )
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.data is not None
+    assert state.interaction.data["confirm_kind"] == "db_operation_risk"
+
+    policy.grant_allow_once(
+        capability="sql",
+        source_id=source.id,
+        target_type="connector_profile",
+        target_value="postgresql",
+    )
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ACTIVE
+    data_controller.upsert.assert_called_once()
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.data is not None
+    assert state.interaction.data["confirm_kind"] == "network_trust"
 
 
 @pytest.mark.asyncio

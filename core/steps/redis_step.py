@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.log_redaction import sanitize_log_reason
 from core.sql.normalization import build_sql_fields, serialize_sql_value
+from core.steps.db_trust import enforce_database_network_trust
 
 if TYPE_CHECKING:
     from core.config_loader import SourceConfig, StepConfig
@@ -375,7 +376,17 @@ async def execute_redis_step(
     outputs: dict[str, Any],
     executor: Any,
 ) -> dict[str, Any]:
-    _ = (context, outputs, executor)
+    _ = (context, outputs)
+    profile = _normalize_profile(args) or _SUPPORTED_PROFILE
+    connection_string = str(args.get("uri") or args.get("dsn") or "")
+    enforce_database_network_trust(
+        capability="redis",
+        profile=profile,
+        connection_string=connection_string,
+        source=source,
+        step=step,
+        executor=executor,
+    )
     try:
         _validate_contract(args)
     except Exception as error:

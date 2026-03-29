@@ -653,6 +653,23 @@ def _build_network_trust_pending_state(source_id: str) -> SimpleNamespace:
     )
 
 
+def _build_db_operation_risk_pending_state(source_id: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        interaction=SimpleNamespace(
+            type=InteractionType.CONFIRM,
+            source_id=source_id,
+            fields=[],
+            data={
+                "confirm_kind": "db_operation_risk",
+                "capability": "sql",
+                "target_type": "connector_profile",
+                "target_value": "postgresql",
+                "target_key": "postgresql",
+            },
+        ),
+    )
+
+
 def test_interact_network_trust_allow_once_bypasses_secrets_and_grants_ephemeral():
     source = make_stored_source("oauth-source", integration_id="oauth-integration")
     integration = make_integration_config("oauth-integration", "oauth")
@@ -686,6 +703,45 @@ def test_interact_network_trust_allow_once_bypasses_secrets_and_grants_ephemeral
         source_id="oauth-source",
         target_type="host",
         target_value="127.0.0.1",
+    )
+    runtime["trust_rule_repo"].upsert_rule.assert_not_called()
+    runtime["secrets_controller"].set_secrets.assert_not_called()
+    runtime["executor"].fetch_source.assert_called_once()
+
+
+def test_interact_db_operation_risk_allow_once_uses_same_trust_submit_contract():
+    source = make_stored_source("oauth-source", integration_id="oauth-integration")
+    integration = make_integration_config("oauth-integration", "oauth")
+    runtime = make_api_runtime(
+        sources=[source],
+        integrations={"oauth-integration": integration},
+    )
+    runtime["secrets_controller"] = SimpleNamespace(set_secrets=MagicMock())
+    runtime["network_trust_policy"] = SimpleNamespace(grant_allow_once=MagicMock())
+    runtime["trust_rule_repo"] = SimpleNamespace(upsert_rule=MagicMock())
+    runtime["executor"] = SimpleNamespace(
+        get_source_state=lambda _source_id: _build_db_operation_risk_pending_state("oauth-source"),
+        _update_state=MagicMock(),
+        fetch_source=MagicMock(),
+    )
+    client = _build_client(runtime)
+
+    response = client.post(
+        "/api/sources/oauth-source/interact",
+        json={
+            "type": "confirm",
+            "decision": "allow_once",
+            "scope": "source",
+            "target_key": "postgresql",
+        },
+    )
+
+    assert response.status_code == 200
+    runtime["network_trust_policy"].grant_allow_once.assert_called_once_with(
+        capability="sql",
+        source_id="oauth-source",
+        target_type="connector_profile",
+        target_value="postgresql",
     )
     runtime["trust_rule_repo"].upsert_rule.assert_not_called()
     runtime["secrets_controller"].set_secrets.assert_not_called()

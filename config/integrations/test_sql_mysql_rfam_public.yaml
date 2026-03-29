@@ -88,7 +88,6 @@ templates:
             size: "sm"
             tone: "muted"
           - type: "Chart.Table"
-            title: "Rfam Schema Table Snapshot"
             data_source: "{rfam_table_rows}"
             encoding:
               columns:
@@ -104,9 +103,7 @@ templates:
             sort_by: "TABLE_NAME"
             sort_order: "asc"
             limit: 50
-            empty_state: "No schema rows."
           - type: "Chart.Table"
-            title: "Rfam Family Sample"
             data_source: "{rfam_family_rows}"
             encoding:
               columns:
@@ -122,4 +119,3 @@ templates:
             sort_by: "rfam_acc"
             sort_order: "asc"
             limit: 20
-            empty_state: "No family rows."

@@ -591,6 +591,53 @@ describe("FlowHandler", () => {
         });
     });
 
+    it("renders database operation risk copy and submits trust decisions with the same contract", async () => {
+        render(
+            <FlowHandler
+                source={buildSource({
+                    type: "confirm",
+                    message: "Database risk confirmation required",
+                    fields: [],
+                    data: {
+                        confirm_kind: "db_operation_risk",
+                        target_key: "postgresql",
+                        profile: "postgresql",
+                        statement_types: ["delete"],
+                        risk_reasons: ["non_select_statement"],
+                        query_preview: "DELETE FROM metrics WHERE id = 1",
+                        available_scopes: ["source", "global"],
+                    },
+                })}
+                isOpen={true}
+                onClose={vi.fn()}
+                onInteractSuccess={vi.fn()}
+            />,
+        );
+
+        expect(
+            screen.getByText(/may write or mutate stored data|可能写入或修改已存储的数据/),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText(/Query preview: DELETE FROM metrics WHERE id = 1|查询预览：DELETE FROM metrics WHERE id = 1/),
+        ).toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: /Allow Once|仅允许本次/,
+            }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(apiMock.interact).toHaveBeenCalledWith("source-1", {
+            type: "confirm",
+            decision: "allow_once",
+            scope: "source",
+            target_key: "postgresql",
+        });
+    });
+
     it("prefers error code copy over interaction message in dialog title/description", async () => {
         render(
             <FlowHandler

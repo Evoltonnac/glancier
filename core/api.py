@@ -299,8 +299,13 @@ def _infer_error_code_from_interaction(interaction: dict[str, Any] | None) -> st
     interaction_type = interaction.get("type")
     if interaction_type == "confirm":
         data = interaction.get("data")
-        if isinstance(data, dict) and data.get("confirm_kind") == "network_trust":
-            return "runtime.network_trust_required"
+        if isinstance(data, dict):
+            confirm_kind = str(data.get("confirm_kind") or "").strip().lower()
+            capability = str(data.get("capability") or "").strip().lower()
+            if confirm_kind == "network_trust":
+                return "runtime.network_trust_required"
+            if confirm_kind == "db_operation_risk" and capability == "sql":
+                return "runtime.sql_risk_operation_requires_trust"
     mapping = {
         "oauth_start": "auth.authorization_required",
         "oauth_device_flow": "auth.authorization_required",
@@ -745,11 +750,12 @@ def _resolve_webview_interaction_secret_key(
     return "webview_data"
 
 
-def _extract_network_trust_binding_data(interaction: InteractionRequest | Any) -> dict[str, Any] | None:
+def _extract_trust_binding_data(interaction: InteractionRequest | Any) -> dict[str, Any] | None:
     data = getattr(interaction, "data", None)
     if not isinstance(data, dict):
         return None
-    if data.get("confirm_kind") != "network_trust":
+    required_keys = {"capability", "target_type", "target_value", "target_key"}
+    if not required_keys.issubset(data.keys()):
         return None
     return data
 
@@ -1548,7 +1554,7 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
             request_interaction_type=interaction_type,
             request_source_id=request_source_id,
         )
-        trust_binding = _extract_network_trust_binding_data(binding)
+        trust_binding = _extract_trust_binding_data(binding)
         if trust_binding is not None:
             _validate_interaction_payload_keys(
                 data,

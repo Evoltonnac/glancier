@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.config_loader import StepType
+from core.network_trust.models import TrustDecision, TrustResolution
 from core.steps.mongodb_step import execute_mongodb_step
 from tests.factories import build_source_config, build_step
 
@@ -52,6 +53,41 @@ async def test_execute_mongodb_step_returns_deterministic_envelope(
     assert response["truncated"] is False
     assert response["operation"] == "find"
     assert response["duration_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_execute_mongodb_step_private_uri_requires_network_trust_first():
+    step = build_step(step_id="mongo-step", use=StepType.MONGODB)
+    source = build_source_config(source_id="mongo-trust-gate", flow=[step])
+    executor = SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.PROMPT,
+                reason="default",
+            )
+        )
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await execute_mongodb_step(
+            step,
+            source,
+            {
+                "uri": "mongodb://localhost:27017",
+                "database": "demo",
+                "collection": "metrics",
+                "operation": "find",
+                "filter": {"name": "alpha"},
+            },
+            {},
+            {},
+            executor,
+        )
+
+    error = exc_info.value
+    assert getattr(error, "code", None) == "runtime.network_trust_required"
+    assert getattr(error, "data", {}).get("confirm_kind") == "network_trust"
+    assert getattr(error, "data", {}).get("capability") == "mongodb"
 
 
 @pytest.mark.asyncio
