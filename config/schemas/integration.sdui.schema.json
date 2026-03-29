@@ -1016,6 +1016,10 @@
           "type": "string",
           "minLength": 1
         },
+        "fields_source": {
+          "type": "string",
+          "minLength": 1
+        },
         "legend": {
           "anyOf": [
             {
@@ -1143,6 +1147,10 @@
       "type": "object",
       "properties": {
         "data_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fields_source": {
           "type": "string",
           "minLength": 1
         },
@@ -1276,6 +1284,10 @@
           "type": "string",
           "minLength": 1
         },
+        "fields_source": {
+          "type": "string",
+          "minLength": 1
+        },
         "legend": {
           "anyOf": [
             {
@@ -1406,6 +1418,10 @@
           "type": "string",
           "minLength": 1
         },
+        "fields_source": {
+          "type": "string",
+          "minLength": 1
+        },
         "legend": {
           "anyOf": [
             {
@@ -1524,6 +1540,10 @@
       "type": "object",
       "properties": {
         "data_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fields_source": {
           "type": "string",
           "minLength": 1
         },

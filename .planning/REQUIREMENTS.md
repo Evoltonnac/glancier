@@ -38,6 +38,13 @@
 - [ ] **UX-03**: User can apply dashboard-level filter values to SQL query inputs without breaking canonical `useViewTabsState` ownership and idempotent sync.
 - [ ] **UX-04**: User can use SQL+chart workflows without introducing duplicate SWR/Zustand write paths in dashboard management interactions.
 
+### Security and Storage Trust (Phase 7 Refactor)
+
+- [x] **SEC-HTTP-01**: User can rely on loopback/private target classification for HTTP steps.
+- [x] **SEC-HTTP-02**: User can authorize HTTP private-target access through policy-driven trust prompts.
+- [x] **SEC-DB-01**: User can rely on deterministic identity for database trust rules (capability/source/target).
+- [x] **STORAGE-TRUST-01**: User can persist trust decisions in SQLite with source-scoped cascade deletion.
+
 ## v2 Requirements
 
 ### Deferred Capability Expansion
@@ -82,10 +89,14 @@
 | UX-02 | Phase 11 | Pending |
 | UX-03 | Phase 11 | Pending |
 | UX-04 | Phase 11 | Pending |
+| SEC-HTTP-01 | Phase 7 | Complete |
+| SEC-HTTP-02 | Phase 7 | Complete |
+| SEC-DB-01 | Phase 7 | Complete |
+| STORAGE-TRUST-01 | Phase 7 | Complete |
 
 **Coverage:**
-- v1 requirements: 21 total
-- Mapped to phases: 21
+- v1 requirements: 25 total
+- Mapped to phases: 25
 - Unmapped: 0
 
 ---

@@ -125,22 +125,6 @@ const emptyData = {
     },
 };
 
-const runtimeErrorData = {
-    sql_response: {
-        rows: sqlResponse.rows,
-        fields: sqlResponse.fields,
-        error: { message: "boom" },
-    },
-};
-
-const loadingData = {
-    sql_response: {
-        rows: sqlResponse.rows,
-        fields: sqlResponse.fields,
-        status: "refreshing",
-    },
-};
-
 describe("chart widget foundations", () => {
     it("renders line chart from sql_response rows", () => {
         render(
@@ -278,12 +262,13 @@ describe("chart widget foundations", () => {
         expect(screen.getByText(/This chart cannot be shown right now\./)).toBeInTheDocument();
     });
 
-    it("renders line widget ready state and fallback states", () => {
+    it("renders line widget ready/config/empty states from widget params", () => {
         const { rerender } = render(
             <ChartLine
                 widget={{
                     type: "Chart.Line",
                     data_source: readyData.sql_response.rows,
+                    fields_source: readyData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -301,37 +286,8 @@ describe("chart widget foundations", () => {
             <ChartLine
                 widget={{
                     type: "Chart.Line",
-                    data_source: loadingData.sql_response.rows,
-                    encoding: {
-                        x: { field: "ts" },
-                        y: { field: "amount" },
-                    },
-                }}
-                data={loadingData}
-            />,
-        );
-        expect(screen.getByLabelText("Loading line chart")).toBeInTheDocument();
-
-        rerender(
-            <ChartLine
-                widget={{
-                    type: "Chart.Line",
-                    data_source: runtimeErrorData.sql_response.rows,
-                    encoding: {
-                        x: { field: "ts" },
-                        y: { field: "amount" },
-                    },
-                }}
-                data={runtimeErrorData}
-            />,
-        );
-        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
-
-        rerender(
-            <ChartLine
-                widget={{
-                    type: "Chart.Line",
                     data_source: configErrorData.sql_response.rows,
+                    fields_source: configErrorData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "missing_metric" },
@@ -347,6 +303,7 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Line",
                     data_source: emptyData.sql_response.rows,
+                    fields_source: emptyData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -358,12 +315,13 @@ describe("chart widget foundations", () => {
         expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
     });
 
-    it("renders bar widget ready state and fallback states", () => {
+    it("renders bar widget ready/config/empty states", () => {
         const { rerender } = render(
             <ChartBar
                 widget={{
                     type: "Chart.Bar",
                     data_source: readyData.sql_response.rows,
+                    fields_source: readyData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -379,37 +337,8 @@ describe("chart widget foundations", () => {
             <ChartBar
                 widget={{
                     type: "Chart.Bar",
-                    data_source: loadingData.sql_response.rows,
-                    encoding: {
-                        x: { field: "ts" },
-                        y: { field: "amount" },
-                    },
-                }}
-                data={loadingData}
-            />,
-        );
-        expect(screen.getByLabelText("Loading bar chart")).toBeInTheDocument();
-
-        rerender(
-            <ChartBar
-                widget={{
-                    type: "Chart.Bar",
-                    data_source: runtimeErrorData.sql_response.rows,
-                    encoding: {
-                        x: { field: "ts" },
-                        y: { field: "amount" },
-                    },
-                }}
-                data={runtimeErrorData}
-            />,
-        );
-        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
-
-        rerender(
-            <ChartBar
-                widget={{
-                    type: "Chart.Bar",
                     data_source: configErrorData.sql_response.rows,
+                    fields_source: configErrorData.sql_response.fields,
                     encoding: {
                         x: { field: "missing_x" },
                         y: { field: "amount" },
@@ -425,6 +354,7 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Bar",
                     data_source: emptyData.sql_response.rows,
+                    fields_source: emptyData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -436,12 +366,13 @@ describe("chart widget foundations", () => {
         expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
     });
 
-    it("renders area widget ready state and fallback states", () => {
+    it("renders area widget ready/config/empty states", () => {
         const { rerender } = render(
             <ChartArea
                 widget={{
                     type: "Chart.Area",
                     data_source: readyData.sql_response.rows,
+                    fields_source: readyData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -457,37 +388,8 @@ describe("chart widget foundations", () => {
             <ChartArea
                 widget={{
                     type: "Chart.Area",
-                    data_source: loadingData.sql_response.rows,
-                    encoding: {
-                        x: { field: "ts" },
-                        y: { field: "amount" },
-                    },
-                }}
-                data={loadingData}
-            />,
-        );
-        expect(screen.getByLabelText("Loading area chart")).toBeInTheDocument();
-
-        rerender(
-            <ChartArea
-                widget={{
-                    type: "Chart.Area",
-                    data_source: runtimeErrorData.sql_response.rows,
-                    encoding: {
-                        x: { field: "ts" },
-                        y: { field: "amount" },
-                    },
-                }}
-                data={runtimeErrorData}
-            />,
-        );
-        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
-
-        rerender(
-            <ChartArea
-                widget={{
-                    type: "Chart.Area",
                     data_source: configErrorData.sql_response.rows,
+                    fields_source: configErrorData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "category" },
@@ -503,6 +405,7 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Area",
                     data_source: emptyData.sql_response.rows,
+                    fields_source: emptyData.sql_response.fields,
                     encoding: {
                         x: { field: "ts" },
                         y: { field: "amount" },
@@ -514,7 +417,7 @@ describe("chart widget foundations", () => {
         expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
     });
 
-    it("renders pie widget ready state, donut mode, and fallback states", () => {
+    it("renders pie widget ready/config/empty states and donut mode", () => {
         const { rerender } = render(
             <ChartPie
                 widget={{
@@ -525,6 +428,7 @@ describe("chart widget foundations", () => {
                         { ts: "2026-03-06T00:00:00Z", category: "Epsilon", amount: 6, label: "Northwest", count: 4 },
                         { ts: "2026-03-07T00:00:00Z", category: "Zeta", amount: 8, label: "Southeast", count: 6 },
                     ],
+                    fields_source: readyData.sql_response.fields,
                     donut: true,
                     encoding: {
                         label: { field: "label" },
@@ -546,39 +450,8 @@ describe("chart widget foundations", () => {
             <ChartPie
                 widget={{
                     type: "Chart.Pie",
-                    data_source: loadingData.sql_response.rows,
-                    donut: true,
-                    encoding: {
-                        label: { field: "label" },
-                        value: { field: "count" },
-                    },
-                }}
-                data={loadingData}
-            />,
-        );
-        expect(screen.getByLabelText("Loading pie chart")).toBeInTheDocument();
-
-        rerender(
-            <ChartPie
-                widget={{
-                    type: "Chart.Pie",
-                    data_source: runtimeErrorData.sql_response.rows,
-                    donut: true,
-                    encoding: {
-                        label: { field: "label" },
-                        value: { field: "count" },
-                    },
-                }}
-                data={runtimeErrorData}
-            />,
-        );
-        expect(screen.getByText("Chart unavailable")).toBeInTheDocument();
-
-        rerender(
-            <ChartPie
-                widget={{
-                    type: "Chart.Pie",
                     data_source: configErrorData.sql_response.rows,
+                    fields_source: configErrorData.sql_response.fields,
                     donut: true,
                     encoding: {
                         label: { field: "label" },
@@ -595,6 +468,7 @@ describe("chart widget foundations", () => {
                 widget={{
                     type: "Chart.Pie",
                     data_source: emptyData.sql_response.rows,
+                    fields_source: emptyData.sql_response.fields,
                     donut: true,
                     encoding: {
                         label: { field: "label" },

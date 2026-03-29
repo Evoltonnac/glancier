@@ -10,6 +10,17 @@ from core.steps.mongodb_step import execute_mongodb_step
 from tests.factories import build_source_config, build_step
 
 
+def _allow_trust_executor() -> SimpleNamespace:
+    return SimpleNamespace(
+        _network_trust_policy=SimpleNamespace(
+            evaluate=lambda **_kwargs: TrustResolution(
+                decision=TrustDecision.ALLOW,
+                reason="test_allow",
+            )
+        )
+    )
+
+
 @pytest.mark.asyncio
 async def test_execute_mongodb_step_returns_deterministic_envelope(
     monkeypatch: pytest.MonkeyPatch,
@@ -43,7 +54,7 @@ async def test_execute_mongodb_step_returns_deterministic_envelope(
         },
         {},
         {},
-        SimpleNamespace(),
+        _allow_trust_executor(),
     )
 
     response = result["mongo_response"]
@@ -127,7 +138,7 @@ async def test_execute_mongodb_step_maps_runtime_errors_to_stable_codes(
             },
             {},
             {},
-            SimpleNamespace(),
+            _allow_trust_executor(),
         )
 
     assert getattr(exc_info.value, "code", None) == expected_code

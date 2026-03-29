@@ -6,6 +6,7 @@ Glanceus uses SDUI (Schema-Driven UI) in the view layer:
 - Declare UI with YAML/JSON templates instead of hardcoding per-scenario pages.
 - Renderer handles parsing/validation/fallback, not request orchestration.
 - Flow owns authentication and fetching; SDUI only renders data.
+- Widgets are parameter-driven and stateless with respect to backend workflow semantics.
 
 ## 2. Template Structure (`templates`)
 
@@ -111,6 +112,7 @@ To output literal template markers, use backslash escapes:
 ```yaml
 - type: "Chart.Line"
   data_source: "{sql_response.rows}"
+  fields_source: "{sql_response.fields}"
   title: "Revenue trend"
   description: "Daily SQL revenue"
   encoding:
@@ -126,6 +128,7 @@ To output literal template markers, use backslash escapes:
 
 - type: "Chart.Table"
   data_source: "{sql_response.rows}"
+  fields_source: "{sql_response.fields}"
   title: "Top regions"
   encoding:
     columns:
@@ -151,6 +154,7 @@ Supported first-release chart widget types:
 
 Shared chart props:
 - `data_source`: resolved dataset, typically `sql_response.rows`
+- `fields_source` (optional): resolved field metadata array, typically `sql_response.fields`
 - `encoding`: channel mapping for chart fields inside the selected dataset
 - `title`
 - `description`
@@ -164,13 +168,14 @@ Per-chart required encoding channels:
 - `Chart.Pie`: `encoding.label`, `encoding.value`, optional `donut` (boolean)
 - `Chart.Table`: `encoding.columns[*].field` references must map to dataset fields; `sort_by`, `sort_order`, and `limit` remain top-level table controls
 
-Deterministic chart fallback states:
-- `loading`
-- `empty`
+Deterministic chart widget states:
 - `config_error`
-- `runtime_error`
+- `empty`
+- `ready`
 
-State precedence is fixed to: `loading -> runtime_error -> config_error -> empty -> ready`.
+State precedence is fixed to: `empty -> config_error -> ready` for widget-local validation.
+If `fields_source` is provided, chart validation must use it; if omitted, renderer may infer metadata from `data_source` rows as a compatibility fallback.
+Source lifecycle states (`refreshing`, `error`, `suspended`) and `error_code` diagnostics are source-level concerns, not chart widget input contract.
 Invalid or empty chart widgets must degrade inside the card shell and must never white-screen the dashboard.
 
 ### 5.2 Widget Visual Baseline (Spacing and List Item)
@@ -211,4 +216,5 @@ For implementation details and scroll strategies, see: [04_widget_layout_contrac
 
 - SDUI: presentation layer only.
 - Flow: auth/fetch/extract/resume execution.
+- Flow outputs determine widget inputs; widgets must not assume fixed backend field paths.
 - Flow docs entry: [../flow/01_architecture_and_orchestration.md](../flow/01_architecture_and_orchestration.md)

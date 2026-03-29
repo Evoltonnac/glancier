@@ -201,6 +201,11 @@ After create/update/delete:
 
 Do not place business state transitions in purely presentational components.
 
+Widget design principles:
+- Keep declarative widgets parameter-driven: consume only declared widget params.
+- Do not hardcode backend-specific field paths inside widget components (for example fixed `sql_response.*` reads).
+- Workflow state and deterministic `error_code` diagnostics belong to source/card-level state handling, not chart widget internals.
+
 ## I18N Standard
 
 Scope: all user-facing copy in `ui-react/src/`.

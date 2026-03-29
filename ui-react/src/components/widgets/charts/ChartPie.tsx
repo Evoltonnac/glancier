@@ -1,7 +1,7 @@
 import { ChartFrame } from "./ChartFrame";
 import { renderPieChart } from "./adapters/rechartsAdapter";
 import {
-    deriveSqlFieldsFromRows,
+    resolveChartFieldsSource,
     validateChartEncoding,
 } from "../shared/chartFieldValidation";
 import { classifyChartState } from "../shared/chartState";
@@ -13,17 +13,16 @@ interface ChartPieProps {
 }
 
 export function ChartPie({ widget, data }: ChartPieProps) {
-    const sqlResponse = data.sql_response ?? {};
+    void data;
     const rows = Array.isArray(widget.data_source) ? widget.data_source : [];
+    const sqlFields = resolveChartFieldsSource(widget.fields_source, rows);
     const encodingValidation = validateChartEncoding(
         widget.type,
         widget.encoding,
-        deriveSqlFieldsFromRows(rows),
+        sqlFields,
     );
     const state = classifyChartState({
-        sourceStatus: sqlResponse.status,
         rows,
-        runtimeError: sqlResponse.error,
         encodingValidation,
     });
 

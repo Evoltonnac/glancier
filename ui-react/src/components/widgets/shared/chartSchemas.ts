@@ -69,14 +69,21 @@ const TableColumnSchema = z.object({
     format: z.string().optional(),
 });
 
+const ChartFieldMetadataSchema = z.object({
+    name: z.string().min(1),
+    type: z.string().optional().nullable(),
+});
+
 const ChartBaseSchema = z.object({
     data_source: z.string().min(1),
+    fields_source: z.string().min(1).optional(),
     legend: z.boolean().optional(),
     colors: z.array(ChartSemanticColorSchema).optional(),
 });
 
 const RuntimeChartBaseSchema = ChartBaseSchema.extend({
     data_source: z.array(z.record(z.string(), z.any())),
+    fields_source: z.array(ChartFieldMetadataSchema).optional(),
 });
 
 export const ChartLineSchema = ChartBaseSchema.extend({

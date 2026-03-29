@@ -360,6 +360,7 @@ Do not use legacy enum values.
 Color rule:
 - On supported non-chart widgets, `color` overrides `tone`.
 - For charts, use `colors` as the array form of the same semantic color enum.
+- Keep widgets parameter-driven: bind chart datasets through `data_source` and optional metadata through `fields_source`; do not assume fixed backend field paths inside widget configs.
 
 ### Widget Catalog
 
@@ -427,15 +428,15 @@ Minimal valid `List` snippet (`render` must be a widget array):
 
 - `Chart.Line` / `Chart.Bar` / `Chart.Area`
   - required: `type`, `data_source`, `encoding.x.field`, `encoding.y.field`
-  - optional: `encoding.series.field`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+  - optional: `fields_source`, `encoding.series.field`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
 
 - `Chart.Pie`
   - required: `type`, `data_source`, `encoding.label.field`, `encoding.value.field`
-  - optional: `donut` (boolean), `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+  - optional: `fields_source`, `donut` (boolean), `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
 
 - `Chart.Table`
   - required: `type`, `data_source`, `encoding.columns[*].field`
-  - optional: `encoding.columns[*].title`, `encoding.columns[*].format`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+  - optional: `fields_source`, `encoding.columns[*].title`, `encoding.columns[*].format`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
 
 Chart color constraints:
 - `colors` only accepts semantic names:

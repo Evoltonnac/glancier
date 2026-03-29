@@ -1,6 +1,6 @@
 import { ChartFrame } from "./ChartFrame";
 import {
-    deriveSqlFieldsFromRows,
+    resolveChartFieldsSource,
     validateChartEncoding,
 } from "../shared/chartFieldValidation";
 import { classifyChartState } from "../shared/chartState";
@@ -80,20 +80,19 @@ function getProcessedRows(
 }
 
 export function ChartTable({ widget, data }: ChartTableProps) {
-    const sqlResponse = data.sql_response ?? {};
+    void data;
     const rows = Array.isArray(widget.data_source)
         ? (widget.data_source as TableRow[])
         : [];
     const columns = widget.encoding.columns ?? [];
+    const sqlFields = resolveChartFieldsSource(widget.fields_source, rows);
     const encodingValidation = validateChartEncoding(
         widget.type,
         { columns },
-        deriveSqlFieldsFromRows(rows),
+        sqlFields,
     );
     const state = classifyChartState({
-        sourceStatus: sqlResponse.status,
         rows,
-        runtimeError: sqlResponse.error,
         encodingValidation,
     });
     const processedRows =

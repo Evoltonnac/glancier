@@ -456,7 +456,37 @@ Current runtime status:
 - Declared in schema, but no dedicated executor branch is wired yet.
 - Do not rely on `log` for production flow behavior; use `script` with `print()` if runtime traces are required.
 
-## 4. Adding a New Step Type
+## 4. Database Metadata Normalization
+
+For database step types (`sql`, `mongodb`, `redis`), the `response.fields` metadata is normalized into a canonical Glanceus format to ensure consistent chart rendering regardless of the underlying database engine.
+
+### 4.1 Canonical Field Types
+
+| Canonical Type | Description | Typical Source Types |
+| --- | --- | --- |
+| `integer` | Whole numbers | `int`, `bigint`, `int4`, `int8`, `short`, `long` |
+| `float` | Floating point numbers | `float`, `double`, `real`, `float8` |
+| `decimal` | Exact numeric values | `decimal`, `numeric`, `money` |
+| `string` | Text strings | `varchar`, `text`, `char`, `uuid`, `json` |
+| `boolean` | Logical values | `bool`, `boolean`, `tinyint(1)` |
+| `date` | Date without time | `date`, `year` |
+| `time` | Time without date | `time`, `timetz` |
+| `datetime` | Date and time | `timestamp`, `datetime`, `timestamptz` |
+| `bytes` | Binary data | `blob`, `bytea`, `binary`, `varbinary` |
+| `unknown` | Undetected or complex type | Default fallback when no mapping or data exists |
+
+### 4.2 Normalization vs Inference
+
+The system uses a two-tier strategy to determine field types:
+
+1.  **Driver Mapping (Tier 1)**: The system first checks the type metadata reported by the database driver (e.g., `psycopg`, `pymysql`, `sqlite3`). If the driver returns a known type alias (including common internal names like PostgreSQL's `int4` or `float8`), it is mapped to a canonical type.
+2.  **Automatic Inference (Tier 2)**: If the driver reports an unknown type alias or explicitly marks it as `unknown`, the system falls back to automatic inference. It scans the actual data rows in the result set and identifies the Python equivalent types (`int`, `float`, `Decimal`, `datetime`, etc.) to resolve a canonical type.
+
+### 4.3 SDUI Integration
+
+When authoring templates, using `fields_source: "{sql_response.fields}"` ensures that widgets like `Chart.Table` can automatically select the correct column alignment, numeric formatting, and sorting behavior based on these canonical types.
+
+## 5. Adding a New Step Type
 
 1. Add `StepType` entry in [core/config_loader.py](/Users/xingminghua/Coding/evoltonnac/glanceus/core/config_loader.py).
 2. Add corresponding schema in `STEP_ARGS_SCHEMAS_BY_USE` (same file).

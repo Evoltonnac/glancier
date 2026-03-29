@@ -7,7 +7,10 @@ import {
     ChartPieSchema,
     ChartTableSchema,
 } from "./shared/chartSchemas";
-import { validateChartEncoding } from "./shared/chartFieldValidation";
+import {
+    parseChartFieldsSource,
+    validateChartEncoding,
+} from "./shared/chartFieldValidation";
 
 const sqlRows = [
     {
@@ -66,6 +69,7 @@ describe("chart schemas", () => {
         const validChart = ChartLineSchema.safeParse({
             type: "Chart.Line",
             data_source: "sql_response.rows",
+            fields_source: "sql_response.fields",
             encoding: {
                 x: { field: "ts" },
                 y: { field: "amount" },
@@ -268,5 +272,21 @@ describe("chart schemas", () => {
                 ],
             ),
         ).toEqual({ ok: true });
+    });
+
+    it("normalizes field metadata from fields_source payload", () => {
+        expect(
+            parseChartFieldsSource([
+                { name: "amount", type: "numeric" },
+                { name: "category", type: "varchar" },
+                { name: "created_at", type: "timestamp" },
+                { name: "invalid", type: "mystery_type" },
+            ]),
+        ).toEqual([
+            { name: "amount", type: "decimal" },
+            { name: "category", type: "string" },
+            { name: "created_at", type: "datetime" },
+            { name: "invalid", type: "unknown" },
+        ]);
     });
 });

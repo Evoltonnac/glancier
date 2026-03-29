@@ -175,6 +175,7 @@ Required:
 - `encoding.y.field`
 
 Optional:
+- `fields_source`
 - `encoding.series.field`
 - `title`
 - `description`
@@ -192,6 +193,7 @@ Required:
 - `encoding.value.field`
 
 Optional:
+- `fields_source`
 - `donut`: boolean
 - `title`
 - `description`
@@ -208,6 +210,7 @@ Required:
 - `encoding.columns[*].field` (at least one column)
 
 Optional:
+- `fields_source`
 - `encoding.columns[*].title`
 - `encoding.columns[*].format`
 - `sort_by`
@@ -225,6 +228,7 @@ Chart color contract:
 - `colors` must use semantic names only:
   `blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`.
 - Do not use raw hex/CSS variable/native library color values.
+- Keep chart configs parameter-driven: bind dataset via `data_source` and metadata via optional `fields_source`; do not encode fixed backend response paths as hidden assumptions.
 
 ### 3.5 Actions
 

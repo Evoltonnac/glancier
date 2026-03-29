@@ -575,6 +575,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Chart.Table",
                         data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
                         encoding: {
                             columns: [
                                 { field: "label", title: "Region", format: "text" },
@@ -601,6 +602,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Chart.Table",
                         data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
                         encoding: {
                             columns: [{ field: "missing_metric", title: "Broken" }],
                         },
@@ -617,6 +619,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Chart.Table",
                         data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
                         encoding: {
                             columns: [{ field: "label", title: "Region" }],
                         },
@@ -631,50 +634,6 @@ describe("WidgetRenderer", () => {
             />,
         );
         expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
-
-        rerender(
-            <WidgetRenderer
-                widget={
-                    {
-                        type: "Chart.Table",
-                        data_source: "{sql_response.rows}",
-                        encoding: {
-                            columns: [{ field: "label", title: "Region" }],
-                        },
-                    } as any
-                }
-                data={{
-                    sql_response: {
-                        rows: chartData.sql_response.rows,
-                        fields: chartData.sql_response.fields,
-                        status: "refreshing",
-                    },
-                }}
-            />,
-        );
-        expect(screen.getByLabelText("Loading chart table")).toBeInTheDocument();
-
-        rerender(
-            <WidgetRenderer
-                widget={
-                    {
-                        type: "Chart.Table",
-                        data_source: "{sql_response.rows}",
-                        encoding: {
-                            columns: [{ field: "label", title: "Region" }],
-                        },
-                    } as any
-                }
-                data={{
-                    sql_response: {
-                        rows: chartData.sql_response.rows,
-                        fields: chartData.sql_response.fields,
-                        error: { message: "boom" },
-                    },
-                }}
-            />,
-        );
-        expect(screen.getByText(/This chart cannot be shown right now\./)).toBeInTheDocument();
     });
 
     it("renders chart widget branches and keeps invalid chart fallback details", () => {
@@ -702,6 +661,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Chart.Line",
                         data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
                         legend: "{showLegend}",
                         encoding: {
                             x: { field: "ts" },
@@ -722,6 +682,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Chart.Bar",
                         data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
                         encoding: {
                             x: { field: "ts" },
                             y: { field: "amount" },
@@ -739,6 +700,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Chart.Area",
                         data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
                         encoding: {
                             x: { field: "ts" },
                             y: { field: "amount" },
@@ -756,6 +718,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Chart.Pie",
                         data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
                         donut: "{useDonut}",
                         encoding: {
                             label: { field: "label" },

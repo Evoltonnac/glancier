@@ -119,6 +119,7 @@ Do not author `id` in integration YAML files. Runtime `id` comes from the filena
 
 - `color` is the shared semantic color field for supported non-chart widgets and overrides `tone` when both are present.
 - `Chart.*` widgets keep `colors` as the array form of the same semantic color enum.
+- `Chart.*` widgets should bind dataset via `data_source` and optional field metadata via `fields_source`; avoid hidden fixed backend-path assumptions.
 - Layout widgets may expose both `align_x` and `align_y`; do not assume only one axis is available.
 - Layout widgets also expose axis-aware size controls where supported: `Container.height`, `ColumnSet.height`, `Column.width`, and `Column.height` all accept `auto` | `stretch` | positive number.
 - Numeric layout size values are field-specific: `Container.height` / `ColumnSet.height` and `Column.width` behave as flex weights, while `Column.height` is a fixed pixel height.

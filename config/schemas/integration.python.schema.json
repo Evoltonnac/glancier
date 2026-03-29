@@ -1263,6 +1263,22 @@
                 },
                 "options": {
                   "type": "object",
+                  "properties": {
+                    "dialect": {
+                      "type": "string",
+                      "enum": [
+                        "postgres",
+                        "mysql",
+                        "sqlite",
+                        "duckdb",
+                        "clickhouse",
+                        "snowflake",
+                        "bigquery",
+                        "redshift",
+                        "oracle"
+                      ]
+                    }
+                  },
                   "additionalProperties": true
                 }
               },

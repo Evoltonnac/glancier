@@ -28,14 +28,20 @@ _DB_TYPE_HINT_MAP: dict[str, str] = {
     "smallint": "integer",
     "int": "integer",
     "integer": "integer",
+    "int2": "integer",
+    "int4": "integer",
+    "int8": "integer",
     "bigint": "integer",
     "real": "float",
     "float": "float",
     "double": "float",
     "double precision": "float",
+    "float4": "float",
+    "float8": "float",
     "numeric": "decimal",
     "decimal": "decimal",
     "char": "string",
+    "bpchar": "string",
     "varchar": "string",
     "text": "string",
     "uuid": "string",
@@ -115,9 +121,9 @@ def _normalize_type_hint(raw_type: str | None) -> str | None:
     normalized = raw_type.strip().lower()
     if not normalized:
         return None
-    if normalized in _CANONICAL_FIELD_TYPES:
+    if normalized in _CANONICAL_FIELD_TYPES and normalized != "unknown":
         return normalized
-    return _DB_TYPE_HINT_MAP.get(normalized, "unknown")
+    return _DB_TYPE_HINT_MAP.get(normalized)
 
 
 def build_sql_fields(

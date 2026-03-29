@@ -1,123 +1,123 @@
 name: "TEST - SQL SQLite Local Storage Connectivity"
 description: "Simple SQL smoke test for this project local SQLite storage.db. Validates sqlite connectivity and reads core Glanceus storage tables."
 flow:
-  - id: collect_local_storage_inputs
-    use: form
-    args:
-      title: "Local SQLite Connectivity"
-      description: "Default path points to this project local storage database."
-      message: "Confirm SQLite DSN/path and SQL guardrails for local connectivity testing."
-      fields:
-        - key: "sqlite_dsn"
-          label: "SQLite DSN / Path"
-          type: "text"
-          description: "Supports DSN (sqlite:///...) or local path. Default: ./data/storage.db"
-          required: true
-          default: "./data/storage.db"
-        - key: "sql_timeout_seconds"
-          label: "SQL Timeout Seconds"
-          type: "text"
-          description: "Optional. Default: 10"
-          required: false
-          default: "10"
-        - key: "sql_max_rows"
-          label: "SQL Max Rows"
-          type: "text"
-          description: "Optional. Default: 100"
-          required: false
-          default: "100"
-    secrets:
-      sql_test_local_storage_dsn: "sqlite_dsn"
-    outputs:
-      sql_test_local_timeout_seconds: "sql_timeout_seconds"
-      sql_test_local_max_rows: "sql_max_rows"
+    - id: collect_local_storage_inputs
+      use: form
+      args:
+          title: "Local SQLite Connectivity"
+          description: "Default path points to this project local storage database."
+          message: "Confirm SQLite DSN/path and SQL guardrails for local connectivity testing."
+          fields:
+              - key: "sqlite_dsn"
+                label: "SQLite DSN / Path"
+                type: "text"
+                description: "Supports DSN (sqlite:///...) or local path. Default: ./data/storage.db"
+                required: true
+                default: "./data/storage.db"
+              - key: "sql_timeout_seconds"
+                label: "SQL Timeout Seconds"
+                type: "text"
+                description: "Optional. Default: 10"
+                required: false
+                default: "10"
+              - key: "sql_max_rows"
+                label: "SQL Max Rows"
+                type: "text"
+                description: "Optional. Default: 100"
+                required: false
+                default: "100"
+      secrets:
+          sql_test_local_storage_dsn: "sqlite_dsn"
+      outputs:
+          sql_test_local_timeout_seconds: "sql_timeout_seconds"
+          sql_test_local_max_rows: "sql_max_rows"
 
-  - id: query_storage_table_counts
-    use: sql
-    args:
-      connector:
-        profile: "sqlite"
-        options:
-          dialect: "sqlite"
-      dsn: "{sql_test_local_storage_dsn}"
-      query: |
-        SELECT
-          table_name,
-          row_count
-        FROM (
-          SELECT 'stored_sources' AS table_name, COUNT(*) AS row_count FROM stored_sources
-          UNION ALL
-          SELECT 'stored_views' AS table_name, COUNT(*) AS row_count FROM stored_views
-          UNION ALL
-          SELECT 'runtime_latest' AS table_name, COUNT(*) AS row_count FROM runtime_latest
-          UNION ALL
-          SELECT 'runtime_history' AS table_name, COUNT(*) AS row_count FROM runtime_history
-          UNION ALL
-          SELECT 'connection_trust_rules' AS table_name, COUNT(*) AS row_count FROM connection_trust_rules
-        )
-        ORDER BY table_name ASC
-      timeout: "{sql_test_local_timeout_seconds}"
-      max_rows: "{sql_test_local_max_rows}"
-    outputs:
-      storage_table_rows: "sql_response.rows"
-      storage_table_count: "sql_response.row_count"
+    - id: query_storage_table_counts
+      use: sql
+      args:
+          connector:
+              profile: "sqlite"
+              options:
+                  dialect: "sqlite"
+          dsn: "{sql_test_local_storage_dsn}"
+          query: |
+              SELECT
+                table_name,
+                row_count
+              FROM (
+                SELECT 'stored_sources' AS table_name, COUNT(*) AS row_count FROM stored_sources
+                UNION ALL
+                SELECT 'stored_views' AS table_name, COUNT(*) AS row_count FROM stored_views
+                UNION ALL
+                SELECT 'runtime_latest' AS table_name, COUNT(*) AS row_count FROM runtime_latest
+                UNION ALL
+                SELECT 'runtime_history' AS table_name, COUNT(*) AS row_count FROM runtime_history
+                UNION ALL
+                SELECT 'connection_trust_rules' AS table_name, COUNT(*) AS row_count FROM connection_trust_rules
+              )
+              ORDER BY table_name ASC
+          timeout: "{sql_test_local_timeout_seconds}"
+          max_rows: "{sql_test_local_max_rows}"
+      outputs:
+          storage_table_rows: "sql_response.rows"
+          storage_table_fields: "sql_response.fields"
+          storage_table_count: "sql_response.row_count"
 
-  - id: query_runtime_latest_snapshot
-    use: sql
-    args:
-      connector:
-        profile: "sqlite"
-        options:
-          dialect: "sqlite"
-      dsn: "{sql_test_local_storage_dsn}"
-      query: |
-        SELECT
-          source_id,
-          updated_at,
-          last_success_at
-        FROM runtime_latest
-        ORDER BY updated_at DESC
-        LIMIT 20
-      timeout: "{sql_test_local_timeout_seconds}"
-      max_rows: "{sql_test_local_max_rows}"
-    outputs:
-      runtime_latest_rows: "sql_response.rows"
-      runtime_latest_count: "sql_response.row_count"
+    - id: query_runtime_latest_snapshot
+      use: sql
+      args:
+          connector:
+              profile: "sqlite"
+              options:
+                  dialect: "sqlite"
+          dsn: "{sql_test_local_storage_dsn}"
+          query: |
+              SELECT
+                source_id,
+                updated_at,
+                last_success_at
+              FROM runtime_latest
+              ORDER BY updated_at DESC
+              LIMIT 20
+          timeout: "{sql_test_local_timeout_seconds}"
+          max_rows: "{sql_test_local_max_rows}"
+      outputs:
+          runtime_latest_rows: "sql_response.rows"
+          runtime_latest_fields: "sql_response.fields"
+          runtime_latest_count: "sql_response.row_count"
 
 templates:
-  - id: "sql_sqlite_chinook_chart_suite"
-    type: "source_card"
-    ui:
-      title: "SQL Local Storage Connectivity"
-      icon: "SQL"
-    widgets:
-      - type: "Container"
-        spacing: "md"
-        items:
-          - type: "Chart.Bar"
-            title: "Core Table Row Counts"
-            data_source: "{storage_table_rows}"
-            encoding:
-              x:
-                field: "table_name"
-              y:
-                field: "row_count"
-            empty_state: "No table count rows."
-          - type: "Chart.Table"
-            title: "Latest Runtime Snapshot"
-            data_source: "{runtime_latest_rows}"
-            encoding:
-              columns:
-                - field: "source_id"
-                  title: "Source ID"
-                  format: "text"
-                - field: "updated_at"
-                  title: "Updated At (Epoch)"
-                  format: "number"
-                - field: "last_success_at"
-                  title: "Last Success At (Epoch)"
-                  format: "number"
-            sort_by: "updated_at"
-            sort_order: "desc"
-            limit: 20
-            empty_state: "No runtime_latest rows."
+    - id: "sql_sqlite_chinook_chart_suite"
+      type: "source_card"
+      ui:
+          title: "SQL Local Storage Connectivity"
+          icon: "SQL"
+      widgets:
+          - type: "Container"
+            spacing: "md"
+            items:
+                - type: "Chart.Bar"
+                  data_source: "{storage_table_rows}"
+                  fields_source: "{storage_table_fields}"
+                  encoding:
+                      x:
+                          field: "table_name"
+                      y:
+                          field: "row_count"
+                - type: "Chart.Table"
+                  data_source: "{runtime_latest_rows}"
+                  fields_source: "{runtime_latest_fields}"
+                  encoding:
+                      columns:
+                          - field: "source_id"
+                            title: "Source ID"
+                            format: "text"
+                          - field: "updated_at"
+                            title: "Updated At (Epoch)"
+                            format: "number"
+                          - field: "last_success_at"
+                            title: "Last Success At (Epoch)"
+                            format: "number"
+                  sort_by: "updated_at"
+                  sort_order: "desc"
+                  limit: 20

@@ -470,8 +470,9 @@ def test_create_app_wires_shared_storage_contract(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
     class _FakeDataController:
-        def __init__(self, *, storage):
+        def __init__(self, *, storage, source_update_bus=None):
             captured["data_storage"] = storage
+            captured["source_update_bus"] = source_update_bus
 
         def close(self):
             return None

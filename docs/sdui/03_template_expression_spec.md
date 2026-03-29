@@ -55,6 +55,7 @@ This document defines supported expression syntax and safety boundaries for SDUI
 - `"Literal \\{usage\\} and resolved {usage}"`
 - `"Windows path: C:\\\\{username}"`
 - `data_source: "{sql_response.rows}"`
+- `fields_source: "{sql_response.fields}"`
 - `encoding.x.field: "ts"` with data resolved from `sql_response.fields`
 - `encoding.y.field: "amount"` with numeric field metadata from `sql_response.fields`
 - `encoding.label.field: "label"` and `encoding.value.field: "count"`

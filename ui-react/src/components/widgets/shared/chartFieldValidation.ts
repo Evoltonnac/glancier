@@ -33,6 +33,31 @@ export type ChartEncodingValidationResult =
 const NUMERIC_TYPES = new Set(["integer", "float", "decimal", "number"]);
 const TEMPORAL_TYPES = new Set(["datetime", "date", "timestamp"]);
 const CATEGORICAL_TYPES = new Set(["text", "string", "boolean"]);
+const SUPPORTED_FIELD_TYPES = new Set([
+    ...NUMERIC_TYPES,
+    ...TEMPORAL_TYPES,
+    ...CATEGORICAL_TYPES,
+    "time",
+    "unknown",
+]);
+const FIELD_TYPE_ALIASES: Record<string, string> = {
+    int: "integer",
+    tinyint: "integer",
+    smallint: "integer",
+    bigint: "integer",
+    real: "float",
+    double: "float",
+    numeric: "decimal",
+    bool: "boolean",
+    varchar: "string",
+    char: "string",
+    uuid: "string",
+    json: "string",
+    jsonb: "string",
+    timestamp: "datetime",
+    timestamptz: "datetime",
+    timetz: "time",
+};
 
 function isNumericLike(value: unknown): boolean {
     if (typeof value === "number") {
@@ -94,7 +119,57 @@ export function deriveSqlFieldsFromRows(
     }));
 }
 
-function normalizeFieldType(type?: string | null): string {
+function normalizeMetadataFieldType(type: unknown): string {
+    const normalized = String(type ?? "").trim().toLowerCase();
+    if (normalized.length === 0) {
+        return "unknown";
+    }
+    const mapped = FIELD_TYPE_ALIASES[normalized];
+    if (mapped) {
+        return mapped;
+    }
+    if (SUPPORTED_FIELD_TYPES.has(normalized)) {
+        return normalized;
+    }
+    return "unknown";
+}
+
+export function parseChartFieldsSource(fieldsSource: unknown): SqlFieldMetadata[] {
+    if (!Array.isArray(fieldsSource)) {
+        return [];
+    }
+
+    const parsed: SqlFieldMetadata[] = [];
+    for (const entry of fieldsSource) {
+        if (!entry || typeof entry !== "object") {
+            continue;
+        }
+        const rawName = (entry as { name?: unknown }).name;
+        const name = typeof rawName === "string" ? rawName.trim() : "";
+        if (name.length === 0) {
+            continue;
+        }
+        const rawType = (entry as { type?: unknown }).type;
+        parsed.push({
+            name,
+            type: normalizeMetadataFieldType(rawType),
+        });
+    }
+    return parsed;
+}
+
+export function resolveChartFieldsSource(
+    fieldsSource: unknown,
+    rows: Array<Record<string, unknown>> | undefined,
+): SqlFieldMetadata[] {
+    const parsed = parseChartFieldsSource(fieldsSource);
+    if (parsed.length > 0) {
+        return parsed;
+    }
+    return deriveSqlFieldsFromRows(rows);
+}
+
+function normalizeValidationFieldType(type?: string | null): string {
     return String(type ?? "").trim().toLowerCase();
 }
 
@@ -170,7 +245,7 @@ export function validateChartEncoding(
             };
         }
 
-        const normalizedType = normalizeFieldType(matchedField.type);
+        const normalizedType = normalizeValidationFieldType(matchedField.type);
         if (!channelAllowsType(channel, normalizedType)) {
             return {
                 ok: false,

@@ -54,6 +54,7 @@ Common fields:
 
 Shared chart fields:
 - `data_source`
+- `fields_source` (optional)
 - `encoding`
 - `title`
 - `description`
@@ -67,11 +68,15 @@ Chart-specific field rules:
 - `Chart.Pie`: requires `encoding.label` and `encoding.value`; supports optional `donut` boolean
 - `Chart.Table`: requires `encoding.columns[*].field` references that resolve against dataset fields; supports `sort_by`, `sort_order`, and `limit`
 
-Deterministic chart fallback states:
-- `loading`
-- `empty`
+Deterministic chart widget states:
 - `config_error`
-- `runtime_error`
+- `empty`
+- `ready`
+
+Validation contract:
+- If `fields_source` is provided, channel validation must use `fields_source`.
+- If `fields_source` is omitted, renderer may infer field metadata from `data_source` rows for compatibility.
+- Source-level `status` / `error_code` are outside chart widget params and should be surfaced by source/card diagnostics.
 
 ## 5. Actions
 

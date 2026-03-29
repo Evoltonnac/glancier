@@ -1262,6 +1262,22 @@
                 },
                 "options": {
                   "type": "object",
+                  "properties": {
+                    "dialect": {
+                      "type": "string",
+                      "enum": [
+                        "postgres",
+                        "mysql",
+                        "sqlite",
+                        "duckdb",
+                        "clickhouse",
+                        "snowflake",
+                        "bigquery",
+                        "redshift",
+                        "oracle"
+                      ]
+                    }
+                  },
                   "additionalProperties": true
                 }
               },
@@ -2800,6 +2816,10 @@
           "type": "string",
           "minLength": 1
         },
+        "fields_source": {
+          "type": "string",
+          "minLength": 1
+        },
         "legend": {
           "anyOf": [
             {
@@ -2927,6 +2947,10 @@
       "type": "object",
       "properties": {
         "data_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fields_source": {
           "type": "string",
           "minLength": 1
         },
@@ -3060,6 +3084,10 @@
           "type": "string",
           "minLength": 1
         },
+        "fields_source": {
+          "type": "string",
+          "minLength": 1
+        },
         "legend": {
           "anyOf": [
             {
@@ -3190,6 +3218,10 @@
           "type": "string",
           "minLength": 1
         },
+        "fields_source": {
+          "type": "string",
+          "minLength": 1
+        },
         "legend": {
           "anyOf": [
             {
@@ -3308,6 +3340,10 @@
       "type": "object",
       "properties": {
         "data_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fields_source": {
           "type": "string",
           "minLength": 1
         },
