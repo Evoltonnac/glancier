@@ -77,7 +77,7 @@ class FakeExecutor:
 
 class FakeOAuthHandler:
     def __init__(self) -> None:
-        self.exchange_calls: list[tuple[str, str | None]] = []
+        self.exchange_calls: list[tuple[str, str | None, str | None]] = []
 
     def get_authorize_url(self, redirect_uri: str | None = None) -> str:
         redirect = redirect_uri or "http://localhost/callback"
@@ -89,8 +89,13 @@ class FakeOAuthHandler:
             "authorize_url": self.get_authorize_url(redirect_uri=redirect_uri),
         }
 
-    async def exchange_code(self, code: str, redirect_uri: str | None = None) -> None:
-        self.exchange_calls.append((code, redirect_uri))
+    async def exchange_code(
+        self,
+        code: str,
+        redirect_uri: str | None = None,
+        state: str | None = None,
+    ) -> None:
+        self.exchange_calls.append((code, redirect_uri, state))
 
 
 class FakeAuthManager:
@@ -197,12 +202,13 @@ def test_oauth_authorize_and_code_exchange_smoke_flow(tmp_path, monkeypatch):
         json={
             "type": "oauth_code_exchange",
             "code": "phase13-code",
+            "state": "phase13-state",
             "redirect_uri": "http://localhost:3000/oauth/callback",
         },
     )
     assert interact.status_code == 200
     assert handler.exchange_calls == [
-        ("phase13-code", "http://localhost:3000/oauth/callback")
+        ("phase13-code", "http://localhost:3000/oauth/callback", "phase13-state")
     ]
     assert source_id in executor.fetch_calls
 
@@ -228,6 +234,7 @@ def test_webview_interaction_smoke_flow_updates_secrets_and_state(tmp_path, monk
             source_id=source_id,
             title="Continue in webview",
             message="Need user context",
+            data={"secret_key": "session_cookie"},
         ),
     )
 

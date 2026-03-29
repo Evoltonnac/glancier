@@ -1,8 +1,8 @@
 import pytest
 
-from core.config_loader import AuthType
+from core.config_loader import StepType
 from core.source_state import InteractionType, SourceStatus
-from tests.factories import build_source_config
+from tests.factories import build_source_config, build_step
 
 
 @pytest.mark.asyncio
@@ -10,7 +10,7 @@ async def test_api_key_interaction(executor):
     source = build_source_config(
         source_id="test-source-apikey",
         name="API Key Source",
-        auth_type=AuthType.API_KEY,
+        flow=[build_step(step_id="api-key", use=StepType.API_KEY)],
     )
 
     await executor.fetch_source(source)
@@ -27,7 +27,7 @@ async def test_oauth_interaction(executor):
     source = build_source_config(
         source_id="test-source-oauth",
         name="OAuth Source",
-        auth_type=AuthType.OAUTH,
+        flow=[build_step(step_id="oauth", use=StepType.OAUTH)],
     )
 
     await executor.fetch_source(source)
