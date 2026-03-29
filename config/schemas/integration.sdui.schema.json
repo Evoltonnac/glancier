@@ -119,6 +119,30 @@
               "$ref": "#/$defs/templatedString"
             }
           ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "default": "stretch",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "auto"
+                },
+                {
+                  "type": "string",
+                  "const": "stretch"
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
         }
       },
       "required": [
@@ -173,6 +197,30 @@
                     ]
                   },
                   "width": {
+                    "anyOf": [
+                      {
+                        "default": "auto",
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "auto"
+                          },
+                          {
+                            "type": "string",
+                            "const": "stretch"
+                          },
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "#/$defs/templatedString"
+                      }
+                    ]
+                  },
+                  "height": {
                     "anyOf": [
                       {
                         "default": "auto",
@@ -267,6 +315,30 @@
           "anyOf": [
             {
               "$ref": "#/$defs/alignValue"
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "default": "stretch",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "auto"
+                },
+                {
+                  "type": "string",
+                  "const": "stretch"
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ]
             },
             {
               "$ref": "#/$defs/templatedString"
@@ -1913,6 +1985,30 @@
           ]
         },
         "width": {
+          "anyOf": [
+            {
+              "default": "auto",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "auto"
+                },
+                {
+                  "type": "string",
+                  "const": "stretch"
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/templatedString"
+            }
+          ]
+        },
+        "height": {
           "anyOf": [
             {
               "default": "auto",

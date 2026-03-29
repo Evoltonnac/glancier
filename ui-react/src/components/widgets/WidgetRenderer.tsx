@@ -377,6 +377,7 @@ function WidgetRendererImpl({
                     spacing={validWidget.spacing}
                     align_y={validWidget.align_y}
                     align_x={validWidget.align_x}
+                    height={validWidget.height}
                 >
                     {validWidget.items.map((item: Widget, index: number) => (
                         <WidgetRenderer
@@ -395,11 +396,13 @@ function WidgetRendererImpl({
                     spacing={validWidget.spacing}
                     align_x={validWidget.align_x}
                     align_y={validWidget.align_y}
+                    height={validWidget.height}
                 >
                     {validWidget.columns.map((column: any, index: number) => (
                         <Column
                             key={index}
                             width={column.width}
+                            height={column.height}
                             align_y={column.align_y}
                             spacing={column.spacing}
                             align_x={column.align_x}

@@ -27,8 +27,8 @@ templates:
                       - type: "ColumnSet"
                         columns:
                             - type: "Column"
-                              width: "stretch"
                               spacing: "sm"
+                              width: "stretch"
                               items:
                                   - type: "TextBlock"
                                     text: "{article.title}"

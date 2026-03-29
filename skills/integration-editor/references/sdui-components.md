@@ -16,12 +16,18 @@ Use only these values:
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
 - `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
+- Layout size values (`width` / `height`, where exposed): `auto` | `stretch` | positive number
 
 Avoid legacy values such as `small/default/large` or old alignment aliases.
 
 Color rule:
 - On supported non-chart widgets, `color` overrides `tone`.
 - Charts keep `colors` as the array form of the same semantic color enum.
+
+Layout size rule:
+- Shared value domain is `auto` | `stretch` | positive number, but numeric meaning is field-specific.
+- `Container.height` / `ColumnSet.height` and `Column.width` use flex-weight semantics for numeric values.
+- `Column.height` uses fixed pixel semantics for numeric values.
 
 ## 3. Widget Catalog
 
@@ -36,6 +42,7 @@ Optional:
 - `spacing`
 - `align_x`
 - `align_y`
+- `height`: `auto` | `stretch` | positive number (default `stretch`)
 
 #### `ColumnSet`
 Required:
@@ -46,6 +53,7 @@ Optional:
 - `spacing`
 - `align_x`
 - `align_y`
+- `height`: `auto` | `stretch` | positive number (default `stretch`)
 
 #### `Column`
 Required:
@@ -54,9 +62,16 @@ Required:
 
 Optional:
 - `width`: `auto` | `stretch` | positive number
+- `height`: `auto` | `stretch` | positive number
 - `align_x`
 - `align_y`
 - `spacing`
+
+Layout sizing behavior:
+- `Container.height` / `ColumnSet.height`: `stretch` fills remaining vertical space; `auto` hugs content; positive number is a vertical flex weight.
+- `Column.width`: `stretch` fills remaining horizontal space; positive number is a horizontal flex weight.
+- `Column.height`: `stretch` fills the parent height; positive number is a fixed pixel height.
+- `align_x` and `align_y` are both valid on layout widgets; for `ColumnSet`, `align_x` is the main axis, while for `Container` / `Column`, `align_y` is the main axis.
 
 ### 3.2 Data Container
 

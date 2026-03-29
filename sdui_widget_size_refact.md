@@ -1,6 +1,6 @@
 # SDUI 布局系统：基于 Flexbox 的三层设计规范
 
-利用 CSS Flexbox 的 **“刚性底线”（flex-shrink: 0 + min-height）** 与 **高度链条传递 (Height Propagation)**，通过建立三层组件分类协议，实现 SDUI 在任意卡片尺寸下都能完美分配空间并支持兜底滚动。
+利用 CSS Flexbox 的 **高度链条传递 (Height Propagation)** 与 **弹性分配 (flex-grow / shrink 对齐)**，通过建立三层组件分类协议，实现 SDUI 在任意卡片尺寸下都能完美分配空间并防止布局撑破 (Flex Blowout)。
 
 ---
 

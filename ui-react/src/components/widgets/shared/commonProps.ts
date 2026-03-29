@@ -25,6 +25,13 @@ export type Tone = z.infer<typeof ToneSchema>;
 export const AlignSchema = z.enum(["start", "center", "end"]);
 export type Align = z.infer<typeof AlignSchema>;
 
+export const LayoutSizeSchema = z.union([
+    z.literal("auto"),
+    z.literal("stretch"),
+    z.number().positive(),
+]);
+export type LayoutSize = z.infer<typeof LayoutSizeSchema>;
+
 export { SemanticColorSchema, resolveSemanticColor };
 export type { SemanticColor };
 

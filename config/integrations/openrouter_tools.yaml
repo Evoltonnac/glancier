@@ -1,111 +1,167 @@
-name: "OpenRouter API Keys"
-description: "Use API key auth to fetch OpenRouter developer tooling usage."
+name: "OpenRouter Quota Monitor"
+description: "A minimalist dashboard to monitor your OpenRouter account balance and API key usage. Note: Requires a Management API Key."
 flow:
-    - id: auth
-      use: api_key
-      args:
-          label: "OpenRouter Management API Key"
-          description: "Paste your OpenRouter key."
-      secrets:
-          openrouter_api_key: "api_key"
-    - id: fetch_keys
-      use: http
-      args:
-          url: "https://openrouter.ai/api/v1/keys"
-          method: "GET"
-          headers:
-              Authorization: "Bearer {openrouter_api_key}"
-      outputs:
-          keys_payload: "http_response"
-    - id: parse_keys
-      use: extract
-      args:
-          source: "{keys_payload}"
-          type: "jsonpath"
-      outputs:
-          keys_data: "$.data"
-    - id: count_keys
-      use: script
-      args:
-          code: |
-              key_count = len(keys_data or [])
-      outputs:
-          key_count: "key_count"
-    - id: summarize_keys
-      use: script
-      args:
-          code: |
-              key_items = keys_data or []
-              active_keys = 0
-              limited_keys = 0
-              total_usage = 0.0
-              total_limit = 0.0
+  - id: collect_api_key
+    use: api_key
+    args:
+      label: "Management API Key"
+      description: "请输入您的 OpenRouter 管理密钥 (Management API Key)。注意：常规密钥无法拉取其他密钥的列表。"
+    secrets:
+      openrouter_api_key: "api_key"
 
-              for item in key_items:
-                  if not item.get("disabled", False):
-                      active_keys += 1
+  - id: fetch_credits
+    use: http
+    args:
+      url: "https://openrouter.ai/api/v1/credits"
+      method: "GET"
+      headers:
+        Authorization: "Bearer {openrouter_api_key}"
+    outputs:
+      credits_payload: "http_response"
 
-                  usage = item.get("usage")
-                  limit = item.get("limit")
+  - id: fetch_keys
+    use: http
+    args:
+      url: "https://openrouter.ai/api/v1/keys"
+      method: "GET"
+      headers:
+        Authorization: "Bearer {openrouter_api_key}"
+    outputs:
+      keys_payload: "http_response"
 
-                  if isinstance(usage, (int, float)):
-                      total_usage += float(usage)
-                  if isinstance(limit, (int, float)):
-                      limited_keys += 1
-                      total_limit += float(limit)
+  - id: parse_credits
+    use: extract
+    args:
+      source: "{credits_payload}"
+      type: "jsonpath"
+    outputs:
+      total_credits: "$.data.total_credits"
+      total_usage: "$.data.total_usage"
 
-              utilization_pct = 0
-              if total_limit > 0:
-                  utilization_pct = min(100, (total_usage / total_limit) * 100)
-      outputs:
-          active_keys: "active_keys"
-          limited_keys: "limited_keys"
-          total_usage: "total_usage"
-          total_limit: "total_limit"
-          utilization_pct: "utilization_pct"
+  - id: parse_keys
+    use: extract
+    args:
+      source: "{keys_payload}"
+      type: "jsonpath"
+    outputs:
+      keys_list: "$.data"
+
+  - id: summarize
+    use: script
+    args:
+      code: |
+        try:
+            # 全局账户维度计算
+            credits = float(total_credits or 0)
+            usage = float(total_usage or 0)
+            remaining = max(credits - usage, 0)
+            
+            credits_formatted = f"${credits:.2f}"
+            usage_formatted = f"${usage:.2f}"
+            remaining_formatted = f"${remaining:.2f}"
+            
+            account_percent = min((usage / credits) * 100, 100) if credits > 0 else 0
+            
+            # 密钥列表维度的清洗与计算
+            processed_keys = []
+            if keys_list and isinstance(keys_list, list):
+                for k in keys_list:
+                    name = k.get("name") or "Unnamed Key"
+                    k_usage = float(k.get("usage") or 0)
+                    limit = k.get("limit")
+                    
+                    if limit is not None:
+                        limit_val = float(limit)
+                        percent = min((k_usage / limit_val) * 100, 100) if limit_val > 0 else 0
+                        limit_str = f"${limit_val:.2f}"
+                    else:
+                        percent = 0
+                        limit_str = "Unlimited"
+                    
+                    processed_keys.append({
+                        "name": name,
+                        "usage": f"${k_usage:.2f}",
+                        "limit": limit_str,
+                        "percent": percent
+                    })
+        except Exception as e:
+            remaining_formatted = "$0.00"
+            credits_formatted = "$0.00"
+            usage_formatted = "$0.00"
+            account_percent = 0
+            processed_keys = []
+    outputs:
+      account_remaining: "remaining_formatted"
+      account_limit: "credits_formatted"
+      account_usage: "usage_formatted"
+      account_percent: "account_percent"
+      processed_keys: "processed_keys"
+
 templates:
-    - id: "openrouter_keys_snapshot"
-      type: "source_card"
-      ui:
-          title: "OpenRouter Key Ledger"
-          icon: "KEY"
-      widgets:
-          - type: "Container"
-            spacing: "sm"
-            items:
-                - type: "ColumnSet"
-                  columns:
+  - id: "openrouter_dashboard"
+    type: "source_card"
+    ui:
+      title: "OpenRouter"
+      icon: "🔑"
+    widgets:
+      - type: "Container"
+        spacing: "md"
+        items:
+          # Row: Balance on left, Action on right
+          - type: "ColumnSet"
+            height: "auto"
+            align_x: "center"
+            columns:
+              - type: "Column"
+                width: "stretch"
+                items:
+                  - type: "TextBlock"
+                    text: "{account_remaining}"
+                    size: "xl"
+                    weight: "bold"
+              - type: "Column"
+                width: "auto"
+                align_y: "center"
+                items:
+                  - type: "ActionSet"
+                    actions:
+                      - type: "Action.OpenUrl"
+                        title: "管理密钥"
+                        url: "https://openrouter.ai/keys"
+                        size: "sm"
+
+          - type: "List"
+            data_source: "{processed_keys}"
+            item_alias: "key"
+            layout: "grid"
+            columns: 2
+            page_size: 8
+            pagination: true
+            spacing: "md"
+            render:
+              - type: "Container"
+                spacing: "none"
+                items:
+                  - type: "ColumnSet"
+                    spacing: "sm"
+                    columns:
                       - type: "Column"
                         width: "stretch"
                         items:
-                            - type: "TextBlock"
-                              text: "{key_count}"
-                              size: "xl"
-                              weight: "bold"
-                            - type: "TextBlock"
-                              text: "Managed Keys"
-                              tone: "muted"
-                              size: "sm"
+                          - type: "TextBlock"
+                            text: "{key.name}"
+                            weight: "medium"
+                            max_lines: 1 # Ensure single line
                       - type: "Column"
                         width: "auto"
-                        align_y: "start"
                         items:
-                            - type: "Badge"
-                              text: "API Key"
-                              tone: "info"
-                - type: "Progress"
-                  value: "{utilization_pct}"
-                  thresholds:
-                      warning: 70
+                          - type: "TextBlock"
+                            text: "{key.usage} / {key.limit}"
+                            size: "sm"
+                            tone: "muted"
+                  - type: "Progress"
+                    value: "{fixed(key.percent, 2)}"
+                    size: "sm"
+                    thresholds:
+                      warning: 75
                       danger: 90
-                - type: "FactSet"
-                  spacing: "sm"
-                  facts:
-                      - label: "Active"
-                        value: "{active_keys}"
-                      - label: "Limited"
-                        value: "{limited_keys}"
-                      - label: "Usage"
-                        value: "${fixed(total_usage, 2)}"
-                      - label: "Limit"
-                        value: "${fixed(total_limit, 2)}"

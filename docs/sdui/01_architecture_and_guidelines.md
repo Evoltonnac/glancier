@@ -44,6 +44,7 @@ Widgets share a common enum system, but not every widget exposes every field:
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
 - `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
+- Layout size fields (`width` / `height`, where supported): `auto` | `stretch` | positive number
 
 Color contract:
 - On supported non-chart widgets, `color` overrides `tone`.
@@ -192,6 +193,10 @@ To support discrete grid heights without JS calculations or squashed UI, Glanceu
 
 - **Structural Widgets** (`TextBlock`, `FactSet`, etc.): Height is defined by content (`flex-none`).
 - **Content Widgets** (`List`, `Chart.*`, etc.): Share remaining space based on weight, with a rigid minimum height defined in grid rows (e.g. `2` rows).
+- **Layout Widgets** (`Container`, `ColumnSet`, `Column`): expose axis-aware sizing controls instead of a single hard-coded flex rule.
+  - `Container.height` / `ColumnSet.height`: default `stretch`; `auto` keeps intrinsic height; positive number acts as vertical flex weight.
+  - `Column.width`: default `auto`; `stretch` fills remaining horizontal space; positive number acts as horizontal flex weight.
+  - `Column.height`: default `auto`; `stretch` fills parent height; positive number is a fixed pixel height.
 
 For implementation details and scroll strategies, see: [04_widget_layout_contract.md](04_widget_layout_contract.md).
 

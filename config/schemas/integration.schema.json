@@ -1903,6 +1903,30 @@
               "$ref": "#/$defs/SduitemplatedString"
             }
           ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "default": "stretch",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "auto"
+                },
+                {
+                  "type": "string",
+                  "const": "stretch"
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
         }
       },
       "required": [
@@ -1957,6 +1981,30 @@
                     ]
                   },
                   "width": {
+                    "anyOf": [
+                      {
+                        "default": "auto",
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "auto"
+                          },
+                          {
+                            "type": "string",
+                            "const": "stretch"
+                          },
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "#/$defs/SduitemplatedString"
+                      }
+                    ]
+                  },
+                  "height": {
                     "anyOf": [
                       {
                         "default": "auto",
@@ -2051,6 +2099,30 @@
           "anyOf": [
             {
               "$ref": "#/$defs/SduialignValue"
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "default": "stretch",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "auto"
+                },
+                {
+                  "type": "string",
+                  "const": "stretch"
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ]
             },
             {
               "$ref": "#/$defs/SduitemplatedString"
@@ -3697,6 +3769,30 @@
           ]
         },
         "width": {
+          "anyOf": [
+            {
+              "default": "auto",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "auto"
+                },
+                {
+                  "type": "string",
+                  "const": "stretch"
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/SduitemplatedString"
+            }
+          ]
+        },
+        "height": {
           "anyOf": [
             {
               "default": "auto",

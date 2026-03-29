@@ -7,7 +7,7 @@ In a grid-based dashboard where card heights are discrete (e.g., 2 rows, 4 rows)
 - Widgets are never "squashed" into an unusable state.
 - When the allocated physical height is insufficient, the system provides a predictable "fallback global scroll" behavior.
 
-This specification relies purely on **CSS Flexbox `flex-shrink: 0` + `min-height`** and **Nested Flex Layouts**, completely decoupling from JS-based dynamic height calculations.
+This specification uses a dual strategy: **Horizontal Flex-1** to prevent layout blowout (width), and **Vertical Flex-Shrink-0** to support fallback global scrolling (height). It relies on CSS Flexbox rules and `min-width/height: 0` to manage space allocation.
 
 ## 2. Component Layout Categories (Widget Contract)
 
@@ -20,10 +20,22 @@ All SDUI components must explicitly declare their layout metadata during renderi
 
 ### 2.2 Container Widgets
 - **Characteristics**: Pure layout containers (`Container`, `ColumnSet`, `Column`) that divide space for child widgets. They don't have an intrinsic minimum height baseline themselves but need to adapt to the parent's allocated space.
-- **Representative Components**: `Container`, `ColumnSet`.
+- **Representative Components**: `Container`, `ColumnSet`, `Column`.
 - **Behavioral Constraints**:
   - Should **skip** the standard `sdui-widget-shell` wrapper to avoid redundant nesting.
-  - Must apply `flex: 1 0 auto` (or `flex-grow shrink-0 basis-auto` in Tailwind) and `min-h-0` to their own root element to fill available space while ensuring they **never** shrink below their content's intrinsic height.
+  - `Container` and `ColumnSet` keep `w-full` and `min-h-0`; their vertical fill behavior is controlled by the `height` field instead of a single hard-coded flex rule.
+  - `Container.height` / `ColumnSet.height` default to `stretch`.
+    - `stretch`: apply `flex-grow shrink-0 basis-auto` to fill remaining vertical space without shrinking below intrinsic content height.
+    - `auto`: keep intrinsic height (`flex-shrink-0`) and opt out of vertical fill.
+    - positive number: apply `flex: <n> 0 auto`, treating the value as a vertical flex weight rather than a pixel height.
+  - `Column.width` defaults to `auto`.
+    - `stretch`: apply `flex-1 min-w-0` to fill remaining horizontal space and avoid flex blowout.
+    - `auto`: keep intrinsic width.
+    - positive number: apply `flex: <n> 0 auto`, treating the value as a horizontal flex weight.
+  - `Column.height` defaults to `auto`.
+    - `stretch`: apply `h-full` to match the parent column height.
+    - `auto`: keep intrinsic height.
+    - positive number: apply a fixed pixel height (`height: <n>px`).
 
 ### 2.3 Content Widgets
 - **Characteristics**: Responsible for displaying primary data, occupying the remaining space of the card. When multiple content widgets exist, they share the remaining space based on weight. Every component class has a strict "minimum usable height".
@@ -37,10 +49,17 @@ All SDUI components must explicitly declare their layout metadata during renderi
 
 ## 3. Component-Specific Implementation Guidelines
 
-### 3.1 Tables (`Chart.Table`)
+### 3.1 Layout Widgets (`Container`, `ColumnSet`, `Column`)
+- `align_x` and `align_y` are both first-class layout fields; do not collapse them into a single generic alignment concept.
+- Main-axis mapping is component-specific:
+  - `Container` / `Column`: `align_y` controls vertical distribution, `align_x` controls cross-axis alignment.
+  - `ColumnSet`: `align_x` controls horizontal distribution, `align_y` controls cross-axis alignment.
+- Use numeric `Column.height` only when a fixed pixel pane is intentional; prefer `stretch` for proportional card-filling layouts.
+
+### 3.2 Tables (`Chart.Table`)
 - To maintain context during scrolling, the `thead` must use `sticky top-0` positioning with a high `z-index` and a solid background color.
 
-### 3.2 Responsive Charts (`Chart.*`)
+### 3.3 Responsive Charts (`Chart.*`)
 - Do **not** use fixed pixel heights for charts.
 - Use Recharts `ResponsiveContainer` with `width="100%" height="100%"`.
 - For `PieChart`, use percentage strings for radii (e.g., `outerRadius="80%"` and `cx/cy="50%"`) to ensure the pie scales proportionally to the container dimensions.
