@@ -12,8 +12,7 @@ This roadmap covers milestone v1.2 only: risk-operation trust authorization and 
 - [x] **Phase 7: Risk-Operation Trust Authorization, Rule Storage, and HTTP Step Refactor** - Add extensible trust authorization for risky connection targets with source-aware persistence and lifecycle cleanup, and refactor `http` step from hard private-target block to trust-gate flow.
 - [x] **Phase 8: SQL Step Contracts and Safety Guardrails** - Define and enforce secure `use: sql` contracts, guardrails, and deterministic SQL error handling.
 - [x] **Phase 9: SQL Runtime and Integration Data Normalization** - Execute SQL across supported connectors and emit stable normalized Integration Data for templates/widgets.
-- [x] **Phase 10: SQL Chart Widgets and SDUI Rendering** - Add SQL-backed chart widgets with schema-validated field mapping and resilient fallback rendering. (completed 2026-03-25)
-- [ ] **Phase 11: Authoring Usability and Diagnostics Hardening** - Deliver SQL preview flows, localized diagnostics, and dashboard filter integration without state ownership regressions.
+- [x] **Phase 10: SQL Chart Widgets and SDUI Rendering** - Add SQL-backed chart widgets with schema-validated field mapping and resilient fallback rendering. (completed 2011-03-25)
 
 ## Phase Details
 
@@ -68,17 +67,6 @@ Plans:
 - [x] 10-02-PLAN.md — Implement Chart.Line/Chart.Bar/Chart.Area/Chart.Pie rendering through internal Recharts adapter and register widgets in WidgetRenderer.
 - [x] 10-03-PLAN.md — Implement Chart.Table dense inspection widget, wire fallback behavior, and synchronize SDUI chart documentation.
 
-### Phase 11: Authoring Usability and Diagnostics Hardening
-**Goal**: Users can author and troubleshoot SQL+chart workflows with faster feedback and stable dashboard state behavior.
-**Depends on**: Phase 10
-**Requirements**: UX-01, UX-02, UX-03, UX-04
-**Success Criteria** (what must be TRUE):
-  1. User can preview SQL sample rows and inferred field schema during integration authoring before committing refresh settings.
-  2. User can troubleshoot SQL/chart setup failures with stable `error_code`-driven messages that are i18n-compatible in `en` and `zh`.
-  3. User can apply dashboard-level filters to SQL query inputs while preserving canonical `useViewTabsState` ownership and idempotent SWR/Zustand synchronization.
-  4. User can complete SQL+chart dashboard workflows without introducing duplicate SWR/Zustand write paths in dashboard management interactions.
-**Plans**: TBD
-
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -87,4 +75,3 @@ Plans:
 | 8. SQL Step Contracts and Safety Guardrails | 3/3 | Completed | 2026-03-24 |
 | 9. SQL Runtime and Integration Data Normalization | 3/3 | Complete | 2026-03-24 |
 | 10. SQL Chart Widgets and SDUI Rendering | 3/3 | Complete   | 2026-03-25 |
-| 11. Authoring Usability and Diagnostics Hardening | 0/TBD | Not started | - |
