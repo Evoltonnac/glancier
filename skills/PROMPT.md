@@ -372,7 +372,7 @@ Color rule:
 
 - `ColumnSet`
   - required: `type`, `columns`
-  - optional: `spacing`, `align_x`, `align_y`, `height` (`auto` | `stretch` | positive number; default `stretch`)
+  - optional: `spacing`, `align_x`, `align_y`, `height` (`auto` | `stretch` | positive number; default `auto`)
 
 - `Column`
   - required: `type`, `items`

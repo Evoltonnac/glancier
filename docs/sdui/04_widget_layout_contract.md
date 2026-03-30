@@ -24,7 +24,7 @@ All SDUI components must explicitly declare their layout metadata during renderi
 - **Behavioral Constraints**:
   - Should **skip** the standard `sdui-widget-shell` wrapper to avoid redundant nesting.
   - `Container` and `ColumnSet` keep `w-full` and `min-h-0`; their vertical fill behavior is controlled by the `height` field instead of a single hard-coded flex rule.
-  - `Container.height` / `ColumnSet.height` default to `stretch`.
+  - `Container.height` defaults to `stretch`; `ColumnSet.height` defaults to `auto`.
     - `stretch`: apply `flex-grow shrink-0 basis-auto` to fill remaining vertical space without shrinking below intrinsic content height.
     - `auto`: keep intrinsic height (`flex-shrink-0`) and opt out of vertical fill.
     - positive number: apply `flex: <n> 0 auto`, treating the value as a vertical flex weight rather than a pixel height.

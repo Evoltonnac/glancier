@@ -324,7 +324,7 @@
         "height": {
           "anyOf": [
             {
-              "default": "stretch",
+              "default": "auto",
               "anyOf": [
                 {
                   "type": "string",

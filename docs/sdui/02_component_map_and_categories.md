@@ -15,7 +15,7 @@ This document defines the **single source of truth** for supported SDUI componen
   - Behavior: `align_y` controls vertical stack distribution; `align_x` controls cross-axis alignment; default `height` is `stretch`
 - `ColumnSet`: horizontal column layout; direct children must be `Column`.
   - Common fields: `columns`, `spacing`, `align_x`, `align_y`, `height`
-  - Behavior: `align_x` controls horizontal row distribution; `align_y` controls cross-axis alignment; default `height` is `stretch`
+  - Behavior: `align_x` controls horizontal row distribution; `align_y` controls cross-axis alignment; default `height` is `auto`
 - `Column`: column container with independent width/height sizing.
   - Common fields: `items`, `width`, `height`, `spacing`, `align_x`, `align_y`
   - Behavior: `align_y` controls vertical stack distribution; `align_x` controls cross-axis alignment; default `width` / `height` are `auto`
@@ -97,7 +97,7 @@ Validation contract:
 - Layout size values (`width` / `height`, where exposed): `auto` | `stretch` | positive number
 
 Layout size behavior:
-- `Container.height` / `ColumnSet.height`: `stretch` fills remaining vertical space, `auto` hugs content, positive number acts as vertical flex weight.
+- `Container.height` defaults to `stretch`; `ColumnSet.height` defaults to `auto`. Positive number acts as vertical flex weight.
 - `Column.width`: `stretch` fills remaining horizontal space and enables safe shrinking via `min-w-0`; positive number acts as horizontal flex weight.
 - `Column.height`: `stretch` fills parent height; positive number is a fixed pixel height.
 

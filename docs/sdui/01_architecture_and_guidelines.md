@@ -199,7 +199,7 @@ To support discrete grid heights without JS calculations or squashed UI, Glanceu
 - **Structural Widgets** (`TextBlock`, `FactSet`, etc.): Height is defined by content (`flex-none`).
 - **Content Widgets** (`List`, `Chart.*`, etc.): Share remaining space based on weight, with a rigid minimum height defined in grid rows (e.g. `2` rows).
 - **Layout Widgets** (`Container`, `ColumnSet`, `Column`): expose axis-aware sizing controls instead of a single hard-coded flex rule.
-  - `Container.height` / `ColumnSet.height`: default `stretch`; `auto` keeps intrinsic height; positive number acts as vertical flex weight.
+  - `Container.height` defaults to `stretch`; `ColumnSet.height` defaults to `auto`. Positive number acts as vertical flex weight.
   - `Column.width`: default `auto`; `stretch` fills remaining horizontal space; positive number acts as horizontal flex weight.
   - `Column.height`: default `auto`; `stretch` fills parent height; positive number is a fixed pixel height.
 

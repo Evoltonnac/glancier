@@ -22,7 +22,7 @@ export const ColumnSetSchema = z.object({
     spacing: SpacingSchema.default("md"),
     align_x: AlignSchema.default("start"),
     align_y: AlignSchema.optional(),
-    height: LayoutSizeSchema.default("stretch"),
+    height: LayoutSizeSchema.default("auto"),
 });
 
 export type ColumnSetProps = z.infer<typeof ColumnSetSchema>;
@@ -39,7 +39,7 @@ export function ColumnSet({
     spacing = "md",
     align_x = "start",
     align_y,
-    height = "stretch",
+    height = "auto",
     children,
 }: ColumnSetComponentProps) {
     const heightClass =
