@@ -6,6 +6,7 @@ Glanceus uses SDUI (Schema-Driven UI) in the view layer:
 - Declare UI with YAML/JSON templates instead of hardcoding per-scenario pages.
 - Renderer handles parsing/validation/fallback, not request orchestration.
 - Flow owns authentication and fetching; SDUI only renders data.
+- Widgets are parameter-driven and stateless with respect to backend workflow semantics.
 
 ## 2. Template Structure (`templates`)
 
@@ -36,13 +37,20 @@ Field meanings:
 - `ui`: card-level metadata (`title`, `icon`, ...)
 - `widgets`: SDUI widget tree entry
 
-## 3. Shared Widget Props
+## 3. Shared Widget Field System
 
-All widgets expose a minimal common prop model:
+Widgets share a common enum system, but not every widget exposes every field:
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
+- Layout size fields (`width` / `height`, where supported): `auto` | `stretch` | positive number
+
+Color contract:
+- On supported non-chart widgets, `color` overrides `tone`.
+- Charts keep `colors` as the array form of the same semantic color enum.
+- Do not use raw hex, CSS variables, or library-native color values in templates.
 
 Constraints:
 - Legacy values are not supported (`small/default/large`, `compact/relaxed`, etc.).
@@ -82,7 +90,7 @@ To output literal template markers, use backslash escapes:
 - Arbitrary code execution is forbidden.
 - Parse failures degrade to empty values without breaking card rendering.
 
-## 5. List and Layout Composition
+## 5. List, Layout, and Chart Composition
 
 ```yaml
 - type: "List"
@@ -101,7 +109,76 @@ To output literal template markers, use backslash escapes:
       label: "Usage"
 ```
 
-### 5.1 Widget Visual Baseline (Spacing and List Item)
+```yaml
+- type: "Chart.Line"
+  data_source: "{sql_response.rows}"
+  fields_source: "{sql_response.fields}"
+  title: "Revenue trend"
+  description: "Daily SQL revenue"
+  encoding:
+    x:
+      field: "ts"
+    y:
+      field: "amount"
+    series:
+      field: "category"
+  legend: true
+  colors: ["blue", "teal"]
+  empty_state: "No chart data available"
+
+- type: "Chart.Table"
+  data_source: "{sql_response.rows}"
+  fields_source: "{sql_response.fields}"
+  title: "Top regions"
+  encoding:
+    columns:
+      - field: "label"
+        title: "Region"
+        format: "text"
+      - field: "amount"
+        title: "Revenue"
+        format: "number"
+  sort_by: "amount"
+  sort_order: "desc"
+  limit: 10
+```
+
+### 5.1 Shared Chart Contract
+
+Supported first-release chart widget types:
+- `Chart.Line`
+- `Chart.Bar`
+- `Chart.Area`
+- `Chart.Pie`
+- `Chart.Table`
+
+Shared chart props:
+- `data_source`: resolved dataset, typically `sql_response.rows`
+- `fields_source` (optional): resolved field metadata array, typically `sql_response.fields`
+- `encoding`: channel mapping for chart fields inside the selected dataset
+- `title`
+- `description`
+- `legend`
+- `colors`: chart semantic color names only (`blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`); values cycle when series exceed 12; raw hex, CSS variables, and native color values are not supported
+- `format`
+- `empty_state`
+
+Per-chart required encoding channels:
+- `Chart.Line` / `Chart.Bar` / `Chart.Area`: `encoding.x`, `encoding.y`, optional `encoding.series`
+- `Chart.Pie`: `encoding.label`, `encoding.value`, optional `donut` (boolean)
+- `Chart.Table`: `encoding.columns[*].field` references must map to dataset fields; `sort_by`, `sort_order`, and `limit` remain top-level table controls
+
+Deterministic chart widget states:
+- `config_error`
+- `empty`
+- `ready`
+
+State precedence is fixed to: `empty -> config_error -> ready` for widget-local validation.
+If `fields_source` is provided, chart validation must use it; if omitted, renderer may infer metadata from `data_source` rows as a compatibility fallback.
+Source lifecycle states (`refreshing`, `error`, `suspended`) and `error_code` diagnostics are source-level concerns, not chart widget input contract.
+Invalid or empty chart widgets must degrade inside the card shell and must never white-screen the dashboard.
+
+### 5.2 Widget Visual Baseline (Spacing and List Item)
 
 To keep hierarchy clear, widget spacing uses two semantic levels:
 - **Layout spacing** (`Container` / `ColumnSet` / `Column` / `List`): larger for structure grouping.
@@ -115,7 +192,20 @@ For the same `spacing` token: **Layout >= Micro**. Current mapping:
 - Recommended baseline: `rounded-md border border-border/40 bg-surface/20`
 - Principle: grouping should be visible but not overpower content.
 
-## 6. Schema-First Constraints
+## 6. Widget Layout and Responsive Shell Contract
+
+To support discrete grid heights without JS calculations or squashed UI, Glanceus uses a CSS Flexbox `min-height` + `flex-shrink: 0` approach.
+
+- **Structural Widgets** (`TextBlock`, `FactSet`, etc.): Height is defined by content (`flex-none`).
+- **Content Widgets** (`List`, `Chart.*`, etc.): Share remaining space based on weight, with a rigid minimum height defined in grid rows (e.g. `2` rows).
+- **Layout Widgets** (`Container`, `ColumnSet`, `Column`): expose axis-aware sizing controls instead of a single hard-coded flex rule.
+  - `Container.height` defaults to `stretch`; `ColumnSet.height` defaults to `auto`. Positive number acts as vertical flex weight.
+  - `Column.width`: default `auto`; `stretch` fills remaining horizontal space; positive number acts as horizontal flex weight.
+  - `Column.height`: default `auto`; `stretch` fills parent height; positive number is a fixed pixel height.
+
+For implementation details and scroll strategies, see: [04_widget_layout_contract.md](04_widget_layout_contract.md).
+
+## 7. Schema-First Constraints
 
 1. Define schema first, then derive component props.
 2. Run schema `safeParse` before rendering.
@@ -126,4 +216,5 @@ For the same `spacing` token: **Layout >= Micro**. Current mapping:
 
 - SDUI: presentation layer only.
 - Flow: auth/fetch/extract/resume execution.
+- Flow outputs determine widget inputs; widgets must not assume fixed backend field paths.
 - Flow docs entry: [../flow/01_architecture_and_orchestration.md](../flow/01_architecture_and_orchestration.md)

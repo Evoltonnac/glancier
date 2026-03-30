@@ -11,53 +11,95 @@ This document defines the **single source of truth** for supported SDUI componen
 ## 1. Layouts (Structure Containers)
 
 - `Container`: vertical flow container for section grouping.
-  - Common fields: `items`, `spacing`, `align_y`
+  - Common fields: `items`, `spacing`, `align_x`, `align_y`, `height`
+  - Behavior: `align_y` controls vertical stack distribution; `align_x` controls cross-axis alignment; default `height` is `stretch`
 - `ColumnSet`: horizontal column layout; direct children must be `Column`.
-  - Common fields: `columns`, `spacing`, `align_x`
-- `Column`: column container with `auto` / `stretch` / numeric weight width.
-  - Common fields: `items`, `width`, `spacing`, `align_y`
+  - Common fields: `columns`, `spacing`, `align_x`, `align_y`, `height`
+  - Behavior: `align_x` controls horizontal row distribution; `align_y` controls cross-axis alignment; default `height` is `auto`
+- `Column`: column container with independent width/height sizing.
+  - Common fields: `items`, `width`, `height`, `spacing`, `align_x`, `align_y`
+  - Behavior: `align_y` controls vertical stack distribution; `align_x` controls cross-axis alignment; default `width` / `height` are `auto`
 
 ## 2. Containers (Data Containers)
 
-- `List`: array iterator container with filtering/sorting/pagination/layout support.
+- `List` **[Content, minHeightRows: 2]**: array iterator container with filtering/sorting/pagination/layout support.
 
 Common fields:
 - `data_source`: array data path
 - `item_alias`: list item alias
 - `render`: child widget template per item
+- `align_x` / `align_y`
 - `filter` / `sort_by` / `sort_order` / `limit` / `pagination` / `page_size`
 
 ## 3. Elements (Atomic Elements)
 
-- `TextBlock`: generic text element, including numeric/status text.
-  - Common fields: `text`, `size`, `tone`, `align_x`, `weight`, `wrap`, `max_lines`
-- `FactSet`: key-value pairs (`label`/`value`).
-  - Common fields: `facts`, `spacing` (`tone` can be set per fact)
-- `Image`: image or icon.
+- `TextBlock` **[Structural]**: generic text element, including numeric/status text.
+  - Common fields: `text`, `size`, `tone`, `color`, `align_x`, `weight`, `wrap`, `max_lines`
+- `FactSet` **[Structural]**: key-value pairs (`label`/`value`).
+  - Common fields: `facts`, `spacing`, `color` (`color` / `tone` can be set per fact, and per-fact `color` overrides per-fact `tone`)
+- `Image` **[Structural]**: image or icon.
   - Common fields: `url`, `altText`, `size`
-- `Badge`: status badge.
-  - Common fields: `text`, `size`, `tone`
+- `Badge` **[Structural]**: status badge.
+  - Common fields: `text`, `size`, `tone`, `color`
 
 ## 4. Visualizations
 
-- `Progress`: progress/quota visualization (`bar` or `ring`).
-  - Common fields: `value`, `label`, `style`, `size`, `tone`, `thresholds.warning`, `thresholds.danger`
+- `Progress` **[Structural/Content]**: progress/quota visualization (`bar` or `ring`). behaves as structural or content depending on container constraints.
+  - Common fields: `value`, `label`, `style`, `size`, `tone`, `color`, `thresholds.warning`, `thresholds.danger`
+- `Chart.Line` **[Content, minHeightRows: 3]**: cartesian trend chart for ordered x/y data.
+- `Chart.Bar` **[Content, minHeightRows: 3]**: cartesian comparison chart for x/y data.
+- `Chart.Area` **[Content, minHeightRows: 3]**: filled cartesian trend chart for x/y data.
+- `Chart.Pie` **[Content, minHeightRows: 3]**: categorical share chart for `label` + `value` data.
+- `Chart.Table` **[Content, minHeightRows: 3]**: dense SQL result inspection table for selected columns.
+
+Shared chart fields:
+- `data_source`
+- `fields_source` (optional)
+- `encoding`
+- `title`
+- `description`
+- `legend`
+- `colors`: semantic chart color names only (`blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`); values cycle when series exceed 12
+- `format`
+- `empty_state`
+
+Chart-specific field rules:
+- `Chart.Line` / `Chart.Bar` / `Chart.Area`: require `encoding.x` and `encoding.y`; support optional `encoding.series`
+- `Chart.Pie`: requires `encoding.label` and `encoding.value`; supports optional `donut` boolean
+- `Chart.Table`: requires `encoding.columns[*].field` references that resolve against dataset fields; supports `sort_by`, `sort_order`, and `limit`
+
+Deterministic chart widget states:
+- `config_error`
+- `empty`
+- `ready`
+
+Validation contract:
+- If `fields_source` is provided, channel validation must use `fields_source`.
+- If `fields_source` is omitted, renderer may infer field metadata from `data_source` rows for compatibility.
+- Source-level `status` / `error_code` are outside chart widget params and should be surfaced by source/card diagnostics.
 
 ## 5. Actions
 
-- `ActionSet`: action container.
+- `ActionSet` **[Structural]**: action container.
   - Common fields: `actions`, `spacing`, `align_x`
-- `Action.OpenUrl`: open external URL.
-  - Common fields: `title`, `url`, `size`, `tone`
-- `Action.Copy`: copy text.
-  - Common fields: `title`, `text`, `size`, `tone`
+- `Action.OpenUrl` **[Structural]**: open external URL.
+  - Common fields: `title`, `url`, `size`, `tone`, `color`
+- `Action.Copy` **[Structural]**: copy text.
+  - Common fields: `title`, `text`, `size`, `tone`, `color`
 
-## 6. Shared Enum Fields
+## 6. Shared Enum and Layout Size Fields
 
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
+- Layout size values (`width` / `height`, where exposed): `auto` | `stretch` | positive number
+
+Layout size behavior:
+- `Container.height` defaults to `stretch`; `ColumnSet.height` defaults to `auto`. Positive number acts as vertical flex weight.
+- `Column.width`: `stretch` fills remaining horizontal space and enables safe shrinking via `min-w-0`; positive number acts as horizontal flex weight.
+- `Column.height`: `stretch` fills parent height; positive number is a fixed pixel height.
 
 ## 7. Non-Current SDUI Components (Legacy Names)
 
@@ -65,7 +107,8 @@ The following names are not part of the current renderer and must not be used in
 - `hero_metric`
 - `progress_bar`
 - `key_value_grid`
-- `metric` / `line_chart` / `bar_chart` / `table` / `json` / `stat_grid`
+- `metric` / `table` / `json` / `stat_grid`
+- legacy chart aliases such as `line_chart` and `bar_chart` must not be used; use `Chart.Line` and `Chart.Bar`
 
 ## 8. Maintenance Rules
 

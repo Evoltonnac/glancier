@@ -51,6 +51,8 @@ class ResourceStore(Protocol):
 
     def save_view(self, view: StoredView) -> StoredView: ...
 
+    def reorder_views(self, ordered_view_ids: list[str]) -> list[StoredView]: ...
+
     def delete_view(self, view_id: str) -> bool: ...
 
     def get_view(self, view_id: str) -> StoredView | None: ...
@@ -64,8 +66,44 @@ class SettingsStore(Protocol):
     def save_settings(self, settings: SystemSettings) -> None: ...
 
 
+class TrustRuleStore(Protocol):
+    def upsert_rule(
+        self,
+        *,
+        capability: str,
+        scope_type: str,
+        source_id: str | None,
+        target_type: str,
+        target_value: str,
+        decision: str,
+        metadata: dict[str, Any] | None = None,
+        expires_at: float | None = None,
+    ) -> Any: ...
+
+    def find_rule(
+        self,
+        *,
+        capability: str,
+        scope_type: str,
+        source_id: str | None,
+        target_type: str,
+        target_value: str,
+    ) -> Any | None: ...
+
+    def delete_rule(
+        self,
+        *,
+        capability: str,
+        scope_type: str,
+        source_id: str | None,
+        target_type: str,
+        target_value: str,
+    ) -> bool: ...
+
+
 @dataclass(slots=True)
 class StorageContract:
     runtime: RuntimeStore
     resources: ResourceStore
     settings: SettingsStore
+    trust_rules: TrustRuleStore | None = None

@@ -1,17 +1,14 @@
 # Roadmap: Glanceus
 
-## Overview
-Milestone details are archived under `.planning/milestones/` to keep this file compact and current.
+## Shipped Milestones
 
-## Milestones
+- [v1.2 SQL Data Access and Visualization Expansion](.planning/milestones/v1.2-ROADMAP.md) (Shipped: 2026-03-29)
+- [v1.1 Security and Stability Hardening](.planning/milestones/v1.1-ROADMAP.md) (Shipped: 2026-03-23)
+- [v1.0 稳定版发版](.planning/milestones/v1.0-ROADMAP.md) (Shipped: 2026-03-13)
 
-- [x] **v0.1: MVP Foundation & UI Refactoring** - [[Archived Roadmap](.planning/milestones/v0.1-ROADMAP.md)] [[Archived Requirements](.planning/milestones/v0.1-REQUIREMENTS.md)]
-- [x] **v1.0: Stable Release + Follow-up Hardening** - [[Archived Roadmap](.planning/milestones/v1.0-ROADMAP.md)] [[Archived Requirements](.planning/milestones/v1.0-REQUIREMENTS.md)] [[Audit](.planning/milestones/v1.0-MILESTONE-AUDIT.md)]
-- [x] **v1.1: Security and Stability Hardening** - Phases 3-6 shipped on 2026-03-23 ([[Archived Roadmap](.planning/milestones/v1.1-ROADMAP.md)] [[Archived Requirements](.planning/milestones/v1.1-REQUIREMENTS.md)])
-- [ ] **v1.2: TBD (Planned)**
+## Current Milestone: v1.3 (Planning)
 
-## Active Milestone
+*Roadmap being defined...*
 
-No active milestone is defined yet.
-
-Run `$gsd-new-milestone` to define v1.2 requirements and phase plan.
+---
+_For past milestone details, see .planning/milestones/_

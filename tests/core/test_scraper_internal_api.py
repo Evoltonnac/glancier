@@ -4,6 +4,7 @@ import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -81,8 +82,17 @@ def _internal_headers(token: str = _INTERNAL_TOKEN) -> dict[str, str]:
     return {"X-Glanceus-Internal-Token": token}
 
 
-def test_internal_auth_required_when_token_missing(tmp_path):
-    client, _store, _executor, _secrets = _build_client(tmp_path)
+@pytest.fixture
+def client_bundle(tmp_path):
+    client, store, executor, secrets = _build_client(tmp_path)
+    try:
+        yield client, store, executor, secrets
+    finally:
+        client.close()
+
+
+def test_internal_auth_required_when_token_missing(client_bundle):
+    client, _store, _executor, _secrets = client_bundle
     response = client.post(
         "/api/internal/scraper/claim",
         json={"worker_id": "daemon-1", "lease_seconds": 20},
@@ -91,8 +101,8 @@ def test_internal_auth_required_when_token_missing(tmp_path):
     assert response.json()["detail"] == "internal_auth_required"
 
 
-def test_internal_auth_required_when_token_invalid(tmp_path):
-    client, _store, _executor, _secrets = _build_client(tmp_path)
+def test_internal_auth_required_when_token_invalid(client_bundle):
+    client, _store, _executor, _secrets = client_bundle
     response = client.post(
         "/api/internal/scraper/claim",
         headers=_internal_headers(token="wrong-token"),
@@ -102,8 +112,8 @@ def test_internal_auth_required_when_token_invalid(tmp_path):
     assert response.json()["detail"] == "internal_auth_required"
 
 
-def test_internal_claim_and_complete_is_idempotent(tmp_path):
-    client, store, executor, secrets = _build_client(tmp_path)
+def test_internal_claim_and_complete_is_idempotent(client_bundle):
+    client, store, executor, secrets = client_bundle
     task = store.upsert_pending_task(
         source_id="source-1",
         step_id="webview",
@@ -157,8 +167,8 @@ def test_internal_claim_and_complete_is_idempotent(tmp_path):
     executor.fetch_source.assert_called_once()
 
 
-def test_internal_fail_manual_required_suspends_with_webview_interaction(tmp_path):
-    client, store, executor, _secrets = _build_client(tmp_path)
+def test_internal_fail_manual_required_suspends_with_webview_interaction(client_bundle):
+    client, store, executor, _secrets = client_bundle
     task = store.upsert_pending_task(
         source_id="source-1",
         step_id="webview-step",
@@ -198,8 +208,8 @@ def test_internal_fail_manual_required_suspends_with_webview_interaction(tmp_pat
     assert interaction.data["task_id"] == task["task_id"]
 
 
-def test_internal_fail_uncertain_marks_retryable_runtime_error(tmp_path):
-    client, store, executor, _secrets = _build_client(tmp_path)
+def test_internal_fail_uncertain_marks_retryable_runtime_error(client_bundle):
+    client, store, executor, _secrets = client_bundle
     task = store.upsert_pending_task(
         source_id="source-1",
         step_id="webview-step",
@@ -235,8 +245,8 @@ def test_internal_fail_uncertain_marks_retryable_runtime_error(tmp_path):
     assert "interaction" not in call_args.kwargs
 
 
-def test_internal_fail_cancel_does_not_overwrite_existing_manual_required_state(tmp_path):
-    client, store, executor, _secrets = _build_client(tmp_path)
+def test_internal_fail_cancel_does_not_overwrite_existing_manual_required_state(client_bundle):
+    client, store, executor, _secrets = client_bundle
     task = store.upsert_pending_task(
         source_id="source-1",
         step_id="webview-step",
@@ -277,8 +287,8 @@ def test_internal_fail_cancel_does_not_overwrite_existing_manual_required_state(
     executor._update_state.assert_not_called()
 
 
-def test_internal_fail_is_idempotent_for_repeated_attempts(tmp_path):
-    client, store, executor, _secrets = _build_client(tmp_path)
+def test_internal_fail_is_idempotent_for_repeated_attempts(client_bundle):
+    client, store, executor, _secrets = client_bundle
     task = store.upsert_pending_task(
         source_id="source-1",
         step_id="webview-step",
@@ -322,8 +332,8 @@ def test_internal_fail_is_idempotent_for_repeated_attempts(tmp_path):
     executor._update_state.assert_called_once()
 
 
-def test_internal_complete_rejects_source_mismatch(tmp_path):
-    client, store, _executor, _secrets = _build_client(tmp_path)
+def test_internal_complete_rejects_source_mismatch(client_bundle):
+    client, store, _executor, _secrets = client_bundle
     task = store.upsert_pending_task(
         source_id="source-1",
         step_id="webview",
@@ -349,17 +359,20 @@ def test_internal_complete_rejects_source_mismatch(tmp_path):
     assert response.status_code == 409
 
 
-def test_internal_claim_rejects_non_localhost_client(tmp_path):
-    client, _store, _executor, _secrets = _build_client(tmp_path)
+def test_internal_claim_rejects_non_localhost_client(client_bundle):
+    client, _store, _executor, _secrets = client_bundle
     remote_client = TestClient(
         client.app,
         base_url="http://127.0.0.1",
         client=("203.0.113.10", 51234),
     )
-    response = remote_client.post(
-        "/api/internal/scraper/claim",
-        headers=_internal_headers(),
-        json={"worker_id": "daemon-1", "lease_seconds": 20},
-    )
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Internal scraper endpoint is localhost-only"
+    try:
+        response = remote_client.post(
+            "/api/internal/scraper/claim",
+            headers=_internal_headers(),
+            json={"worker_id": "daemon-1", "lease_seconds": 20},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Internal scraper endpoint is localhost-only"
+    finally:
+        remote_client.close()

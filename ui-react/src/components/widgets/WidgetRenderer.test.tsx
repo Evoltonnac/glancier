@@ -1,8 +1,73 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 
 import { render } from "../../test/render";
 import { WidgetRenderer } from "./WidgetRenderer";
+
+function mockChartComponent(name: string) {
+    return function MockChartComponent({
+        children,
+        ...props
+    }: {
+        children?: ReactNode;
+        [key: string]: unknown;
+    }) {
+        return createElement(
+            "div",
+            {
+                "data-testid": name,
+                "data-props": JSON.stringify(props),
+            },
+            children,
+        );
+    };
+}
+
+vi.mock("recharts", () => ({
+    ResponsiveContainer: mockChartComponent("ResponsiveContainer"),
+    LineChart: mockChartComponent("LineChart"),
+    Line: mockChartComponent("Line"),
+    BarChart: mockChartComponent("BarChart"),
+    Bar: mockChartComponent("Bar"),
+    AreaChart: mockChartComponent("AreaChart"),
+    Area: mockChartComponent("Area"),
+    PieChart: mockChartComponent("PieChart"),
+    Pie: mockChartComponent("Pie"),
+    Cell: mockChartComponent("Cell"),
+    XAxis: mockChartComponent("XAxis"),
+    YAxis: mockChartComponent("YAxis"),
+    CartesianGrid: mockChartComponent("CartesianGrid"),
+    Tooltip: mockChartComponent("Tooltip"),
+    Legend: mockChartComponent("Legend"),
+}));
+
+beforeAll(() => {
+    class MockResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    }
+
+    Object.defineProperty(globalThis, "ResizeObserver", {
+        configurable: true,
+        writable: true,
+        value: MockResizeObserver,
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+        configurable: true,
+        value: 800,
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+        configurable: true,
+        value: 400,
+    });
+    Object.defineProperty(SVGElement.prototype, "getBBox", {
+        configurable: true,
+        value: () => ({ x: 0, y: 0, width: 100, height: 20 }),
+    });
+});
 
 describe("WidgetRenderer", () => {
     it("renders Progress values from list item templates", () => {
@@ -113,21 +178,21 @@ describe("WidgetRenderer", () => {
             />,
         );
 
-        expect(screen.getByText("Page 1 / 2")).toBeInTheDocument();
+        expect(screen.getByText("第 1 / 2 页")).toBeInTheDocument();
         expect(screen.getByText("Key 1")).toBeInTheDocument();
         expect(screen.getByText("Key 2")).toBeInTheDocument();
         expect(screen.queryByText("Key 3")).toBeNull();
 
-        fireEvent.click(screen.getByRole("button", { name: "Next" }));
+        fireEvent.click(screen.getByRole("button", { name: "下一页" }));
 
-        expect(screen.getByText("Page 2 / 2")).toBeInTheDocument();
+        expect(screen.getByText("第 2 / 2 页")).toBeInTheDocument();
         expect(screen.getByText("Key 3")).toBeInTheDocument();
         expect(screen.queryByText("Key 1")).toBeNull();
-        expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
 
-        fireEvent.click(screen.getByRole("button", { name: "Prev" }));
-        expect(screen.getByText("Page 1 / 2")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Prev" })).toBeDisabled();
+        fireEvent.click(screen.getByRole("button", { name: "上一页" }));
+        expect(screen.getByText("第 1 / 2 页")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
     });
 
     it("formats decimal display via expression", () => {
@@ -209,19 +274,20 @@ describe("WidgetRenderer", () => {
         expect(screen.getByText("~ $100.12 per gram")).toBeInTheDocument();
     });
 
-    it("filters list items with expression engine", () => {
+    it("renders empty state for lists with no items after filtering", () => {
         render(
             <WidgetRenderer
                 widget={
                     {
                         type: "List",
                         data_source: [
-                            { name: "Key 1", active: true, percent: 90 },
-                            { name: "Key 2", active: false, percent: 95 },
-                            { name: "Key 3", active: true, percent: 70 },
+                            { name: "Key 1", active: false },
+                            { name: "Key 2", active: false },
                         ],
                         item_alias: "key_item",
-                        filter: "key_item.active && key_item.percent >= 80",
+                        filter: "key_item.active",
+                        pagination: true,
+                        page_size: 2,
                         render: [
                             {
                                 type: "TextBlock",
@@ -234,9 +300,10 @@ describe("WidgetRenderer", () => {
             />,
         );
 
-        expect(screen.getByText("Key 1")).toBeInTheDocument();
-        expect(screen.queryByText("Key 2")).toBeNull();
-        expect(screen.queryByText("Key 3")).toBeNull();
+        expect(screen.getByText("暂无条目")).toBeInTheDocument();
+        expect(screen.getByText("当前没有可展示内容。")).toBeInTheDocument();
+        expect(screen.queryByText(/第 1/i)).toBeNull();
+        expect(screen.queryByRole("button", { name: "下一页" })).toBeNull();
     });
 
     it("applies TextBlock multi-line clamp styles", () => {
@@ -267,6 +334,7 @@ describe("WidgetRenderer", () => {
                     {
                         type: "Container",
                         spacing: "{compact ? 'sm' : 'lg'}",
+                        align_x: "{cross_align}",
                         align_y: "{vertical_align}",
                         items: [
                             {
@@ -281,6 +349,7 @@ describe("WidgetRenderer", () => {
                 }
                 data={{
                     compact: true,
+                    cross_align: "end",
                     vertical_align: "center",
                     text_size: "lg",
                     text_tone: "warning",
@@ -294,9 +363,10 @@ describe("WidgetRenderer", () => {
         expect(textBlock).toHaveClass("text-warning");
         expect(textBlock).toHaveClass("text-right");
 
-        const container = textBlock.parentElement;
+        const container = textBlock.parentElement?.parentElement;
         expect(container).toHaveClass("qb-gap-2");
         expect(container).toHaveClass("justify-center");
+        expect(container).toHaveClass("items-end");
     });
 
     it("uses larger layout spacing than micro spacing for the same token", () => {
@@ -327,7 +397,7 @@ describe("WidgetRenderer", () => {
         const factSet = screen.getByText("CPU:").closest("div.flex.flex-col");
         expect(factSet).not.toBeNull();
         expect(factSet).toHaveClass("qb-gap-3");
-        expect(factSet?.parentElement).toHaveClass("qb-gap-4");
+        expect(factSet?.parentElement?.parentElement).toHaveClass("qb-gap-4");
     });
 
     it("resolves list layout params from templates", () => {
@@ -344,6 +414,8 @@ describe("WidgetRenderer", () => {
                         layout: "{layout_mode}",
                         columns: "{column_count}",
                         spacing: "{gap_size}",
+                        align_x: "{list_horizontal_align}",
+                        align_y: "{list_vertical_align}",
                         render: [
                             {
                                 type: "TextBlock",
@@ -356,6 +428,8 @@ describe("WidgetRenderer", () => {
                     layout_mode: "grid",
                     column_count: 3,
                     gap_size: "lg",
+                    list_horizontal_align: "end",
+                    list_vertical_align: "center",
                 }}
             />,
         );
@@ -364,12 +438,86 @@ describe("WidgetRenderer", () => {
         expect(listGrid).not.toBeNull();
         expect(listGrid).toHaveClass("lg:grid-cols-3");
         expect(listGrid).toHaveClass("qb-gap-4");
+        expect(listGrid).toHaveClass("justify-items-end");
+        expect(listGrid).toHaveClass("content-center");
 
         const listItem = screen.getByText("Item A").closest("div.rounded-md");
         expect(listItem).not.toBeNull();
         expect(listItem).toHaveClass("border");
         expect(listItem).toHaveClass("border-border/40");
         expect(listItem).toHaveClass("bg-surface/20");
+    });
+
+    it("applies dual-axis alignment on ColumnSet and Column layouts", () => {
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "ColumnSet",
+                        align_x: "end",
+                        align_y: "center",
+                        columns: [
+                            {
+                                type: "Column",
+                                align_x: "center",
+                                align_y: "end",
+                                items: [
+                                    {
+                                        type: "TextBlock",
+                                        text: "Aligned",
+                                    },
+                                ],
+                            },
+                        ],
+                    } as any
+                }
+                data={{}}
+            />,
+        );
+
+        const row = document.querySelector(
+            "div.flex.flex-row.justify-end.items-center",
+        );
+        expect(row).not.toBeNull();
+
+        const column = document.querySelector(
+            "div.flex.flex-col.justify-end.items-center",
+        );
+        expect(column).not.toBeNull();
+    });
+
+    it("lets color override tone on supported widgets", () => {
+        render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Container",
+                        items: [
+                            {
+                                type: "TextBlock",
+                                text: "Colored text",
+                                tone: "warning",
+                                color: "blue",
+                            },
+                            {
+                                type: "Badge",
+                                text: "Colored badge",
+                                tone: "danger",
+                                color: "amber",
+                            },
+                        ],
+                    } as any
+                }
+                data={{}}
+            />,
+        );
+
+        const textBlock = screen.getByText("Colored text");
+        expect(textBlock).toHaveClass("text-warning");
+        expect(textBlock.getAttribute("style")).toContain("--chart-blue");
+
+        const badge = screen.getByText("Colored badge");
+        expect(badge.getAttribute("style")).toContain("--chart-amber");
     });
 
     it("shows validation fallback when templated enum values are invalid", () => {
@@ -404,30 +552,205 @@ describe("WidgetRenderer", () => {
         errorSpy.mockRestore();
     });
 
-    it("shows nested validation path for field-level errors", () => {
-        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it("renders Chart.Table branch and shared fallback semantics", () => {
+        const chartData = {
+            sql_response: {
+                rows: [
+                    { ts: "2026-03-01T00:00:00Z", category: "Alpha", amount: 12.5, label: "North", count: 3 },
+                    { ts: "2026-03-02T00:00:00Z", category: "Beta", amount: 18.25, label: "South", count: 7 },
+                ],
+                fields: [
+                    { name: "ts", type: "datetime" },
+                    { name: "category", type: "text" },
+                    { name: "amount", type: "float" },
+                    { name: "label", type: "text" },
+                    { name: "count", type: "integer" },
+                ],
+            },
+        };
 
-        render(
+        const { rerender } = render(
             <WidgetRenderer
                 widget={
                     {
-                        type: "FactSet",
-                        facts: [
-                            {
-                                label: "CPU",
-                                value: { bad: true },
-                            },
-                        ],
+                        type: "Chart.Table",
+                        data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
+                        encoding: {
+                            columns: [
+                                { field: "label", title: "Region", format: "text" },
+                                { field: "amount", title: "Revenue", format: "number" },
+                            ],
+                        },
+                        sort_by: "amount",
+                        sort_order: "desc",
+                        limit: 1,
                     } as any
                 }
-                data={{}}
+                data={chartData}
+            />,
+        );
+
+        expect(screen.getByRole("columnheader", { name: "Region" })).toBeInTheDocument();
+        expect(screen.getByRole("columnheader", { name: "Revenue" })).toBeInTheDocument();
+        expect(screen.getByText("South")).toBeInTheDocument();
+        expect(screen.queryByText("North")).toBeNull();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Table",
+                        data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
+                        encoding: {
+                            columns: [{ field: "missing_metric", title: "Broken" }],
+                        },
+                    } as any
+                }
+                data={chartData}
+            />,
+        );
+        expect(screen.getByText("Invalid chart configuration")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Table",
+                        data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
+                        encoding: {
+                            columns: [{ field: "label", title: "Region" }],
+                        },
+                    } as any
+                }
+                data={{
+                    sql_response: {
+                        rows: [],
+                        fields: chartData.sql_response.fields,
+                    },
+                }}
+            />,
+        );
+        expect(screen.getByText("暂无图表数据")).toBeInTheDocument();
+    });
+
+    it("renders chart widget branches and keeps invalid chart fallback details", () => {
+        const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        const chartData = {
+            sql_response: {
+                rows: [
+                    { ts: "2026-03-01T00:00:00Z", category: "Alpha", amount: 12.5, label: "North", count: 3 },
+                    { ts: "2026-03-02T00:00:00Z", category: "Beta", amount: 18.25, label: "South", count: 7 },
+                ],
+                fields: [
+                    { name: "ts", type: "datetime" },
+                    { name: "category", type: "text" },
+                    { name: "amount", type: "float" },
+                    { name: "label", type: "text" },
+                    { name: "count", type: "integer" },
+                ],
+            },
+        };
+
+        const { rerender } = render(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Line",
+                        data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
+                        legend: "{showLegend}",
+                        encoding: {
+                            x: { field: "ts" },
+                            y: { field: "amount" },
+                            series: { field: "category" },
+                        },
+                    } as any
+                }
+                data={{ ...chartData, showLegend: true }}
+            />,
+        );
+
+        expect(screen.getByTestId("LineChart")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Bar",
+                        data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
+                        encoding: {
+                            x: { field: "ts" },
+                            y: { field: "amount" },
+                        },
+                    } as any
+                }
+                data={chartData}
+            />,
+        );
+        expect(screen.getByTestId("BarChart")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Area",
+                        data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
+                        encoding: {
+                            x: { field: "ts" },
+                            y: { field: "amount" },
+                        },
+                    } as any
+                }
+                data={chartData}
+            />,
+        );
+        expect(screen.getByTestId("AreaChart")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Pie",
+                        data_source: "{sql_response.rows}",
+                        fields_source: "{sql_response.fields}",
+                        donut: "{useDonut}",
+                        encoding: {
+                            label: { field: "label" },
+                            value: { field: "count" },
+                        },
+                    } as any
+                }
+                data={{ ...chartData, useDonut: true }}
+            />,
+        );
+        expect(screen.getByTestId("PieChart")).toBeInTheDocument();
+
+        rerender(
+            <WidgetRenderer
+                widget={
+                    {
+                        type: "Chart.Line",
+                        data_source: "{sql_response.rows}",
+                        encoding: {
+                            x: { field: "ts" },
+                        },
+                    } as any
+                }
+                data={chartData}
             />,
         );
 
         expect(
-            screen.getByText("Invalid widget configuration: FactSet"),
+            screen.getByText("Invalid widget configuration: Chart.Line"),
         ).toBeInTheDocument();
-        expect(screen.getByText("Path: facts[0].value")).toBeInTheDocument();
+        expect(screen.getByText("Path: encoding.y.field")).toBeInTheDocument();
+        expect(screen.getByText(/Reason:/)).toBeInTheDocument();
 
         errorSpy.mockRestore();
     });

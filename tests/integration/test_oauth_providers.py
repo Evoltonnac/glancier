@@ -40,13 +40,15 @@ def _build_device_config(**overrides) -> AuthConfig:
 
 @pytest.mark.asyncio
 async def test_code_flow_mock_provider_persists_token(secrets_controller, monkeypatch, httpx_mock):
+    captured: dict[str, str | None] = {}
+
     def fake_create_authorization_url(self, url, state=None, code_verifier=None, **kwargs):
         _ = self
         _ = kwargs
         assert url == "https://provider.example.com/oauth/authorize"
-        assert state == "source-code"
+        captured["state"] = state
         assert isinstance(code_verifier, str)
-        return ("https://provider.example.com/oauth/authorize?state=source-code", state)
+        return (f"https://provider.example.com/oauth/authorize?state={state}", state)
 
     monkeypatch.setattr(
         AsyncOAuth2Client,
@@ -56,7 +58,9 @@ async def test_code_flow_mock_provider_persists_token(secrets_controller, monkey
 
     handler = OAuthAuth(_build_code_config(), "source-code", secrets_controller)
     authorize_url = handler.get_authorize_url("http://localhost:5173/oauth/callback")
-    assert "state=source-code" in authorize_url
+    stored_state = secrets_controller.get_secrets("source-code")["oauth_pkce"]["state"]
+    assert captured["state"] == stored_state
+    assert f"state={stored_state}" in authorize_url
 
     httpx_mock.add_response(
         method="POST",
@@ -68,7 +72,11 @@ async def test_code_flow_mock_provider_persists_token(secrets_controller, monkey
             "expires_in": 3600,
         },
     )
-    await handler.exchange_code("auth-code", "http://localhost:5173/oauth/callback")
+    await handler.exchange_code(
+        "auth-code",
+        "http://localhost:5173/oauth/callback",
+        state=stored_state,
+    )
 
     stored = secrets_controller.get_secrets("source-code")["oauth_secrets"]
     assert stored["access_token"] == "token-1"
@@ -81,12 +89,13 @@ async def test_code_flow_invalid_code_raises(secrets_controller, monkeypatch, ht
     def fake_create_authorization_url(self, url, state=None, code_verifier=None, **kwargs):
         _ = self
         _ = kwargs
-        return ("https://provider.example.com/oauth/authorize?state=source-code", state)
+        return (f"https://provider.example.com/oauth/authorize?state={state}", state)
 
     monkeypatch.setattr(AsyncOAuth2Client, "create_authorization_url", fake_create_authorization_url)
 
     handler = OAuthAuth(_build_code_config(), "source-code", secrets_controller)
     handler.get_authorize_url("http://localhost:5173/oauth/callback")
+    stored_state = secrets_controller.get_secrets("source-code")["oauth_pkce"]["state"]
 
     httpx_mock.add_response(
         method="POST",
@@ -96,7 +105,11 @@ async def test_code_flow_invalid_code_raises(secrets_controller, monkeypatch, ht
     )
 
     with pytest.raises(OAuthError):
-        await handler.exchange_code("bad-code", "http://localhost:5173/oauth/callback")
+        await handler.exchange_code(
+            "bad-code",
+            "http://localhost:5173/oauth/callback",
+            state=stored_state,
+        )
 
 
 @pytest.mark.asyncio

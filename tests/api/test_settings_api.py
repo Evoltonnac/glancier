@@ -159,6 +159,18 @@ def test_get_settings_includes_script_sandbox_and_timeout_defaults():
     assert payload["script_timeout_seconds"] == 10
 
 
+def test_get_settings_includes_sql_guardrail_defaults():
+    settings_manager = _MockSettingsManager(SystemSettings())
+    client = _build_client(settings_manager)
+
+    response = client.get("/api/settings")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sql_default_timeout_seconds"] == 30
+    assert payload["sql_default_max_rows"] == 500
+
+
 def test_update_settings_persists_script_sandbox_and_timeout():
     settings_manager = _MockSettingsManager(SystemSettings())
     client = _build_client(settings_manager)
@@ -166,15 +178,17 @@ def test_update_settings_persists_script_sandbox_and_timeout():
     payload = settings_manager.load_settings().model_dump()
     payload["script_sandbox_enabled"] = True
     payload["script_timeout_seconds"] = 25
+    payload["http_private_target_policy_default"] = "deny"
     response = client.put("/api/settings", json=payload)
 
     assert response.status_code == 200
     updated = response.json()
     assert updated["script_sandbox_enabled"] is True
     assert updated["script_timeout_seconds"] == 25
+    assert updated["http_private_target_policy_default"] == "deny"
     assert settings_manager.saved[-1].script_sandbox_enabled is True
     assert settings_manager.saved[-1].script_timeout_seconds == 25
-
+    assert settings_manager.saved[-1].http_private_target_policy_default == "deny"
 
 def test_update_settings_persists_enhanced_scraping_flag():
     settings_manager = _MockSettingsManager(SystemSettings())
@@ -188,3 +202,20 @@ def test_update_settings_persists_enhanced_scraping_flag():
     updated = response.json()
     assert updated["enhanced_scraping"] is True
     assert settings_manager.saved[-1].enhanced_scraping is True
+
+
+def test_update_settings_persists_sql_guardrail_defaults():
+    settings_manager = _MockSettingsManager(SystemSettings())
+    client = _build_client(settings_manager)
+
+    payload = settings_manager.load_settings().model_dump()
+    payload["sql_default_timeout_seconds"] = 12
+    payload["sql_default_max_rows"] = 120
+    response = client.put("/api/settings", json=payload)
+
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["sql_default_timeout_seconds"] == 12
+    assert updated["sql_default_max_rows"] == 120
+    assert settings_manager.saved[-1].sql_default_timeout_seconds == 12
+    assert settings_manager.saved[-1].sql_default_max_rows == 120

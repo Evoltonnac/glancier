@@ -1,0 +1,151 @@
+import { ChartFrame } from "./ChartFrame";
+import {
+    resolveChartFieldsSource,
+    validateChartEncoding,
+} from "../shared/chartFieldValidation";
+import { classifyChartState } from "../shared/chartState";
+import { formatChartTableValue } from "../shared/chartFormatting";
+import type { RuntimeChartTable as ChartTableWidget } from "../shared/chartSchemas";
+
+interface ChartTableProps {
+    widget: ChartTableWidget;
+    data: Record<string, any>;
+}
+
+type TableRow = Record<string, unknown>;
+
+function compareTableValues(left: unknown, right: unknown): number {
+    if (left == null && right == null) {
+        return 0;
+    }
+    if (left == null) {
+        return -1;
+    }
+    if (right == null) {
+        return 1;
+    }
+
+    if (typeof left === "number" && typeof right === "number") {
+        return left === right ? 0 : left > right ? 1 : -1;
+    }
+
+    const leftDate = new Date(left as string | number);
+    const rightDate = new Date(right as string | number);
+    if (
+        !Number.isNaN(leftDate.getTime()) &&
+        !Number.isNaN(rightDate.getTime())
+    ) {
+        const leftTime = leftDate.getTime();
+        const rightTime = rightDate.getTime();
+        return leftTime === rightTime ? 0 : leftTime > rightTime ? 1 : -1;
+    }
+
+    const leftText = String(left);
+    const rightText = String(right);
+    return leftText.localeCompare(rightText, "en", {
+        numeric: true,
+        sensitivity: "base",
+    });
+}
+
+function getProcessedRows(
+    rows: TableRow[],
+    sortBy?: string,
+    sortOrder: "asc" | "desc" = "asc",
+    limit?: number,
+) {
+    let processedRows = [...rows];
+
+    if (sortBy) {
+        processedRows = processedRows
+            .map((row, index) => ({ row, index }))
+            .sort((left, right) => {
+                const comparison = compareTableValues(
+                    left.row[sortBy],
+                    right.row[sortBy],
+                );
+                if (comparison !== 0) {
+                    return sortOrder === "desc" ? -comparison : comparison;
+                }
+                return left.index - right.index;
+            })
+            .map(({ row }) => row);
+    }
+
+    if (limit) {
+        processedRows = processedRows.slice(0, limit);
+    }
+
+    return processedRows;
+}
+
+export function ChartTable({ widget, data }: ChartTableProps) {
+    void data;
+    const rows = Array.isArray(widget.data_source)
+        ? (widget.data_source as TableRow[])
+        : [];
+    const columns = widget.encoding.columns ?? [];
+    const sqlFields = resolveChartFieldsSource(widget.fields_source, rows);
+    const encodingValidation = validateChartEncoding(
+        widget.type,
+        { columns },
+        sqlFields,
+    );
+    const state = classifyChartState({
+        rows,
+        encodingValidation,
+    });
+    const processedRows =
+        state.kind === "ready"
+            ? getProcessedRows(
+                  rows,
+                  widget.sort_by,
+                  widget.sort_order ?? "asc",
+                  widget.limit,
+              )
+            : [];
+
+    return (
+        <ChartFrame type="Chart.Table" state={state}>
+            {state.kind === "ready" ? (
+                <div className="h-full flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-md border border-border/40 bg-surface/20">
+                    <table className="w-full border-collapse text-sm">
+                        <thead className="sticky top-0 z-10 bg-surface text-left">
+                            <tr>
+                                {columns.map((column) => (
+                                    <th
+                                        key={column.field}
+                                        className="border-b border-border/40 px-3 py-2 font-semibold text-foreground"
+                                        scope="col"
+                                    >
+                                        {column.title ?? column.field}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {processedRows.map((row, rowIndex) => (
+                                <tr
+                                    key={`${rowIndex}-${columns.map((column) => String(row[column.field] ?? "")).join("|")}`}
+                                    className="border-b border-border/30 last:border-b-0"
+                                >
+                                    {columns.map((column) => (
+                                        <td
+                                            key={column.field}
+                                            className="px-3 py-2 align-top text-muted-foreground"
+                                        >
+                                            {formatChartTableValue(
+                                                row[column.field],
+                                                column.format,
+                                            )}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : null}
+        </ChartFrame>
+    );
+}

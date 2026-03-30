@@ -144,6 +144,7 @@ Scope: `Dashboard.tsx`, `viewTabsState.ts`, dashboard management components.
 - Do not split dashboard ordering logic across multiple components. Reorder intent should funnel into store actions/helpers.
 - Keep `Dashboard` page effects thin. Effects should trigger sync/invalidation, not duplicate reconciliation logic.
 - Route dashboard layout persistence through `viewSaveQueue` and keep optimistic update + `invalidateViews()` reconciliation.
+- Persist dashboard reorder through one backend call (`POST /api/views/reorder`) that updates `StoredView.sort_index` transactionally, then reconcile with `invalidateViews()`.
 - Treat keys under `dashboard.tabs.*` and `dashboard.management.*` as stable contracts in i18n catalogs.
 - Before shipping dashboard-management changes, run at least:
   - `DashboardViewTabs.test.tsx`
@@ -181,6 +182,15 @@ Documentation and change policy:
 - Public API methods currently do not expose caller-level cancellation (`signal`).
 - Add explicit `signal` plumbing in `ApiClient` before using cancellation in new paths.
 
+## Integration Editor Diagnostics
+
+Scope: Integration YAML editing and validation UX.
+
+- Diagnostics must be severity-aware (`error` vs `warning`), not treated as a single blocking bucket.
+- Unknown/additional parameter diagnostics should be presented as `warning` so users can keep iterating.
+- Save interception (`Save` button and `Ctrl/Cmd+S`) must block only on `error` diagnostics.
+- Runtime widget validation should tolerate extra widget parameters (ignore/drop extras) instead of failing card rendering only due unknown keys.
+
 ## Mutation Pattern
 
 After create/update/delete:
@@ -190,6 +200,11 @@ After create/update/delete:
 3. invalidate relevant SWR keys
 
 Do not place business state transitions in purely presentational components.
+
+Widget design principles:
+- Keep declarative widgets parameter-driven: consume only declared widget params.
+- Do not hardcode backend-specific field paths inside widget components (for example fixed `sql_response.*` reads).
+- Workflow state and deterministic `error_code` diagnostics belong to source/card-level state handling, not chart widget internals.
 
 ## I18N Standard
 

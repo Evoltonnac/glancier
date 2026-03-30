@@ -28,6 +28,15 @@
           "$ref": "#/$defs/StepConfig_log"
         },
         {
+          "$ref": "#/$defs/StepConfig_sql"
+        },
+        {
+          "$ref": "#/$defs/StepConfig_mongodb"
+        },
+        {
+          "$ref": "#/$defs/StepConfig_redis"
+        },
+        {
           "$ref": "#/$defs/StepConfig_webview"
         }
       ]
@@ -42,6 +51,9 @@
         "extract",
         "script",
         "log",
+        "sql",
+        "mongodb",
+        "redis",
         "webview"
       ],
       "title": "StepType",
@@ -342,6 +354,50 @@
             "doc_url": {
               "type": "string"
             },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "warning_message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "scope": {
               "anyOf": [
                 {
@@ -523,14 +579,60 @@
         "args": {
           "type": "object",
           "properties": {
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "label": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "description": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "message": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "warning_message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             }
           },
           "additionalProperties": true
@@ -591,10 +693,26 @@
           "type": "object",
           "properties": {
             "title": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "description": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "fields": {
               "type": "array",
@@ -603,28 +721,81 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "key": {
                     "type": "string",
                     "minLength": 1
                   },
                   "label": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "type": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "description": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "placeholder": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "required": {
                     "type": "boolean"
                   },
-                  "default": {}
+                  "default": {},
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "multiple": {
+                    "type": "boolean"
+                  },
+                  "value_type": {
+                    "type": "string"
+                  }
                 },
                 "required": [
                   "key"
@@ -637,24 +808,77 @@
               "minLength": 1
             },
             "label": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "type": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "required": {
               "type": "boolean"
             },
             "default": {},
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "multiple": {
+              "type": "boolean"
+            },
+            "value_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "defaults": {
               "type": "object",
               "additionalProperties": true
             },
             "message": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "warning_message": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             }
           },
           "additionalProperties": true
@@ -714,17 +938,60 @@
         "args": {
           "type": "object",
           "properties": {
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "label": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "description": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "message": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "warning_message": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             }
           },
           "additionalProperties": true
@@ -919,9 +1186,484 @@
           "type": "object",
           "properties": {
             "message": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             }
           },
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "id",
+        "use"
+      ],
+      "additionalProperties": false
+    },
+    "StepConfig_sql": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context",
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secrets",
+          "type": "object"
+        },
+        "use": {
+          "type": "string",
+          "const": "sql",
+          "title": "Use"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "connector": {
+              "type": "object",
+              "properties": {
+                "profile": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "options": {
+                  "type": "object",
+                  "properties": {
+                    "dialect": {
+                      "type": "string",
+                      "enum": [
+                        "postgres",
+                        "mysql",
+                        "sqlite",
+                        "duckdb",
+                        "clickhouse",
+                        "snowflake",
+                        "bigquery",
+                        "redshift",
+                        "oracle"
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "profile"
+              ],
+              "additionalProperties": true
+            },
+            "dsn": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1
+            },
+            "timeout": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            },
+            "max_rows": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            }
+          },
+          "required": [
+            "connector",
+            "query"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "dsn"
+              ]
+            },
+            {
+              "required": [
+                "uri"
+              ]
+            }
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "id",
+        "use"
+      ],
+      "additionalProperties": false
+    },
+    "StepConfig_mongodb": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context",
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secrets",
+          "type": "object"
+        },
+        "use": {
+          "type": "string",
+          "const": "mongodb",
+          "title": "Use"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "connector": {
+              "type": "object",
+              "properties": {
+                "profile": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "profile"
+              ],
+              "additionalProperties": true
+            },
+            "dsn": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "database": {
+              "type": "string",
+              "minLength": 1
+            },
+            "collection": {
+              "type": "string",
+              "minLength": 1
+            },
+            "operation": {
+              "type": "string",
+              "enum": [
+                "find",
+                "aggregate"
+              ]
+            },
+            "filter": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "projection": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              ]
+            },
+            "sort": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "pipeline": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "timeout": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            },
+            "max_rows": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            }
+          },
+          "required": [
+            "database",
+            "collection",
+            "operation"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "dsn"
+              ]
+            },
+            {
+              "required": [
+                "uri"
+              ]
+            }
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "id",
+        "use"
+      ],
+      "additionalProperties": false
+    },
+    "StepConfig_redis": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context",
+          "type": "object"
+        },
+        "secrets": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secrets",
+          "type": "object"
+        },
+        "use": {
+          "type": "string",
+          "const": "redis",
+          "title": "Use"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "connector": {
+              "type": "object",
+              "properties": {
+                "profile": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "profile"
+              ],
+              "additionalProperties": true
+            },
+            "dsn": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "command": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "keys": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            },
+            "withscores": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            },
+            "max_rows": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "dsn"
+              ]
+            },
+            {
+              "required": [
+                "uri"
+              ]
+            }
+          ],
           "additionalProperties": true
         }
       },
@@ -995,6 +1737,50 @@
               "default": null
             },
             "intercept_api": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "warning_message": {
               "anyOf": [
                 {
                   "type": "string"

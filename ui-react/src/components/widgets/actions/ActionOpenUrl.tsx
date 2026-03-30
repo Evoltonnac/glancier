@@ -5,6 +5,8 @@ import {
     SizeSchema,
     ToneSchema,
     toneButtonClassMap,
+    SemanticColorSchema,
+    resolveSurfaceColorStyle,
 } from "../shared/commonProps";
 
 /**
@@ -16,6 +18,7 @@ export const ActionOpenUrlSchema = z.object({
     url: z.string().url(),
     size: SizeSchema.default("md"),
     tone: ToneSchema.default("default"),
+    color: SemanticColorSchema.optional(),
 });
 
 export type ActionOpenUrlProps = z.infer<typeof ActionOpenUrlSchema>;
@@ -39,6 +42,7 @@ export function ActionOpenUrl({
     url,
     size = "md",
     tone = "default",
+    color,
 }: ActionOpenUrlProps) {
     const handleClick = () => {
         openExternalLink(url);
@@ -47,7 +51,10 @@ export function ActionOpenUrl({
     return (
         <button
             onClick={handleClick}
-            className={`inline-flex items-center rounded-md font-medium transition-colors ${sizeMap[size]} ${toneButtonClassMap[tone]}`}
+            className={`inline-flex items-center rounded-md font-medium ${
+                color ? "transition-opacity hover:opacity-90" : "transition-colors"
+            } ${sizeMap[size]} ${color ? "" : toneButtonClassMap[tone]}`}
+            style={resolveSurfaceColorStyle(color)}
         >
             {title}
             <ExternalLink className={iconSizeMap[size]} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SourceSummary } from "../../types/config";
+import type { InteractionField, InteractionFieldOption, SourceSummary } from "../../types/config";
 import {
     Dialog,
     DialogContent,
@@ -10,6 +10,14 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Switch } from "../ui/switch";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "../ui/select";
 import { AlertCircle, ExternalLink, Wrench, Monitor, Download } from "lucide-react";
 import { api } from "../../api/client";
 import { useI18n } from "../../i18n";
@@ -34,6 +42,34 @@ interface RuntimePortInfo {
     web_mode_port?: number | null;
 }
 
+type TrustScope = "source" | "global";
+type InteractionValue = string | boolean | string[];
+
+interface TrustInteractionDataBase {
+    confirm_kind: "network_trust" | "db_operation_risk";
+    target_key?: string;
+    target_value?: string;
+    target_type?: string;
+    available_scopes?: TrustScope[];
+}
+
+interface NetworkTrustInteractionData extends TrustInteractionDataBase {
+    confirm_kind: "network_trust";
+    target_class?: string;
+}
+
+interface DatabaseOperationRiskInteractionData extends TrustInteractionDataBase {
+    confirm_kind: "db_operation_risk";
+    profile?: string;
+    statement_types?: string[];
+    risk_reasons?: string[];
+    query_preview?: string;
+}
+
+type TrustInteractionData =
+    | NetworkTrustInteractionData
+    | DatabaseOperationRiskInteractionData;
+
 export function FlowHandler({
     source,
     isOpen,
@@ -44,7 +80,7 @@ export function FlowHandler({
     const inTauri = isTauri();
     const { t, getErrorCopyByCode } = useI18n();
     const sourceId = source?.id ?? null;
-    const [formData, setFormData] = useState<Record<string, string>>({});
+    const [formData, setFormData] = useState<Record<string, InteractionValue>>({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [deviceFlowData, setDeviceFlowData] = useState<DeviceFlowData | null>(
@@ -53,6 +89,7 @@ export function FlowHandler({
     const [deviceStatus, setDeviceStatus] = useState<
         "idle" | "pending" | "authorized" | "expired" | "error"
     >("idle");
+    const [trustScope, setTrustScope] = useState<TrustScope>("source");
     const [verifying, setVerifying] = useState(false);
     const authStatusPollInFlightRef = useRef(false);
 
@@ -64,10 +101,79 @@ export function FlowHandler({
     const isErrorState = source?.status === "error";
     const isSuspendedState = source?.status === "suspended";
     const sourceErrorCopy = getErrorCopyByCode(source?.error_code);
+    const trustInteractionData: TrustInteractionData | null =
+        interaction?.type === "confirm" &&
+        (interaction.data?.confirm_kind === "network_trust" ||
+            interaction.data?.confirm_kind === "db_operation_risk")
+            ? (interaction.data as TrustInteractionData)
+            : null;
+    const networkTrustData =
+        trustInteractionData?.confirm_kind === "network_trust"
+            ? trustInteractionData
+            : null;
+    const dbOperationRiskData =
+        trustInteractionData?.confirm_kind === "db_operation_risk"
+            ? trustInteractionData
+            : null;
+    const availableTrustScopes = Array.isArray(trustInteractionData?.available_scopes)
+        ? trustInteractionData.available_scopes
+        : ["source", "global"];
+    const supportsGlobalTrustScope = availableTrustScopes.includes("global");
 
-    const handleInputChange = (key: string, value: string) => {
+    const getFieldOptions = useCallback((field: InteractionField): InteractionFieldOption[] => {
+        if (!Array.isArray(field.options)) {
+            return [];
+        }
+        return field.options.filter(
+            (option): option is InteractionFieldOption =>
+                typeof option?.label === "string" && typeof option?.value === "string",
+        );
+    }, []);
+
+    const getFieldInitialValue = useCallback(
+        (field: InteractionField): InteractionValue => {
+            if (field.multiple || field.type === "multiselect") {
+                return Array.isArray(field.default)
+                    ? field.default.filter((item): item is string => typeof item === "string")
+                    : [];
+            }
+            if (
+                field.type === "switch" ||
+                field.type === "boolean" ||
+                field.value_type === "boolean"
+            ) {
+                return Boolean(field.default);
+            }
+            if (typeof field.default === "string") {
+                return field.default;
+            }
+            return "";
+        },
+        [],
+    );
+
+    const getFieldValue = useCallback(
+        (field: InteractionField): InteractionValue => {
+            const currentValue = formData[field.key];
+            if (currentValue !== undefined) {
+                return currentValue;
+            }
+            return getFieldInitialValue(field);
+        },
+        [formData, getFieldInitialValue],
+    );
+
+    const handleInputChange = (key: string, value: InteractionValue) => {
         setFormData((prev) => ({ ...prev, [key]: value }));
     };
+
+    const formatRiskList = (values?: string[]) =>
+        Array.isArray(values)
+            ? values
+                  .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                  .map((value) => value.replaceAll("_", " "))
+                  .join(", ")
+            : "";
 
     const hasEffectiveValue = useCallback((value: unknown): boolean => {
         if (value === null || value === undefined) {
@@ -96,10 +202,20 @@ export function FlowHandler({
     );
 
     const buildInteractionPayload = useCallback(
-        (fields: Array<{ key: string }>) => {
-            const payload: Record<string, string> = {};
+        (fields: Array<InteractionField>) => {
+            const payload: Record<string, InteractionValue> = {};
             fields.forEach((field) => {
-                const raw = formData[field.key];
+                const raw = getFieldValue(field);
+                if (Array.isArray(raw)) {
+                    if (raw.length > 0) {
+                        payload[field.key] = raw;
+                    }
+                    return;
+                }
+                if (typeof raw === "boolean") {
+                    payload[field.key] = raw;
+                    return;
+                }
                 if (typeof raw !== "string") {
                     return;
                 }
@@ -111,7 +227,7 @@ export function FlowHandler({
             });
             return payload;
         },
-        [formData],
+        [getFieldValue],
     );
     const missingRequiredFieldLabels = interaction
         ? getMissingRequiredFieldLabels(interaction.fields)
@@ -154,7 +270,8 @@ export function FlowHandler({
     useEffect(() => {
         setFormData({});
         resetFlowState();
-    }, [sourceId, resetFlowState]);
+        setTrustScope("source");
+    }, [sourceId, interaction?.step_id, resetFlowState]);
 
     // Track initial source ID and step ID when source changes
     useEffect(() => {
@@ -333,6 +450,46 @@ export function FlowHandler({
         }
     };
 
+    const submitTrustDecision = useCallback(
+        async (decision: "allow_once" | "allow_always" | "deny") => {
+            if (!source || !interaction || !trustInteractionData) return;
+
+            const targetKey =
+                trustInteractionData.target_key || trustInteractionData.target_value;
+            if (!targetKey) {
+                setError(t("flow.error.interaction_failed"));
+                return;
+            }
+
+            setLoading(true);
+            setError(null);
+            try {
+                await api.interact(source.id, {
+                    type: "confirm",
+                    decision,
+                    scope: supportsGlobalTrustScope ? trustScope : "source",
+                    target_key: targetKey,
+                });
+                onInteractSuccess?.();
+                handleClose();
+            } catch (err: any) {
+                setError(err.message || t("flow.error.interaction_failed"));
+            } finally {
+                setLoading(false);
+            }
+        },
+        [
+            handleClose,
+            interaction,
+            onInteractSuccess,
+            source,
+            supportsGlobalTrustScope,
+            t,
+            trustInteractionData,
+            trustScope,
+        ],
+    );
+
     const pollDeviceToken = useCallback(async () => {
         if (!sourceId) return;
         if (verifying) return;
@@ -477,6 +634,167 @@ export function FlowHandler({
         t,
     ]);
 
+    const renderInputField = useCallback(
+        (field: InteractionField) => {
+            const fieldValue = getFieldValue(field);
+            const options = getFieldOptions(field);
+            const label = `${field.label}${field.required ? " *" : ""}`;
+
+            if (
+                field.type === "switch" ||
+                field.type === "boolean" ||
+                field.value_type === "boolean"
+            ) {
+                return (
+                    <div key={field.key} className="grid gap-2">
+                        <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+                            <label
+                                htmlFor={field.key}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                                {label}
+                            </label>
+                            <Switch
+                                id={field.key}
+                                aria-label={field.label}
+                                checked={Boolean(fieldValue)}
+                                onCheckedChange={(checked) =>
+                                    handleInputChange(field.key, checked)
+                                }
+                                disabled={loading}
+                            />
+                        </div>
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                    </div>
+                );
+            }
+
+            if (field.type === "radio") {
+                return (
+                    <fieldset key={field.key} className="grid gap-2">
+                        <legend className="text-sm font-medium leading-none">{label}</legend>
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                        <div className="grid gap-2">
+                            {options.map((option) => (
+                                <label
+                                    key={`${field.key}-${option.value}`}
+                                    className="flex items-center gap-2 text-sm"
+                                >
+                                    <input
+                                        type="radio"
+                                        name={field.key}
+                                        value={option.value}
+                                        checked={fieldValue === option.value}
+                                        onChange={() =>
+                                            handleInputChange(field.key, option.value)
+                                        }
+                                        disabled={loading}
+                                    />
+                                    <span>{option.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </fieldset>
+                );
+            }
+
+            if (field.multiple || field.type === "multiselect") {
+                const selectedValues = Array.isArray(fieldValue) ? fieldValue : [];
+                return (
+                    <fieldset key={field.key} className="grid gap-2">
+                        <legend className="text-sm font-medium leading-none">{label}</legend>
+                        {field.description && (
+                            <p className="text-xs text-muted-foreground">{field.description}</p>
+                        )}
+                        <div className="grid gap-2">
+                            {options.map((option) => {
+                                const checked = selectedValues.includes(option.value);
+                                return (
+                                    <label
+                                        key={`${field.key}-${option.value}`}
+                                        className="flex items-center gap-2 text-sm"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            name={`${field.key}-${option.value}`}
+                                            checked={checked}
+                                            onChange={() => {
+                                                const nextValues = checked
+                                                    ? selectedValues.filter(
+                                                          (value) => value !== option.value,
+                                                      )
+                                                    : [...selectedValues, option.value];
+                                                handleInputChange(field.key, nextValues);
+                                            }}
+                                            disabled={loading}
+                                        />
+                                        <span>{option.label}</span>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </fieldset>
+                );
+            }
+
+            if (field.type === "select") {
+                const selectValue = typeof fieldValue === "string" ? fieldValue : "";
+                return (
+                    <div key={field.key} className="grid gap-2">
+                        <label
+                            htmlFor={field.key}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                            {label}
+                        </label>
+                        <Select
+                            value={selectValue || undefined}
+                            onValueChange={(value) => handleInputChange(field.key, value)}
+                            disabled={loading}
+                        >
+                            <SelectTrigger id={field.key} aria-label={field.label}>
+                                <SelectValue placeholder={field.description || field.label} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {options.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            }
+
+            return (
+                <div key={field.key} className="grid gap-2">
+                    <label
+                        htmlFor={field.key}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                        {label}
+                    </label>
+                    <Input
+                        id={field.key}
+                        type={field.type || "text"}
+                        placeholder={field.description}
+                        value={typeof fieldValue === "string" ? fieldValue : ""}
+                        onChange={(e) => handleInputChange(field.key, e.target.value)}
+                        required={field.required}
+                        disabled={loading}
+                        className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
+                    />
+                </div>
+            );
+        },
+        [getFieldOptions, getFieldValue, handleInputChange, loading],
+    );
+
     const renderContent = () => {
         if (!source || !interaction) {
             return null;
@@ -489,32 +807,14 @@ export function FlowHandler({
             case "input_text":
                 return (
                     <div className="space-y-4 py-4">
-                        {interaction.fields.map((field) => (
-                            <div key={field.key} className="grid gap-2">
-                                <label
-                                    htmlFor={field.key}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                >
-                                    {field.label}
-                                    {field.required ? " *" : ""}
-                                </label>
-                                <Input
-                                    id={field.key}
-                                    type={field.type || "text"}
-                                    placeholder={field.description}
-                                    value={formData[field.key] || ""}
-                                    onChange={(e) =>
-                                        handleInputChange(
-                                            field.key,
-                                            e.target.value,
-                                        )
-                                    }
-                                    required={field.required}
-                                    disabled={loading}
-                                    className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
-                                />
-                            </div>
-                        ))}
+                        {interaction.fields.map((field) => renderInputField(field))}
+                    </div>
+                );
+
+            case "input_form":
+                return (
+                    <div className="space-y-4 py-4">
+                        {interaction.fields.map((field) => renderInputField(field))}
                     </div>
                 );
 
@@ -524,39 +824,7 @@ export function FlowHandler({
                         {/* Render client_id/client_secret input fields if present */}
                         {interaction.fields.length > 0 && (
                             <div className="w-full space-y-4">
-                                {interaction.fields.map((field) => (
-                                    <div
-                                        key={field.key}
-                                        className="grid gap-2"
-                                    >
-                                        <label
-                                            htmlFor={field.key}
-                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                        >
-                                            {field.label}
-                                            {field.required
-                                                ? " *"
-                                                : ""}
-                                        </label>
-                                        <Input
-                                            id={field.key}
-                                            type={field.type || "text"}
-                                            placeholder={field.description}
-                                            value={
-                                                formData[field.key] || ""
-                                            }
-                                            onChange={(e) =>
-                                                handleInputChange(
-                                                    field.key,
-                                                    e.target.value,
-                                                )
-                                            }
-                                            required={field.required}
-                                            disabled={loading}
-                                            className="bg-surface focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 transition-all hover:border-brand/50"
-                                        />
-                                    </div>
-                                ))}
+                                {interaction.fields.map((field) => renderInputField(field))}
                             </div>
                         )}
 
@@ -612,6 +880,156 @@ export function FlowHandler({
                 );
 
             case "confirm":
+                if (networkTrustData?.confirm_kind === "network_trust") {
+                    return (
+                        <div className="py-4 space-y-4 text-sm">
+                            <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                                <div className="font-medium">
+                                    {t("flow.network_trust.prompt")}
+                                </div>
+                                <div className="mt-1 text-muted-foreground">
+                                    {t("flow.network_trust.target", {
+                                        target:
+                                            networkTrustData.target_key ||
+                                            networkTrustData.target_value ||
+                                            "",
+                                    })}
+                                </div>
+                                {networkTrustData.target_class && (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                        {t("flow.network_trust.classification", {
+                                            classification:
+                                                networkTrustData.target_class,
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {supportsGlobalTrustScope && (
+                                <div className="space-y-2">
+                                    <div className="text-xs text-muted-foreground">
+                                        {t("flow.network_trust.scope.label")}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "source"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("source")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.source")}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "global"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("global")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.global")}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+                if (dbOperationRiskData?.confirm_kind === "db_operation_risk") {
+                    const hasWriteRisk = Array.isArray(dbOperationRiskData.risk_reasons)
+                        ? dbOperationRiskData.risk_reasons.includes("non_select_statement")
+                        : false;
+                    const statementTypes = formatRiskList(dbOperationRiskData.statement_types);
+                    const riskReasons = formatRiskList(dbOperationRiskData.risk_reasons);
+                    const connectorTarget =
+                        dbOperationRiskData.profile ||
+                        dbOperationRiskData.target_key ||
+                        dbOperationRiskData.target_value ||
+                        "";
+                    return (
+                        <div className="py-4 space-y-4 text-sm">
+                            <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                                <div className="font-medium">
+                                    {t(
+                                        hasWriteRisk
+                                            ? "flow.db_operation_risk.prompt.write"
+                                            : "flow.db_operation_risk.prompt.generic",
+                                    )}
+                                </div>
+                                <div className="mt-1 text-muted-foreground">
+                                    {t("flow.db_operation_risk.connector", {
+                                        connector: connectorTarget,
+                                    })}
+                                </div>
+                                {dbOperationRiskData.query_preview && (
+                                    <div className="mt-1 break-all text-xs text-muted-foreground">
+                                        {t("flow.db_operation_risk.query_preview", {
+                                            query: dbOperationRiskData.query_preview,
+                                        })}
+                                    </div>
+                                )}
+                                {statementTypes && (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                        {t("flow.db_operation_risk.statement_types", {
+                                            types: statementTypes,
+                                        })}
+                                    </div>
+                                )}
+                                {riskReasons && (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                        {t("flow.db_operation_risk.risk_reasons", {
+                                            reasons: riskReasons,
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {supportsGlobalTrustScope && (
+                                <div className="space-y-2">
+                                    <div className="text-xs text-muted-foreground">
+                                        {t("flow.network_trust.scope.label")}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "source"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("source")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.source")}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                trustScope === "global"
+                                                    ? "default"
+                                                    : "outline"
+                                            }
+                                            onClick={() => setTrustScope("global")}
+                                            disabled={loading}
+                                        >
+                                            {t("flow.network_trust.scope.global")}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
                 return (
                     <div className="py-4 text-sm text-center">
                         {t("flow.confirm.message", { name: source.name })}
@@ -699,10 +1117,13 @@ export function FlowHandler({
     }
 
     const dialogTitle =
+        interaction.title ||
         sourceErrorCopy?.title ||
-        interaction.message ||
         t("flow.title.action_required_with_name", { name: source.name });
     const dialogDescription =
+        interaction.description ||
+        (isErrorState ? sourceErrorCopy?.description : null) ||
+        interaction.message ||
         sourceErrorCopy?.description ||
         (interaction.type === "oauth_start" ||
         interaction.type === "oauth_device_flow"
@@ -755,7 +1176,35 @@ export function FlowHandler({
                 {renderContent()}
 
                 <DialogFooter>
-                    {interaction.type !== "oauth_start" &&
+                    {interaction.type === "confirm" && trustInteractionData && (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void submitTrustDecision("deny")}
+                                    disabled={loading}
+                                >
+                                    {t("flow.network_trust.action.deny")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void submitTrustDecision("allow_once")}
+                                    disabled={loading}
+                                >
+                                    {t("flow.network_trust.action.allow_once")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={() => void submitTrustDecision("allow_always")}
+                                    disabled={loading}
+                                >
+                                    {t("flow.network_trust.action.allow_always")}
+                                </Button>
+                            </>
+                        )}
+                    {!(interaction.type === "confirm" && trustInteractionData) &&
+                        interaction.type !== "oauth_start" &&
                         interaction.type !== "oauth_device_flow" &&
                         interaction.type !== "webview_scrape" && (
                             <Button

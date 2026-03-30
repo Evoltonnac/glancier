@@ -11,6 +11,8 @@ from core.data_controller import DataController
 from core.models import StoredSource, StoredView, ViewItem
 from core.resource_manager import ResourceManager
 from core.secrets_controller import SecretsController
+from core.storage.sqlite_connection import create_sqlite_connection
+from core.storage.sqlite_trust_rule_repo import SqliteTrustRuleRepository
 
 
 def _build_client(tmp_path):
@@ -18,6 +20,8 @@ def _build_client(tmp_path):
     resource_manager = ResourceManager(data_dir=data_dir)
     data_controller = DataController(db_path=data_dir / "data.json")
     secrets_controller = SecretsController(secrets_dir=data_dir)
+    trust_connection = create_sqlite_connection(data_dir / "storage.db")
+    trust_rule_repo = SqliteTrustRuleRepository(trust_connection)
 
     api_module.init_api(
         executor=SimpleNamespace(get_source_state=lambda _source_id: None, _states={}),
@@ -28,15 +32,16 @@ def _build_client(tmp_path):
         resource_manager=resource_manager,
         integration_manager=SimpleNamespace(),
         settings_manager=None,
+        trust_rule_repo=trust_rule_repo,
     )
 
     app = FastAPI()
     app.include_router(api_module.router)
-    return TestClient(app), resource_manager, data_controller, secrets_controller
+    return TestClient(app), resource_manager, data_controller, secrets_controller, trust_rule_repo
 
 
 def test_delete_source_cascades_data_secrets_and_view_bindings(tmp_path):
-    client, resource_manager, data_controller, secrets_controller = _build_client(tmp_path)
+    client, resource_manager, data_controller, secrets_controller, trust_rule_repo = _build_client(tmp_path)
 
     source_a = StoredSource(
         id="source-a",
@@ -54,6 +59,23 @@ def test_delete_source_cascades_data_secrets_and_view_bindings(tmp_path):
     )
     resource_manager.save_source(source_a)
     resource_manager.save_source(source_b)
+
+    trust_rule_repo.upsert_rule(
+        capability="http",
+        scope_type="source",
+        source_id="source-a",
+        target_type="host",
+        target_value="127.0.0.1",
+        decision="allow",
+    )
+    trust_rule_repo.upsert_rule(
+        capability="http",
+        scope_type="global",
+        source_id=None,
+        target_type="host",
+        target_value="10.0.0.5",
+        decision="deny",
+    )
 
     data_controller.upsert("source-a", {"value": 1})
     data_controller.upsert("source-b", {"value": 2})
@@ -113,3 +135,20 @@ def test_delete_source_cascades_data_secrets_and_view_bindings(tmp_path):
     saved_view = resource_manager.get_view("view-main")
     assert saved_view is not None
     assert [item.source_id for item in saved_view.items] == ["source-b"]
+
+    source_rule = trust_rule_repo.find_rule(
+        capability="http",
+        scope_type="source",
+        source_id="source-a",
+        target_type="host",
+        target_value="127.0.0.1",
+    )
+    assert source_rule is None
+    global_rule = trust_rule_repo.find_rule(
+        capability="http",
+        scope_type="global",
+        source_id=None,
+        target_type="host",
+        target_value="10.0.0.5",
+    )
+    assert global_rule is not None

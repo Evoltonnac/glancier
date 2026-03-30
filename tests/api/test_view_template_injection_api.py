@@ -37,6 +37,25 @@ class InMemoryResourceManager:
         self.views.append(view)
         return view
 
+    def reorder_views(self, ordered_view_ids: list[str]) -> list[StoredView]:
+        unique_ordered_view_ids = list(dict.fromkeys(ordered_view_ids))
+        if len(unique_ordered_view_ids) != len(ordered_view_ids):
+            raise ValueError("Duplicate view ids are not allowed")
+
+        if len(unique_ordered_view_ids) != len(self.views):
+            raise ValueError("ordered_view_ids must include each existing view exactly once")
+
+        view_by_id = {view.id: view for view in self.views}
+        if set(unique_ordered_view_ids) != set(view_by_id):
+            raise ValueError("ordered_view_ids must include each existing view exactly once")
+
+        reordered = [
+            view_by_id[view_id].model_copy(update={"sort_index": index})
+            for index, view_id in enumerate(unique_ordered_view_ids)
+        ]
+        self.views = list(reordered)
+        return list(reordered)
+
 
 def _build_client(
     *,
@@ -103,6 +122,7 @@ def test_create_view_returns_hydrated_props_but_stores_only_overrides():
     payload = response.json()
     props = payload["items"][0]["props"]
 
+    assert payload["sort_index"] == 0
     assert props["id"] == "demo_template"
     assert props["type"] == "source_card"
     assert props["ui"]["title"] == "Demo Card"
@@ -175,3 +195,42 @@ def test_list_views_ignores_legacy_template_snapshots():
     assert response.status_code == 200
     payload = response.json()
     assert payload[0]["items"][0]["props"]["ui"]["title"] == "Demo Card Latest"
+
+
+def test_reorder_views_updates_sort_index_and_response_order():
+    client, resource_manager = _build_client()
+
+    first = client.post(
+        "/api/views",
+        json={**_build_view_payload(), "id": "view-1", "name": "View 1"},
+    )
+    second = client.post(
+        "/api/views",
+        json={**_build_view_payload(), "id": "view-2", "name": "View 2"},
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    reorder_response = client.post(
+        "/api/views/reorder",
+        json={"ordered_view_ids": ["view-2", "view-1"]},
+    )
+
+    assert reorder_response.status_code == 200
+    reordered_payload = reorder_response.json()
+    assert [view["id"] for view in reordered_payload] == ["view-2", "view-1"]
+    assert [view["sort_index"] for view in reordered_payload] == [0, 1]
+    assert [view.id for view in resource_manager.views] == ["view-2", "view-1"]
+
+
+def test_reorder_views_rejects_duplicate_ids():
+    client, _ = _build_client()
+
+    client.post("/api/views", json={**_build_view_payload(), "id": "view-1", "name": "View 1"})
+    client.post("/api/views", json={**_build_view_payload(), "id": "view-2", "name": "View 2"})
+
+    response = client.post(
+        "/api/views/reorder",
+        json={"ordered_view_ids": ["view-2", "view-2"]},
+    )
+    assert response.status_code == 400

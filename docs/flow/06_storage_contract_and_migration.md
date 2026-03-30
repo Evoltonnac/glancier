@@ -25,11 +25,17 @@ Phase 5 split:
   - Runtime Integration Data (`runtime_latest`, `runtime_history`)
   - Stored Sources (`stored_sources`)
   - Stored Views (`stored_views`)
+  - Connection trust rules (`connection_trust_rules`)
 - JSON-backed entities (unchanged in this phase):
   - Settings (`data/settings.json`)
   - Secrets (`data/secrets.json`)
 
 This preserves compatibility while moving high-churn runtime/resource entities to transactional storage.
+
+`connection_trust_rules` contract notes:
+- Identity is deterministic by capability + scope + source + target (`idx_connection_trust_rules_identity`).
+- Source-scoped rules reference `stored_sources(source_id)` with `ON DELETE CASCADE`.
+- Deleting a source automatically removes its source-scoped trust rules.
 
 ## 3. Startup Migration Chunk Order
 

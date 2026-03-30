@@ -32,6 +32,12 @@ from core.config_loader import (
 )
 from core.auth.oauth_auth import OAuthAuth
 from core.error_formatter import format_runtime_error
+from core.log_redaction import sanitize_log_reason
+from core.network_trust.models import (
+    NetworkTargetDeniedError,
+    NetworkTargetInvalidError,
+    NetworkTrustRequiredError,
+)
 from core.network_proxy import resolve_proxy_url
 from jsonpath_ng import parse
 
@@ -55,6 +61,12 @@ _WEBVIEW_RETRYABLE_KEYWORDS = (
     "timeout",
     "timed out",
 )
+_DB_ERROR_CODE_PREFIXES = ("runtime.sql_", "runtime.mongo_", "runtime.redis_")
+
+
+def _is_database_runtime_error_code(code: Any) -> bool:
+    normalized = str(code or "")
+    return any(normalized.startswith(prefix) for prefix in _DB_ERROR_CODE_PREFIXES)
 
 
 class Executor:
@@ -70,11 +82,13 @@ class Executor:
         settings_manager=None,
         max_concurrent_fetches: int | None = None,
         scraper_task_store=None,
+        network_trust_policy=None,
     ):
         self._data_controller = data_controller
         self._secrets = secrets_controller
         self._settings_manager = settings_manager
         self._scraper_tasks = scraper_task_store
+        self._network_trust_policy = network_trust_policy
         # source_id -> SourceState
         self._states: Dict[str, SourceState] = {}
         resolved_max_concurrency = self._resolve_max_concurrent_fetches(max_concurrent_fetches)
@@ -217,7 +231,17 @@ class Executor:
             async with self._fetch_semaphore:
                 await self._fetch_source_once(source)
         finally:
+            self._clear_completed_allow_once_grants(source.id)
             await self._clear_source_inflight(source.id)
+
+    def _clear_completed_allow_once_grants(self, source_id: str) -> None:
+        policy = self._network_trust_policy
+        if policy is None or not hasattr(policy, "clear_allow_once_for_source"):
+            return
+        state = self.get_source_state(source_id)
+        if state.status == SourceStatus.SUSPENDED:
+            return
+        policy.clear_allow_once_for_source(source_id=source_id)
 
     async def _fetch_source_once(self, source: SourceConfig):
         try:
@@ -232,7 +256,15 @@ class Executor:
                 self._update_state(source.id, SourceStatus.ERROR, "No flow defined for source")
 
         except Exception as e:
-            logger.error(f"[{source.id}] Fetch failed: {e}", exc_info=True)
+            is_db_error = _is_database_runtime_error_code(getattr(e, "code", ""))
+            if is_db_error:
+                logger.error(
+                    "[%s] Fetch failed: %s",
+                    source.id,
+                    sanitize_log_reason(getattr(e, "details", e)),
+                )
+            else:
+                logger.error(f"[{source.id}] Fetch failed: {e}", exc_info=True)
             normalized_error = self._normalize_interaction_error(source, e)
 
             # For OAuth invalid-credential errors, first attempt token refresh and retry once.
@@ -272,7 +304,10 @@ class Executor:
                 normalized_error,
                 default_code="runtime.fetch_failed",
                 default_summary="Fetch failed",
-                include_traceback=not isinstance(normalized_error, FlowExecutionError),
+                include_traceback=(
+                    not isinstance(normalized_error, FlowExecutionError)
+                    and not _is_database_runtime_error_code(getattr(normalized_error, "code", ""))
+                ),
             )
             self._update_state(
                 source.id,
@@ -320,7 +355,13 @@ class Executor:
                     execute_browser_step,
                     execute_auth_step,
                     execute_extract_step,
-                    execute_script_step
+                    execute_script_step,
+                    execute_mongodb_step,
+                    execute_redis_step,
+                    execute_sql_step,
+                    MongoStepRuntimeError,
+                    RedisStepRuntimeError,
+                    SqlStepRuntimeError,
                 )
 
                 if step.use in (StepType.API_KEY, StepType.FORM, StepType.CURL, StepType.OAUTH):
@@ -331,6 +372,12 @@ class Executor:
                     output = await execute_extract_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.SCRIPT:
                     output = await execute_script_step(step, source, args, context, step_inputs, self)
+                elif step.use == StepType.MONGODB:
+                    output = await execute_mongodb_step(step, source, args, context, step_inputs, self)
+                elif step.use == StepType.REDIS:
+                    output = await execute_redis_step(step, source, args, context, step_inputs, self)
+                elif step.use == StepType.SQL:
+                    output = await execute_sql_step(step, source, args, context, step_inputs, self)
                 elif step.use == StepType.WEBVIEW:
                     output = await execute_browser_step(step, source, args, context, step_inputs, self)
 
@@ -371,10 +418,17 @@ class Executor:
                     step_error,
                     (
                         RequiredSecretMissing,
+                        MissingFormInputs,
                         InvalidCredentialsError,
                         NetworkTimeoutError,
                         WebScraperBlockedError,
                         RetryRequiredRuntimeError,
+                        NetworkTrustRequiredError,
+                        NetworkTargetDeniedError,
+                        NetworkTargetInvalidError,
+                        MongoStepRuntimeError,
+                        RedisStepRuntimeError,
+                        SqlStepRuntimeError,
                     ),
                 ) or getattr(step_error, "code", None) in {
                     "script_timeout_exceeded",
@@ -551,14 +605,27 @@ class Executor:
         source: SourceConfig,
         error: Exception,
     ) -> Exception:
+        from core.steps.sql_step import (
+            SqlStepRuntimeError,
+        )
+        from core.steps.mongodb_step import MongoStepRuntimeError
+        from core.steps.redis_step import RedisStepRuntimeError
+
         if isinstance(
             error,
             (
                 RequiredSecretMissing,
+                MissingFormInputs,
                 InvalidCredentialsError,
                 NetworkTimeoutError,
                 WebScraperBlockedError,
                 RetryRequiredRuntimeError,
+                NetworkTrustRequiredError,
+                NetworkTargetDeniedError,
+                NetworkTargetInvalidError,
+                MongoStepRuntimeError,
+                RedisStepRuntimeError,
+                SqlStepRuntimeError,
             ),
         ):
             return error
@@ -805,8 +872,9 @@ class Executor:
                     type=interaction_type,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Authorization Invalid",
-                    message="Current OAuth authorization is invalid. Please reconnect.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[],
                     data={
                         "oauth_args": oauth_args,
@@ -822,14 +890,15 @@ class Executor:
                     type=InteractionType.INPUT_TEXT,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Credentials Invalid",
-                    message="The API key appears invalid. Please update it and retry.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[
                         InteractionField(
                             key=api_key,
                             label=(step.args or {}).get("label", "API Key"),
                             type="password",
-                            description=(step.args or {}).get("description", "Enter a valid API key"),
+                            description=(step.args or {}).get("description"),
                         )
                     ],
                     data={
@@ -839,16 +908,14 @@ class Executor:
                 )
             if step.use == StepType.FORM:
                 return InteractionRequest(
-                    type=InteractionType.INPUT_TEXT,
+                    type=InteractionType.INPUT_FORM,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Input Invalid",
-                    message=(step.args or {}).get(
-                        "message",
-                        "Provided form values appear invalid. Please update and retry.",
-                    ),
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=self._build_form_recovery_fields(step),
-                    warning_message=(step.args or {}).get("warning_message"),
+                    warning_message=None,
                     data={
                         "failed_step_id": error.step_id,
                         "recovery_step_id": step.id,
@@ -860,20 +927,18 @@ class Executor:
                     type=InteractionType.INPUT_TEXT,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Credentials Invalid",
-                    message="Session credentials expired or invalid. Please paste a fresh cURL command.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[
                         InteractionField(
                             key=curl_key,
                             label=(step.args or {}).get("label", "cURL Request"),
                             type="text",
-                            description=(step.args or {}).get(
-                                "description",
-                                "Paste a new authenticated cURL command",
-                            ),
+                            description=(step.args or {}).get("description"),
                         )
                     ],
-                    warning_message=(step.args or {}).get("warning_message"),
+                    warning_message=None,
                     data={
                         "failed_step_id": error.step_id,
                         "recovery_step_id": step.id,
@@ -884,8 +949,9 @@ class Executor:
                     type=InteractionType.WEBVIEW_SCRAPE,
                     step_id=step.id,
                     source_id=source.id,
-                    title="Web Scraper Blocked",
-                    message="Web scraper was blocked. Please resume in foreground mode.",
+                    title=None,
+                    description=None,
+                    message=None,
                     fields=[],
                     data={
                         "url": (step.args or {}).get("url"),
@@ -902,8 +968,9 @@ class Executor:
             type=InteractionType.RETRY,
             step_id="flow_retry",
             source_id=source.id,
-            title="Retry Required",
-            message="Credentials are invalid. Please update credentials and retry.",
+            title=None,
+            description=None,
+            message=None,
             fields=[],
             data={"failed_step_id": error.step_id},
         )
@@ -959,6 +1026,9 @@ class Executor:
                     description=description if isinstance(description, str) else None,
                     required=True if required is None else bool(required),
                     default=default,
+                    options=raw_field.get("options") if isinstance(raw_field.get("options"), list) else [],
+                    multiple=bool(raw_field.get("multiple")),
+                    value_type=raw_field.get("value_type") if isinstance(raw_field.get("value_type"), str) else None,
                 )
             )
 
@@ -968,13 +1038,15 @@ class Executor:
 
     def _exception_to_interaction(self, source: SourceConfig, error: Exception) -> InteractionRequest | None:
         """Build interaction request from exception type."""
+        from core.steps.sql_step import SqlRiskOperationTrustRequiredError
         
-        if isinstance(error, RequiredSecretMissing):
+        if isinstance(error, (RequiredSecretMissing, MissingFormInputs)):
             return InteractionRequest(
                 type=error.interaction_type,
                 step_id=error.step_id or "auth_check",
                 source_id=error.source_id,
-                title="Authentication Required",
+                title=error.title,
+                description=error.description,
                 message=error.message,
                 warning_message=error.warning_message,
                 fields=error.fields,
@@ -1014,8 +1086,41 @@ class Executor:
                 type=InteractionType.WEBVIEW_SCRAPE,
                 step_id=error.step_id or (webview_step.id if webview_step else "webview"),
                 source_id=source.id,
-                title="Manual Action Required",
-                message=error.message,
+                title=None,
+                description=None,
+                message=None,
+                fields=[],
+                data=interaction_data,
+            )
+
+        if isinstance(error, SqlRiskOperationTrustRequiredError):
+            interaction_data = dict(error.data or {})
+            interaction_data.setdefault("confirm_kind", "db_operation_risk")
+            interaction_data.setdefault("actions", ["allow_once", "allow_always", "deny"])
+            interaction_data.setdefault("available_scopes", ["source", "global"])
+            return InteractionRequest(
+                type=InteractionType.CONFIRM,
+                step_id=error.step_id or "sql",
+                source_id=source.id,
+                title=None,
+                description=None,
+                message=None,
+                fields=[],
+                data=interaction_data,
+            )
+
+        if isinstance(error, NetworkTrustRequiredError):
+            interaction_data = dict(error.data or {})
+            interaction_data.setdefault("confirm_kind", "network_trust")
+            interaction_data.setdefault("actions", ["allow_once", "allow_always", "deny"])
+            interaction_data.setdefault("available_scopes", ["source", "global"])
+            return InteractionRequest(
+                type=InteractionType.CONFIRM,
+                step_id=error.step_id or "http",
+                source_id=source.id,
+                title=None,
+                description=None,
+                message=None,
                 fields=[],
                 data=interaction_data,
             )
@@ -1036,11 +1141,13 @@ class RequiredSecretMissing(Exception):
         source_id: str,
         interaction_type: InteractionType,
         fields: list[InteractionField],
-        message: str,
+        message: str | None = None,
         data: dict = None,
-        warning_message: str = None,
+        warning_message: str | None = None,
         step_id: str | None = None,
         code: str = "auth.missing_credentials",
+        title: str | None = None,
+        description: str | None = None,
     ):
         self.source_id = source_id
         self.step_id = step_id
@@ -1050,7 +1157,37 @@ class RequiredSecretMissing(Exception):
         self.data = data
         self.warning_message = warning_message
         self.code = code
-        super().__init__(message)
+        self.title = title
+        self.description = description
+        super().__init__(message or code)
+
+
+class MissingFormInputs(RequiredSecretMissing):
+    """Custom exception: form interaction is missing required inputs."""
+
+    def __init__(
+        self,
+        source_id: str,
+        fields: list[InteractionField],
+        message: str | None = None,
+        data: dict | None = None,
+        warning_message: str | None = None,
+        step_id: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(
+            source_id=source_id,
+            interaction_type=InteractionType.INPUT_FORM,
+            fields=fields,
+            message=message,
+            data=data,
+            warning_message=warning_message,
+            step_id=step_id,
+            code="auth.missing_form_inputs",
+            title=title,
+            description=description,
+        )
 
 
 class InvalidCredentialsError(Exception):

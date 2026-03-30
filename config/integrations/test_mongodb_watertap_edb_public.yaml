@@ -1,0 +1,123 @@
+name: "TEST - MongoDB WaterTAP EDB Public Connectivity"
+description: "MongoDB smoke test for the public WaterTAP Electrolyte Database (EDB) Atlas instance."
+flow:
+    - id: collect_edb_mongodb_inputs
+      use: form
+      args:
+          title: "WaterTAP EDB MongoDB Connectivity"
+          description: "Defaults target the public NAWI WaterTAP EDB MongoDB Atlas endpoint."
+          message: "Confirm MongoDB URI, namespace, and runtime guardrails."
+          fields:
+              - key: "mongo_uri"
+                label: "MongoDB URI"
+                type: "text"
+                required: true
+                default: "mongodb+srv://edbnawi:edb-user@nawi-edb.utpac.mongodb.net"
+              - key: "mongo_database"
+                label: "Database"
+                type: "text"
+                required: true
+                default: "electrolytedb"
+              - key: "mongo_collection"
+                label: "Collection"
+                type: "text"
+                required: true
+                default: "base"
+              - key: "mongo_timeout_seconds"
+                label: "Mongo Timeout Seconds"
+                type: "text"
+                required: false
+                default: "15"
+              - key: "mongo_max_rows"
+                label: "Mongo Max Rows"
+                type: "text"
+                required: false
+                default: "20"
+      secrets:
+          watertap_mongo_uri: "mongo_uri"
+      outputs:
+          watertap_mongo_database: "mongo_database"
+          watertap_mongo_collection: "mongo_collection"
+          watertap_mongo_timeout_seconds: "mongo_timeout_seconds"
+          watertap_mongo_max_rows: "mongo_max_rows"
+
+    - id: query_edb_base_sample
+      use: mongodb
+      args:
+          connector:
+              profile: "mongodb"
+          uri: "{watertap_mongo_uri}"
+          database: "{watertap_mongo_database}"
+          collection: "{watertap_mongo_collection}"
+          operation: "find"
+          filter: {}
+          projection:
+              - "_id"
+              - "name"
+          sort:
+              _id: 1
+          timeout: "{watertap_mongo_timeout_seconds}"
+          max_rows: "{watertap_mongo_max_rows}"
+      outputs:
+          edb_base_rows: "mongo_response.rows"
+          edb_base_fields: "mongo_response.fields"
+          edb_base_row_count: "mongo_response.row_count"
+
+    - id: query_edb_base_summary
+      use: mongodb
+      args:
+          connector:
+              profile: "mongodb"
+          uri: "{watertap_mongo_uri}"
+          database: "{watertap_mongo_database}"
+          collection: "{watertap_mongo_collection}"
+          operation: "aggregate"
+          pipeline:
+              - "$group":
+                    "_id": null
+                    "record_count":
+                        "$sum": 1
+          timeout: "{watertap_mongo_timeout_seconds}"
+          max_rows: "{watertap_mongo_max_rows}"
+      outputs:
+          edb_summary_rows: "mongo_response.rows"
+          edb_summary_fields: "mongo_response.fields"
+          edb_summary_row_count: "mongo_response.row_count"
+
+templates:
+    - id: "mongodb_watertap_edb_public_connectivity"
+      type: "source_card"
+      ui:
+          title: "WaterTAP EDB MongoDB Connectivity"
+          icon: "MongoDB"
+      widgets:
+          - type: "Container"
+            spacing: "md"
+            items:
+                - type: "TextBlock"
+                  text: "Base sample rows: {edb_base_row_count} | summary rows: {edb_summary_row_count}"
+                  size: "sm"
+                  tone: "muted"
+                - type: "Chart.Table"
+                  data_source: "{edb_base_rows}"
+                  fields_source: "{edb_base_fields}"
+                  encoding:
+                      columns:
+                          - field: "_id"
+                            title: "Document ID"
+                            format: "text"
+                          - field: "name"
+                            title: "Name"
+                            format: "text"
+                  sort_by: "_id"
+                  sort_order: "asc"
+                  limit: 20
+                - type: "Chart.Table"
+                  data_source: "{edb_summary_rows}"
+                  fields_source: "{edb_summary_fields}"
+                  encoding:
+                      columns:
+                          - field: "record_count"
+                            title: "Record Count"
+                            format: "number"
+                  limit: 5

@@ -5,6 +5,8 @@ import {
     SizeSchema,
     ToneSchema,
     toneButtonClassMap,
+    SemanticColorSchema,
+    resolveSurfaceColorStyle,
 } from "../shared/commonProps";
 
 /**
@@ -16,6 +18,7 @@ export const ActionCopySchema = z.object({
     text: z.string(),
     size: SizeSchema.default("md"),
     tone: ToneSchema.default("default"),
+    color: SemanticColorSchema.optional(),
 });
 
 export type ActionCopyProps = z.infer<typeof ActionCopySchema>;
@@ -39,6 +42,7 @@ export function ActionCopy({
     text,
     size = "md",
     tone = "default",
+    color,
 }: ActionCopyProps) {
     const [copied, setCopied] = useState(false);
 
@@ -55,7 +59,10 @@ export function ActionCopy({
     return (
         <button
             onClick={handleCopy}
-            className={`inline-flex items-center rounded-md font-medium transition-colors ${sizeMap[size]} ${toneButtonClassMap[tone]}`}
+            className={`inline-flex items-center rounded-md font-medium ${
+                color ? "transition-opacity hover:opacity-90" : "transition-colors"
+            } ${sizeMap[size]} ${color ? "" : toneButtonClassMap[tone]}`}
+            style={resolveSurfaceColorStyle(color)}
         >
             {copied ? <Check className={iconSizeMap[size]} /> : <Copy className={iconSizeMap[size]} />}
             {copied ? "Copied!" : title}

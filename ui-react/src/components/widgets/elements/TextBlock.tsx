@@ -6,6 +6,8 @@ import {
     textAlignClassMap,
     toneTextClassMap,
     AlignSchema,
+    SemanticColorSchema,
+    resolveTextColorStyle,
 } from "../shared/commonProps";
 
 /**
@@ -19,6 +21,7 @@ export const TextBlockSchema = z.object({
     size: SizeSchema.default("md"),
     weight: z.enum(["normal", "medium", "semibold", "bold"]).default("normal"),
     tone: ToneSchema.default("default"),
+    color: SemanticColorSchema.optional(),
     align_x: AlignSchema.default("start"),
     wrap: z.boolean().default(true),
     max_lines: z.number().positive().optional(),
@@ -38,6 +41,7 @@ export function TextBlock({
     size = "md",
     weight = "normal",
     tone = "default",
+    color,
     align_x = "start",
     wrap = true,
     max_lines,
@@ -54,11 +58,12 @@ export function TextBlock({
               overflow: "hidden",
           }
         : undefined;
+    const colorStyle = resolveTextColorStyle(color);
 
     return (
         <div
             className={`${sizeTextClassMap[size]} ${weightMap[weight]} ${toneTextClassMap[tone]} ${textAlignClassMap[align_x]} ${wrapClass}`}
-            style={clampStyle}
+            style={{ ...clampStyle, ...colorStyle }}
         >
             {displayText}
         </div>

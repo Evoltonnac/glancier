@@ -73,6 +73,9 @@ def _build_form_field_specs(step: "StepConfig", args: Dict[str, Any]) -> list[Di
                 "description": args.get("description"),
                 "required": args.get("required"),
                 "default": args.get("default"),
+                "options": args.get("options"),
+                "multiple": args.get("multiple"),
+                "value_type": args.get("value_type"),
             }
         ]
 
@@ -94,16 +97,39 @@ def _build_form_field_specs(step: "StepConfig", args: Dict[str, Any]) -> list[Di
         required = raw_field.get("required")
         has_default = "default" in raw_field
         default = raw_field.get("default") if has_default else defaults.get(key)
+        raw_options = raw_field.get("options")
+        options = raw_options if isinstance(raw_options, list) else []
+        multiple = bool(raw_field.get("multiple"))
+        value_type = raw_field.get("value_type")
+
+        if isinstance(field_type, str):
+            normalized_type = field_type.strip().lower()
+        else:
+            normalized_type = "text"
+
+        if normalized_type in {"multiselect", "multi_select", "checkbox_group"}:
+            multiple = True
+        if normalized_type in {"switch", "toggle"}:
+            normalized_value_type = "boolean"
+        elif multiple:
+            normalized_value_type = "string[]"
+        elif isinstance(value_type, str) and value_type.strip():
+            normalized_value_type = value_type.strip()
+        else:
+            normalized_value_type = "string"
 
         specs.append(
             {
                 "source_key": key,
                 "secret_key": _secret_name_for_source(step, key, key),
                 "label": label if isinstance(label, str) and label.strip() else key,
-                "type": field_type if isinstance(field_type, str) and field_type.strip() else "text",
+                "type": normalized_type or "text",
                 "description": description if isinstance(description, str) else None,
                 "required": True if required is None else bool(required),
                 "default": default,
+                "options": options,
+                "multiple": multiple,
+                "value_type": normalized_value_type,
             }
         )
 
@@ -124,7 +150,7 @@ async def execute_auth_step(
     Returns:
         Dict[str, Any]: output dictionary with keys like api_key, oauth_secrets, etc.
     """
-    from core.executor import RequiredSecretMissing
+    from core.executor import MissingFormInputs, RequiredSecretMissing
     from core.source_state import InteractionType, InteractionField
 
     if step.use == StepType.API_KEY:
@@ -141,10 +167,13 @@ async def execute_auth_step(
                         key=secret_key,
                         label=args.get("label", "API Key"),
                         type="password",
-                        description=args.get("description", "Please enter the API Key")
+                        description=args.get("description")
                     )
                 ],
-                message=args.get("message", f"Missing API Key for {source.name}")
+                title=args.get("title"),
+                description=args.get("description"),
+                message=args.get("message"),
+                warning_message=args.get("warning_message"),
             )
 
         return {"api_key": api_key}
@@ -156,32 +185,33 @@ async def execute_auth_step(
 
         for spec in field_specs:
             value = executor._secrets.get_secret(source.id, spec["secret_key"])
-            if _is_missing_required_value(value) and spec["default"] is not None:
-                value = spec["default"]
 
-            if _is_missing_required_value(value) and spec["required"]:
+            if _is_missing_required_value(value):
                 interaction_fields.append(
                     InteractionField(
                         key=spec["secret_key"],
                         label=spec["label"],
                         type=spec["type"],
                         description=spec["description"],
-                        required=True,
+                        required=spec["required"],
                         default=spec["default"],
+                        options=spec["options"],
+                        multiple=spec["multiple"],
+                        value_type=spec["value_type"],
                     )
                 )
                 continue
 
-            if not _is_missing_required_value(value):
-                resolved_values[spec["source_key"]] = value
+            resolved_values[spec["source_key"]] = value
 
         if interaction_fields:
-            raise RequiredSecretMissing(
+            raise MissingFormInputs(
                 source_id=source.id,
                 step_id=step.id,
-                interaction_type=InteractionType.INPUT_TEXT,
                 fields=interaction_fields,
-                message=args.get("message", f"Missing required form values for {source.name}"),
+                title=args.get("title"),
+                description=args.get("description"),
+                message=args.get("message"),
                 warning_message=args.get("warning_message"),
             )
 
@@ -201,10 +231,12 @@ async def execute_auth_step(
                         key=secret_key,
                         label=args.get("label", "cURL Request"),
                         type="text",
-                        description=args.get("description", "Paste your cURL command here")
+                        description=args.get("description")
                     )
                 ],
-                message=args.get("message", f"Provide cURL request for {source.name}"),
+                title=args.get("title"),
+                description=args.get("description"),
+                message=args.get("message"),
                 warning_message=args.get("warning_message")
             )
             
@@ -262,14 +294,14 @@ async def execute_auth_step(
                 key="client_id",
                 label="Client ID",
                 type="text",
-                description="OAuth Client ID"
+                description=None,
             ))
         if not client_secret:
             interaction_fields.append(InteractionField(
                 key="client_secret",
                 label="Client Secret",
                 type="password",
-                description="OAuth Client Secret",
+                description=None,
                 required=False,
             ))
 
@@ -284,24 +316,16 @@ async def execute_auth_step(
                 "doc_url": oauth_args.get("doc_url"),
                 "oauth_flow": normalized_flow,
             }
-            required_fields = [field for field in interaction_fields if field.required]
-            guidance = (
-                "Please provide required OAuth credentials."
-                if required_fields
-                else (
-                    "Optional OAuth credentials can be provided before authorization."
-                    if interaction_fields
-                    else "Click to authorize."
-                )
-            )
-            msg = f"Authorization required for step {step.id}. {guidance}"
             raise RequiredSecretMissing(
                 source_id=source.id,
                 step_id=step.id,
                 interaction_type=interaction_type,
                 fields=interaction_fields,
-                message=msg,
-                data=interaction_data
+                title=oauth_args.get("title"),
+                description=oauth_args.get("description"),
+                message=oauth_args.get("message"),
+                data=interaction_data,
+                code="auth.authorization_required",
             )
             
         return {

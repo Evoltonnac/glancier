@@ -56,6 +56,8 @@ Design a dense, reliable dashboard where **Metrics**, **Signals**, and **Integra
 - Border: `border-border`
 - Brand: `text-brand`, `bg-brand`
 - Status: `text-success`, `text-warning`, `text-error` (backgrounds typically with opacity)
+- Semantic chart palette: `text-chart-blue`, `text-chart-orange`, `text-chart-green`, `text-chart-violet`, `text-chart-red`, `text-chart-cyan`, `text-chart-amber`, `text-chart-pink`, `text-chart-teal`, `text-chart-gold`, `text-chart-slate`, `text-chart-yellow`
+- Chart widget `colors` config only accepts these 12 semantic names; raw hex, CSS variables, and native color values are not supported
 
 ### Typography
 

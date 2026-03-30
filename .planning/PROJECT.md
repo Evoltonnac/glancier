@@ -14,13 +14,14 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 - **Local-First 的极简便当盒 UI (The Bento Grid)**：配置与密钥基于 AES-256 加密存在本地。彻底抛弃老旧运维风格，采用 2026 前端最新趋势的 High-Density Minimalist（高密度极简），构建可高度自定义的 Bento 流体网格系统。
 - **配置即一切 (Configuration as Code)**：接入新平台零 Python 后端修改，全生命周期由 Integration YAML 与 View Template 驱动。
 
-## 3. 当前状态 (v1.1 Shipped, v1.2 Planning)
+## 3. 当前状态 (v1.2 Shipped, v1.3 In Progress)
 
 - **Shipped v0.1**：核心链路已打通。在不修改 Python 业务代码的前提下，通过配置完成「鉴权 -> 采集 -> 解析 -> 展示」全链路接入。UI 完成了高密度、响应式的看板重构。
 - **Shipped v1.0**：完成品牌与术语重塑、代码语义统一、测试体系加固与稳定版交付。
 - **Post-v1.0 completed phases**：已完成 Phase 1/2（WebView Scraper reliability + usability/i18n/defaults hardening），并收敛归档到 v1.0 milestone context。
 - **Shipped v1.1**: Completed Phase 3-6 scope (security hardening, WebView stability, storage contract refactor, dashboard management workflows).
-- **Current focus (v1.2 planning)**: Define the next milestone requirements and roadmap from validated v1.1 outcomes.
+- **Shipped v1.2**: Completed Phase 7-10 (SQL Data Access, Chart Widgets, Normalized SQL Integration Data, and DB Risk Trust-gating).
+- **Current focus (v1.3 planning)**: Define next milestone scope (Authoring Usability or AI Enhancements).
 
 ## 4. 全局目标 (Source of Truth 提炼)
 
@@ -117,7 +118,18 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 8. `docs/testing_tdd.md`
 9. `docs/ui_design_guidelines.md`
 
-## 12. Last Milestone: v1.1 Security and Stability Hardening (Shipped)
+## 12. Last Milestone: v1.2 SQL Data Access and Visualization Expansion (Shipped)
+
+**Goal:** Let users query external databases through config-defined SQL steps and render richer Integration Data with chart-oriented Bento Cards.
+
+**Target features:**
+- Shipped multiple database SQL connection step patterns for SQLite and PostgreSQL.
+- Shipped multiple chart widgets (Line, Bar, Area, Pie, Table) for dashboard templates.
+- Resolved cross-phase chart wiring gaps (CHART-06, CHART-07) and established metadata-driven field mapping.
+- Expanded risk-operation trust-gating to include database connectors and split network/DB trust prompts.
+
+<details>
+<summary>Previous Milestone: v1.1 Security and Stability Hardening</summary>
 
 **Goal:** Deliver a security and stability-focused minor release by consolidating Phase 3/4 hardening, finishing storage persistence refactoring, and integrating Phase 6 dashboard management scope into the same milestone.
 
@@ -126,6 +138,7 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 - Consolidate Phase 4 WebView stability work (no implicit focus stealing, bounded uncertain-failure retries, deterministic fail contracts).
 - Refactor storage persistence for runtime/resources/settings with crash-safe write behavior, migration path, and deterministic recovery semantics.
 - Ship dashboard management and multi-view tab workflows (state ownership, CRUD/reorder UX, and docs/i18n contract alignment).
+</details>
 
 ## 13. v1.1 Requirement Outcomes
 
@@ -138,11 +151,14 @@ Glanceus 是一个面向重度数字用户的个人全能数据枢纽 (Personal 
 - [x] **STOR-03**: User can migrate existing local data files into the refactored storage structure without manual repair.
 - [x] **STOR-04**: User can diagnose storage failures via deterministic `error_code` surfaces and reproducible checks.
 
-## 14. Next Milestone Goals (v1.2 Draft)
+## 13. Current Milestone: v1.3 (Planning)
 
-- [ ] Define new requirement set and traceability table for post-v1.1 product direction.
-- [ ] Decide whether to continue dashboard/productivity UX expansion or prioritize desktop/runtime hardening work.
-- [ ] Start a fresh milestone cycle with `$gsd-new-milestone`.
+**Goal**: Define roadmap for authoring usability (backlog Phase 11) or AI-augmented data washing and insights.
+
+**Active Requirements:**
+- [ ] Define v1.3 requirement scope.
+- [ ] Research AI-first data washing reliability vs cost (O1/Claude 3.7 Sonnet).
+- [ ] Recover authoring preview/diagnostics scope from deferred Phase 11.
 
 ---
-*Last updated: 2026-03-23 after completing milestone v1.1 (security + stability + storage + dashboard management)*
+*Last updated: 2026-03-24 after Phase 8 completion and transition to Phase 9 planning*

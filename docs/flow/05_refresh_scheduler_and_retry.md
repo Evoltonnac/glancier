@@ -107,3 +107,29 @@ When diagnosing retry-loop regressions, verify:
 - Flow architecture: [01_architecture_and_orchestration.md](01_architecture_and_orchestration.md)
 - Failure scenario inputs: [04_step_failure_test_inputs.md](04_step_failure_test_inputs.md)
 - WebView runtime fallback (high-level): [../webview-scraper/02_runtime_and_fallback.md](../webview-scraper/02_runtime_and_fallback.md)
+
+## 11. SQL Guardrail Runtime Contract
+
+SQL step execution has deterministic timeout and row-limit guardrails. Threshold resolution order is:
+1. Source override (`args.timeout` / `args.max_rows`, including source-variable substitution)
+2. System settings defaults (`sql_default_timeout_seconds`, `sql_default_max_rows`)
+3. SQL runtime built-ins (`30s`, `500 rows`)
+
+Runtime outcomes:
+- timeout breach -> `runtime.sql_timeout`
+- row-limit breach does not fail the step; response is normalized with `sql_response.truncated=true` and `sql_response.row_count <= sql_response.max_rows`
+- canonical timing metadata is `sql_response.duration_ms` (`sql_response.execution_ms` remains a compatibility alias)
+
+Retry policy note:
+- SQL timeout and contract/trust failures are deterministic, not transient transport failures.
+- They are intentionally not included in the automatic retry signature allowlist in Section 4.
+- Successful but truncated SQL responses (`sql_response.truncated=true`) are not failures and must not trigger retry metadata.
+
+## 12. MongoDB and Redis Runtime Contract Notes
+
+MongoDB (`use: mongodb`) and Redis (`use: redis`) step failures are also deterministic backend error surfaces:
+- MongoDB: `runtime.mongo_invalid_contract`, `runtime.mongo_connect_failed`, `runtime.mongo_auth_failed`, `runtime.mongo_query_failed`, `runtime.mongo_timeout`
+- Redis: `runtime.redis_invalid_contract`, `runtime.redis_connect_failed`, `runtime.redis_auth_failed`, `runtime.redis_query_failed`, `runtime.redis_timeout`
+
+Retry policy note:
+- These deterministic contract/connect/auth/query/timeout errors are not part of Section 4 retryable signature allowlist.

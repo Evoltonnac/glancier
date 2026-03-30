@@ -80,6 +80,15 @@ Do not author `id` in integration YAML files. Runtime `id` comes from the filena
 - If prerequisites are missing, ask concise clarifying questions first.
 - Do not invent unavailable credentials, scopes, or undocumented endpoints.
 
+## Risky Data Operation Policy
+
+- For SQL/database-style authoring, default to read/query-only patterns unless the user explicitly requests write behavior.
+- If write/mutation behavior is required, clearly mark it as high-risk and indicate runtime trust authorization is required before execution.
+- Never present write/mutation operations as safe-by-default or silently-enabled behavior.
+- Treat SQL as fully user-authored query text; do not invent hidden parameter-injection layers.
+- Explain that SQLGlot AST risk analysis is applied to final query text before execution.
+- Explain that high-risk SQL routes to the authorization wall trust protocol (`allow_once`, `allow_always`, `deny`).
+
 ## Fallback Policy (Local-First)
 
 - Prefer local context first: existing project files, current integration YAML, and local docs.
@@ -105,6 +114,15 @@ Do not author `id` in integration YAML files. Runtime `id` comes from the filena
 4. Choose step semantics explicitly: use `api_key` for credential-focused auth inputs, use `form` for generic multi-field input collection.
 5. Produce or update YAML deterministically, respecting mode scope.
 6. Apply fallback disclosure and optional-final validation status in the final response.
+
+## SDUI Authoring Notes
+
+- `color` is the shared semantic color field for supported non-chart widgets and overrides `tone` when both are present.
+- `Chart.*` widgets keep `colors` as the array form of the same semantic color enum.
+- `Chart.*` widgets should bind dataset via `data_source` and optional field metadata via `fields_source`; avoid hidden fixed backend-path assumptions.
+- Layout widgets may expose both `align_x` and `align_y`; do not assume only one axis is available.
+- Layout widgets also expose axis-aware size controls where supported: `Container.height`, `ColumnSet.height`, `Column.width`, and `Column.height` all accept `auto` | `stretch` | positive number.
+- Numeric layout size values are field-specific: `Container.height` / `ColumnSet.height` and `Column.width` behave as flex weights, while `Column.height` is a fixed pixel height.
 
 ## Simple Complete YAML Example
 

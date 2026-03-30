@@ -94,6 +94,33 @@ describe("api client", () => {
         );
     });
 
+    it("posts ordered view ids to reorder endpoint", async () => {
+        const { api } = await import("./client");
+        const fetchMock = vi.mocked(fetch);
+        fetchMock
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: vi.fn(),
+            } as unknown as Response)
+            .mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: vi.fn().mockResolvedValue([]),
+            } as unknown as Response);
+
+        await expect(api.reorderViews(["view-2", "view-1"])).resolves.toEqual([]);
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            "/api/views/reorder",
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ordered_view_ids: ["view-2", "view-1"] }),
+            },
+        );
+    });
+
     it("disables cache when loading integration file content", async () => {
         const { api } = await import("./client");
         const fetchMock = vi.mocked(fetch);

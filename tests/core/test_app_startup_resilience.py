@@ -65,7 +65,11 @@ def test_create_app_falls_back_to_empty_config_when_load_fails(monkeypatch):
     monkeypatch.setattr(main_module, "load_config", _boom)
     monkeypatch.setattr(main_module, "DataController", lambda **_kwargs: SimpleNamespace(close=lambda: None))
     monkeypatch.setattr(main_module, "SecretsController", lambda: fake_secrets)
-    monkeypatch.setattr(main_module, "AuthManager", lambda _secrets, app_config: SimpleNamespace())
+    monkeypatch.setattr(
+        main_module,
+        "AuthManager",
+        lambda _secrets, app_config, settings_manager=None: SimpleNamespace(),
+    )
     monkeypatch.setattr(main_module, "SettingsManager", lambda: SimpleNamespace())
     monkeypatch.setattr(main_module, "Executor", lambda _dc, _sc, _sm, **_kwargs: SimpleNamespace())
     monkeypatch.setattr(
@@ -120,7 +124,11 @@ def test_create_app_seeds_first_launch_workspace_when_empty(monkeypatch):
             inject_master_key_provider=lambda _provider: None,
         ),
     )
-    monkeypatch.setattr(main_module, "AuthManager", lambda _secrets, app_config: SimpleNamespace())
+    monkeypatch.setattr(
+        main_module,
+        "AuthManager",
+        lambda _secrets, app_config, settings_manager=None: SimpleNamespace(),
+    )
     monkeypatch.setattr(main_module, "SettingsManager", lambda: SimpleNamespace())
     monkeypatch.setattr(main_module, "Executor", lambda _dc, _sc, _sm, **_kwargs: SimpleNamespace())
     monkeypatch.setattr(main_module, "ResourceManager", lambda **_kwargs: FakeResourceManager())
@@ -240,7 +248,11 @@ def test_create_app_bootstrap_sources_use_api_create_flow_for_auto_refresh(monke
             inject_master_key_provider=lambda _provider: None,
         ),
     )
-    monkeypatch.setattr(main_module, "AuthManager", lambda _secrets, app_config: SimpleNamespace())
+    monkeypatch.setattr(
+        main_module,
+        "AuthManager",
+        lambda _secrets, app_config, settings_manager=None: SimpleNamespace(),
+    )
     monkeypatch.setattr(main_module, "SettingsManager", lambda: SimpleNamespace())
     monkeypatch.setattr(
         main_module,

@@ -7,6 +7,7 @@ import hmac
 import os
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from fastapi import (
@@ -40,6 +41,10 @@ from core.source_update_events import SourceUpdateEventBus
 
 class FileContentRequest(BaseModel):
     content: str
+
+
+class ViewReorderRequest(BaseModel):
+    ordered_view_ids: list[str]
 
 
 class IntegrationPresetPayload(BaseModel):
@@ -92,7 +97,6 @@ DEFAULT_PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "prese
 router = APIRouter(prefix="/api")
 
 # These global references are injected from main.py.
-# These global references are injected from main.py.
 _executor = None
 _data_controller = None
 _config = None
@@ -104,6 +108,8 @@ _settings_manager = None
 _master_key_provider = None
 _scraper_task_store = None
 _source_update_bus = None
+_trust_rule_repo = None
+_network_trust_policy = None
 
 
 def init_api(
@@ -118,9 +124,11 @@ def init_api(
     master_key_provider=None,
     scraper_task_store=None,
     source_update_bus: SourceUpdateEventBus | None = None,
+    trust_rule_repo=None,
+    network_trust_policy=None,
 ):
     """Inject global dependencies (called by main.py)."""
-    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _master_key_provider, _scraper_task_store, _source_update_bus
+    global _executor, _data_controller, _config, _auth_manager, _secrets, _resource_manager, _integration_manager, _settings_manager, _master_key_provider, _scraper_task_store, _source_update_bus, _trust_rule_repo, _network_trust_policy
     _executor = executor
     _data_controller = data_controller
     _config = config
@@ -132,6 +140,8 @@ def init_api(
     _master_key_provider = master_key_provider
     _scraper_task_store = scraper_task_store
     _source_update_bus = source_update_bus
+    _trust_rule_repo = trust_rule_repo
+    _network_trust_policy = network_trust_policy
 
 
 def get_runtime_config():
@@ -287,10 +297,20 @@ def _infer_error_code_from_interaction(interaction: dict[str, Any] | None) -> st
     if not isinstance(interaction, dict):
         return None
     interaction_type = interaction.get("type")
+    if interaction_type == "confirm":
+        data = interaction.get("data")
+        if isinstance(data, dict):
+            confirm_kind = str(data.get("confirm_kind") or "").strip().lower()
+            capability = str(data.get("capability") or "").strip().lower()
+            if confirm_kind == "network_trust":
+                return "runtime.network_trust_required"
+            if confirm_kind == "db_operation_risk" and capability == "sql":
+                return "runtime.sql_risk_operation_requires_trust"
     mapping = {
         "oauth_start": "auth.authorization_required",
         "oauth_device_flow": "auth.authorization_required",
         "input_text": "auth.missing_credentials",
+        "input_form": "auth.missing_form_inputs",
         "cookies_refresh": "auth.invalid_credentials",
         "captcha": "auth.interactive_verification_required",
         "webview_scrape": "auth.manual_webview_required",
@@ -730,6 +750,39 @@ def _resolve_webview_interaction_secret_key(
     return "webview_data"
 
 
+def _extract_trust_binding_data(interaction: InteractionRequest | Any) -> dict[str, Any] | None:
+    data = getattr(interaction, "data", None)
+    if not isinstance(data, dict):
+        return None
+    required_keys = {"capability", "target_type", "target_value", "target_key"}
+    if not required_keys.issubset(data.keys()):
+        return None
+    return data
+
+
+def _normalize_persisted_interaction(interaction: Any) -> InteractionRequest | Any | None:
+    if isinstance(interaction, InteractionRequest):
+        return interaction
+    if not isinstance(interaction, dict):
+        return interaction
+
+    raw_fields = interaction.get("fields")
+    fields = []
+    if isinstance(raw_fields, list):
+        for raw_field in raw_fields:
+            if isinstance(raw_field, dict):
+                fields.append(SimpleNamespace(**raw_field))
+            else:
+                fields.append(raw_field)
+
+    return SimpleNamespace(
+        type=interaction.get("type"),
+        source_id=interaction.get("source_id"),
+        fields=fields,
+        data=interaction.get("data"),
+    )
+
+
 def create_stored_source_record(
     source: StoredSource,
     resource_manager,
@@ -911,6 +964,16 @@ def create_stored_view_record(
         )
 
     return saved_view
+
+
+def _resolve_next_view_sort_index(resource_manager) -> int:
+    load_views = getattr(resource_manager, "load_views", None)
+    if not callable(load_views):
+        return 0
+    views = load_views()
+    if not views:
+        return 0
+    return max(view.sort_index for view in views) + 1
 
 
 @router.post("/refresh/{source_id}")
@@ -1359,8 +1422,20 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
     if source is None:
         raise HTTPException(500, f"无法解析数据源 '{source_id}'")
 
+    try:
+        latest_data = (
+            _data_controller.get_latest(source_id)
+            if _data_controller is not None and hasattr(_data_controller, "get_latest")
+            else None
+        )
+    except StorageContractError as error:
+        return _storage_error_response(error)
+    persisted_interaction = None
+    if isinstance(latest_data, dict):
+        persisted_interaction = _normalize_persisted_interaction(latest_data.get("interaction"))
     state = _executor.get_source_state(source_id)
-    pending_interaction = getattr(state, "interaction", None) if state else None
+    runtime_interaction = getattr(state, "interaction", None) if state else None
+    pending_interaction = persisted_interaction if persisted_interaction is not None else runtime_interaction
 
     # Special Handling: OAuth Code Exchange (Client-Side Callback)
     interaction_type = (
@@ -1470,12 +1545,83 @@ async def interact_source(source_id: str, data: dict[str, Any], background_tasks
 
         background_tasks.add_task(_executor.fetch_source, source)
         return {"message": "OAuth Token 已保存", "source_id": source_id}
-    
+
+    if interaction_type == InteractionType.CONFIRM.value:
+        binding = _validate_interaction_source_binding(
+            source_id,
+            pending_interaction,
+            expected_interaction_types={InteractionType.CONFIRM.value},
+            request_interaction_type=interaction_type,
+            request_source_id=request_source_id,
+        )
+        trust_binding = _extract_trust_binding_data(binding)
+        if trust_binding is not None:
+            _validate_interaction_payload_keys(
+                data,
+                binding,
+                allowed_protocol_keys={
+                    "type",
+                    "interaction_type",
+                    "source_id",
+                    "decision",
+                    "scope",
+                    "target_key",
+                },
+            )
+            decision = str(data.get("decision") or "").strip().lower()
+            scope = str(data.get("scope") or "").strip().lower()
+            target_key = str(data.get("target_key") or "").strip().lower()
+            if decision not in {"allow_once", "allow_always", "deny"}:
+                raise HTTPException(400, "interaction_payload_invalid")
+            if scope not in {"source", "global"}:
+                raise HTTPException(400, "interaction_payload_invalid")
+            if not target_key:
+                raise HTTPException(400, "interaction_payload_invalid")
+
+            capability = str(trust_binding.get("capability") or "http").strip().lower()
+            target_type = str(trust_binding.get("target_type") or "host").strip().lower()
+            target_value = str(trust_binding.get("target_value") or "").strip().lower()
+            expected_key = str(trust_binding.get("target_key") or target_value).strip().lower()
+            if not target_value or expected_key != target_key:
+                raise HTTPException(400, "interaction_payload_invalid")
+
+            if decision == "allow_once":
+                if _network_trust_policy is None or not hasattr(_network_trust_policy, "grant_allow_once"):
+                    raise HTTPException(503, "network_trust_policy_unavailable")
+                _network_trust_policy.grant_allow_once(
+                    capability=capability,
+                    source_id=source_id,
+                    target_type=target_type,
+                    target_value=target_value,
+                )
+            else:
+                if _trust_rule_repo is None or not hasattr(_trust_rule_repo, "upsert_rule"):
+                    raise HTTPException(503, "network_trust_rule_store_unavailable")
+                persisted_decision = "allow" if decision == "allow_always" else "deny"
+                persisted_source_id = source_id if scope == "source" else None
+                _trust_rule_repo.upsert_rule(
+                    capability=capability,
+                    scope_type=scope,
+                    source_id=persisted_source_id,
+                    target_type=target_type,
+                    target_value=target_value,
+                    decision=persisted_decision,
+                    metadata={
+                        "via": "interaction",
+                        "decision": decision,
+                    },
+                )
+
+            _executor._update_state(source_id, SourceStatus.REFRESHING, "Processing interaction results...")
+            background_tasks.add_task(_executor.fetch_source, source)
+            return {"message": "Trust decision recorded, retrying source.", "source_id": source_id}
+
     binding = _validate_interaction_source_binding(
         source_id,
         pending_interaction,
         expected_interaction_types={
             InteractionType.INPUT_TEXT.value,
+            InteractionType.INPUT_FORM.value,
             InteractionType.COOKIES_REFRESH.value,
             InteractionType.CAPTCHA.value,
             InteractionType.CONFIRM.value,
@@ -1785,11 +1931,78 @@ async def list_stored_views() -> list[StoredView]:
     ]
 
 
+@router.post("/views/reorder")
+async def reorder_stored_views(payload: ViewReorderRequest) -> list[StoredView]:
+    unique_ordered_view_ids = list(dict.fromkeys(payload.ordered_view_ids))
+    if len(unique_ordered_view_ids) != len(payload.ordered_view_ids):
+        raise HTTPException(400, "Duplicate view ids are not allowed")
+
+    try:
+        current_views = _resource_manager.load_views()
+    except StorageContractError as error:
+        return _storage_error_response(error)
+
+    if not current_views:
+        return []
+
+    current_view_ids = {view.id for view in current_views}
+    if (
+        len(unique_ordered_view_ids) != len(current_views)
+        or set(unique_ordered_view_ids) != current_view_ids
+    ):
+        raise HTTPException(400, "ordered_view_ids must include each existing view exactly once")
+
+    reorder_views = getattr(_resource_manager, "reorder_views", None)
+    try:
+        if callable(reorder_views):
+            reordered_views = reorder_views(unique_ordered_view_ids)
+        else:
+            view_by_id = {view.id: view for view in current_views}
+            reordered_views = []
+            for index, view_id in enumerate(unique_ordered_view_ids):
+                next_view = view_by_id[view_id].model_copy(update={"sort_index": index})
+                reordered_views.append(_resource_manager.save_view(next_view))
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    except StorageContractError as error:
+        return _storage_error_response(error)
+
+    if not reordered_views:
+        return reordered_views
+
+    try:
+        source_by_id = {source.id: source for source in _resource_manager.load_sources()}
+    except StorageContractError as error:
+        return _storage_error_response(error)
+    template_lookup_by_integration = build_template_lookup_from_config(_config)
+    if not source_by_id or not template_lookup_by_integration:
+        return reordered_views
+
+    return [
+        inject_view_item_props_from_templates(
+            view,
+            source_by_id=source_by_id,
+            template_lookup_by_integration=template_lookup_by_integration,
+        )
+        for view in reordered_views
+    ]
+
+
 @router.post("/views")
 async def create_stored_view(view: StoredView) -> StoredView:
     """Create new stored view."""
+    prepared_view = view
     try:
-        return create_stored_view_record(view, _resource_manager, config=_config)
+        if "sort_index" not in view.model_fields_set:
+            get_view = getattr(_resource_manager, "get_view", None)
+            existing_view = get_view(view.id) if callable(get_view) else None
+            resolved_sort_index = (
+                existing_view.sort_index
+                if existing_view is not None
+                else _resolve_next_view_sort_index(_resource_manager)
+            )
+            prepared_view = view.model_copy(update={"sort_index": resolved_sort_index})
+        return create_stored_view_record(prepared_view, _resource_manager, config=_config)
     except StorageContractError as error:
         return _storage_error_response(error)
 
@@ -1799,8 +2012,16 @@ async def update_stored_view(view_id: str, view: StoredView) -> StoredView:
     """Update stored view."""
     if view.id != view_id:
         raise HTTPException(400, "ID mismatch")
+    prepared_view = view
     try:
-        return create_stored_view_record(view, _resource_manager, config=_config)
+        if "sort_index" not in view.model_fields_set:
+            get_view = getattr(_resource_manager, "get_view", None)
+            existing_view = get_view(view_id) if callable(get_view) else None
+            if existing_view is not None:
+                prepared_view = view.model_copy(
+                    update={"sort_index": existing_view.sort_index},
+                )
+        return create_stored_view_record(prepared_view, _resource_manager, config=_config)
     except StorageContractError as error:
         return _storage_error_response(error)
 

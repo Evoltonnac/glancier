@@ -14,6 +14,13 @@ from core.refresh_policy import (
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_SQL_TIMEOUT_SECONDS = 30
+_MIN_SQL_TIMEOUT_SECONDS = 1
+_MAX_SQL_TIMEOUT_SECONDS = 300
+_DEFAULT_SQL_MAX_ROWS = 500
+_MIN_SQL_MAX_ROWS = 1
+_MAX_SQL_MAX_ROWS = 10000
+
 
 class SystemSettings(BaseModel):
     autostart: bool = False
@@ -34,11 +41,25 @@ class SystemSettings(BaseModel):
     script_sandbox_enabled: bool = False
     # Script step timeout in seconds.
     script_timeout_seconds: int = Field(default=10, ge=1, le=120)
+    # Default SQL timeout in seconds for sql step when args.timeout is omitted.
+    sql_default_timeout_seconds: int = Field(
+        default=_DEFAULT_SQL_TIMEOUT_SECONDS,
+        ge=_MIN_SQL_TIMEOUT_SECONDS,
+        le=_MAX_SQL_TIMEOUT_SECONDS,
+    )
+    # Default SQL max row limit when args.max_rows is omitted.
+    sql_default_max_rows: int = Field(
+        default=_DEFAULT_SQL_MAX_ROWS,
+        ge=_MIN_SQL_MAX_ROWS,
+        le=_MAX_SQL_MAX_ROWS,
+    )
     theme: str = "system" # can be 'light', 'dark', or 'system'
     # UI density: 'compact', 'normal', or 'relaxed'
     density: str = "normal"
     # UI language. English is default.
     language: Literal["en", "zh"] = "en"
+    # Default policy when private/loopback HTTP target has no explicit trust rule.
+    http_private_target_policy_default: Literal["prompt", "allow", "deny"] = "prompt"
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -103,6 +124,8 @@ class SettingsManager:
                     data["refresh_interval_minutes"] = normalized_refresh
                 if data.get("language") not in {"en", "zh"}:
                     data["language"] = "en"
+                if data.get("http_private_target_policy_default") not in {"prompt", "allow", "deny"}:
+                    data["http_private_target_policy_default"] = "prompt"
                 raw_script_timeout = data.get("script_timeout_seconds")
                 if "script_timeout_seconds" not in data:
                     data["script_timeout_seconds"] = 10
@@ -114,6 +137,28 @@ class SettingsManager:
                     if script_timeout < 1 or script_timeout > 120:
                         script_timeout = 10
                     data["script_timeout_seconds"] = script_timeout
+                raw_sql_timeout = data.get("sql_default_timeout_seconds")
+                if "sql_default_timeout_seconds" not in data:
+                    data["sql_default_timeout_seconds"] = _DEFAULT_SQL_TIMEOUT_SECONDS
+                else:
+                    try:
+                        sql_timeout = int(raw_sql_timeout)
+                    except (TypeError, ValueError):
+                        sql_timeout = _DEFAULT_SQL_TIMEOUT_SECONDS
+                    if sql_timeout < _MIN_SQL_TIMEOUT_SECONDS or sql_timeout > _MAX_SQL_TIMEOUT_SECONDS:
+                        sql_timeout = _DEFAULT_SQL_TIMEOUT_SECONDS
+                    data["sql_default_timeout_seconds"] = sql_timeout
+                raw_sql_max_rows = data.get("sql_default_max_rows")
+                if "sql_default_max_rows" not in data:
+                    data["sql_default_max_rows"] = _DEFAULT_SQL_MAX_ROWS
+                else:
+                    try:
+                        sql_max_rows = int(raw_sql_max_rows)
+                    except (TypeError, ValueError):
+                        sql_max_rows = _DEFAULT_SQL_MAX_ROWS
+                    if sql_max_rows < _MIN_SQL_MAX_ROWS or sql_max_rows > _MAX_SQL_MAX_ROWS:
+                        sql_max_rows = _DEFAULT_SQL_MAX_ROWS
+                    data["sql_default_max_rows"] = sql_max_rows
                 if not isinstance(data.get("enhanced_scraping"), bool):
                     data["enhanced_scraping"] = False
                 settings = SystemSettings.model_validate(data)

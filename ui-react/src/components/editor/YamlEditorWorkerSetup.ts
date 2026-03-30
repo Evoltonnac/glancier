@@ -7,21 +7,17 @@ import { loader } from "@monaco-editor/react";
 // Use Vite's ?worker import syntax for proper worker bundling
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import YamlWorker from "../../workers/yaml.worker?worker";
+import {
+  resolveDiagnosticSeverity,
+  type IntegrationDiagnostic,
+} from "./integrationDiagnostics";
+export type { IntegrationDiagnostic } from "./integrationDiagnostics";
 
 // Import the composed full schema (Python flow + React SDUI) for Monaco validation.
 import bundledSchema from "../../../../config/schemas/integration.schema.json";
 
 // Tell @monaco-editor/react to use locally installed monaco-editor instead of CDN
 loader.config({ monaco });
-
-export interface IntegrationDiagnostic {
-  source: "backend" | "editor";
-  message: string;
-  code?: string;
-  line?: number;
-  column?: number;
-  fieldPath?: string;
-}
 
 type JsonSchema = Record<string, unknown>;
 
@@ -106,11 +102,20 @@ export async function setupYamlWorker(
 export function markersToDiagnostics(
   markers: editor.IMarker[],
 ): IntegrationDiagnostic[] {
-  return markers.map((marker) => ({
-    source: "editor",
-    message: marker.message,
-    code: marker.code ? String(marker.code) : "yaml.validation",
-    line: marker.startLineNumber,
-    column: marker.startColumn,
-  }));
+  return markers.map((marker) => {
+    const code = marker.code ? String(marker.code) : "yaml.validation";
+    const message = marker.message;
+    return {
+      source: "editor",
+      message,
+      code,
+      line: marker.startLineNumber,
+      column: marker.startColumn,
+      severity: resolveDiagnosticSeverity({
+        code,
+        message,
+        markerSeverity: marker.severity,
+      }),
+    };
+  });
 }

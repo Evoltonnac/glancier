@@ -167,6 +167,9 @@ class StepType(str, Enum):
     EXTRACT = "extract"
     SCRIPT = "script"
     LOG = "log"
+    SQL = "sql"
+    MONGODB = "mongodb"
+    REDIS = "redis"
     WEBVIEW = "webview"
 
 
@@ -204,6 +207,10 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
             "client_id": {"type": "string"},
             "client_secret": {"type": "string"},
             "doc_url": {"type": "string"},
+            "title": _schema_optional_type("string"),
+            "description": _schema_optional_type("string"),
+            "message": _schema_optional_type("string"),
+            "warning_message": _schema_optional_type("string"),
             "scope": {
                 "anyOf": [
                     {"type": "string"},
@@ -251,54 +258,69 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
     StepType.API_KEY.value: {
         "type": "object",
         "properties": {
-            "label": {"type": "string"},
-            "description": {"type": "string"},
-            "message": {"type": "string"},
+            "title": _schema_optional_type("string"),
+            "label": _schema_optional_type("string"),
+            "description": _schema_optional_type("string"),
+            "message": _schema_optional_type("string"),
+            "warning_message": _schema_optional_type("string"),
         },
         "additionalProperties": True,
     },
     StepType.FORM.value: {
         "type": "object",
         "properties": {
-            "title": {"type": "string"},
-            "description": {"type": "string"},
+            "title": _schema_optional_type("string"),
+            "description": _schema_optional_type("string"),
             "fields": {
                 "type": "array",
                 "minItems": 1,
                 "items": {
                     "type": "object",
                     "properties": {
-                        "name": {"type": "string"},
+                        "name": _schema_optional_type("string"),
                         "key": {"type": "string", "minLength": 1},
-                        "label": {"type": "string"},
-                        "type": {"type": "string"},
-                        "description": {"type": "string"},
-                        "placeholder": {"type": "string"},
+                        "label": _schema_optional_type("string"),
+                        "type": _schema_optional_type("string"),
+                        "description": _schema_optional_type("string"),
+                        "placeholder": _schema_optional_type("string"),
                         "required": {"type": "boolean"},
                         "default": {},
+                        "options": {
+                            "type": "array",
+                            "items": {"type": "object", "additionalProperties": True},
+                        },
+                        "multiple": {"type": "boolean"},
+                        "value_type": {"type": "string"},
                     },
                     "required": ["key"],
                     "additionalProperties": True,
                 },
             },
             "key": {"type": "string", "minLength": 1},
-            "label": {"type": "string"},
-            "type": {"type": "string"},
+            "label": _schema_optional_type("string"),
+            "type": _schema_optional_type("string"),
             "required": {"type": "boolean"},
             "default": {},
+            "options": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "multiple": {"type": "boolean"},
+            "value_type": _schema_optional_type("string"),
             "defaults": {"type": "object", "additionalProperties": True},
-            "message": {"type": "string"},
-            "warning_message": {"type": "string"},
+            "message": _schema_optional_type("string"),
+            "warning_message": _schema_optional_type("string"),
         },
         "additionalProperties": True,
     },
     StepType.CURL.value: {
         "type": "object",
         "properties": {
-            "label": {"type": "string"},
-            "description": {"type": "string"},
-            "message": {"type": "string"},
-            "warning_message": {"type": "string"},
+            "title": _schema_optional_type("string"),
+            "label": _schema_optional_type("string"),
+            "description": _schema_optional_type("string"),
+            "message": _schema_optional_type("string"),
+            "warning_message": _schema_optional_type("string"),
         },
         "additionalProperties": True,
     },
@@ -322,8 +344,166 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
     StepType.LOG.value: {
         "type": "object",
         "properties": {
-            "message": {"type": "string"},
+            "message": _schema_optional_type("string"),
         },
+        "additionalProperties": True,
+    },
+    StepType.SQL.value: {
+        "type": "object",
+        "properties": {
+            "connector": {
+                "type": "object",
+                "properties": {
+                    "profile": {"type": "string", "minLength": 1},
+                    "options": {
+                        "type": "object",
+                        "properties": {
+                            "dialect": {
+                                "type": "string",
+                                "enum": [
+                                    "postgres",
+                                    "mysql",
+                                    "sqlite",
+                                    "duckdb",
+                                    "clickhouse",
+                                    "snowflake",
+                                    "bigquery",
+                                    "redshift",
+                                    "oracle"
+                                ]
+                            }
+                        },
+                        "additionalProperties": True,
+                    },
+                },
+                "required": ["profile"],
+                "additionalProperties": True,
+            },
+            "dsn": {"type": "string", "minLength": 1},
+            "uri": {"type": "string", "minLength": 1},
+            "query": {"type": "string", "minLength": 1},
+            "timeout": {
+                "anyOf": [
+                    {"type": "number", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "max_rows": {
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+        },
+        "required": ["connector", "query"],
+        "anyOf": [
+            {"required": ["dsn"]},
+            {"required": ["uri"]},
+        ],
+        "additionalProperties": True,
+    },
+    StepType.MONGODB.value: {
+        "type": "object",
+        "properties": {
+            "connector": {
+                "type": "object",
+                "properties": {
+                    "profile": {"type": "string", "minLength": 1},
+                },
+                "required": ["profile"],
+                "additionalProperties": True,
+            },
+            "dsn": {"type": "string", "minLength": 1},
+            "uri": {"type": "string", "minLength": 1},
+            "database": {"type": "string", "minLength": 1},
+            "collection": {"type": "string", "minLength": 1},
+            "operation": {"type": "string", "enum": ["find", "aggregate"]},
+            "filter": {"type": "object", "additionalProperties": True},
+            "projection": {
+                "anyOf": [
+                    {"type": "object", "additionalProperties": True},
+                    {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                ]
+            },
+            "sort": {"type": "object", "additionalProperties": True},
+            "pipeline": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "timeout": {
+                "anyOf": [
+                    {"type": "number", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "max_rows": {
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+        },
+        "required": ["database", "collection", "operation"],
+        "anyOf": [
+            {"required": ["dsn"]},
+            {"required": ["uri"]},
+        ],
+        "additionalProperties": True,
+    },
+    StepType.REDIS.value: {
+        "type": "object",
+        "properties": {
+            "connector": {
+                "type": "object",
+                "properties": {
+                    "profile": {"type": "string", "minLength": 1},
+                },
+                "required": ["profile"],
+                "additionalProperties": True,
+            },
+            "dsn": {"type": "string", "minLength": 1},
+            "uri": {"type": "string", "minLength": 1},
+            "command": {"type": "string", "minLength": 1},
+            "key": {"type": "string", "minLength": 1},
+            "keys": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1},
+            },
+            "start": {
+                "anyOf": [
+                    {"type": "integer"},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "stop": {
+                "anyOf": [
+                    {"type": "integer"},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "withscores": {"type": "boolean"},
+            "timeout": {
+                "anyOf": [
+                    {"type": "number", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+            "max_rows": {
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
+        },
+        "required": ["command"],
+        "anyOf": [
+            {"required": ["dsn"]},
+            {"required": ["uri"]},
+        ],
         "additionalProperties": True,
     },
     StepType.WEBVIEW.value: {
@@ -332,6 +512,10 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
             "url": {"type": "string", "minLength": 1},
             "script": _schema_optional_type("string"),
             "intercept_api": _schema_optional_type("string"),
+            "title": _schema_optional_type("string"),
+            "description": _schema_optional_type("string"),
+            "message": _schema_optional_type("string"),
+            "warning_message": _schema_optional_type("string"),
         },
         "required": ["url"],
         "additionalProperties": True,

@@ -368,6 +368,16 @@ class ApiClient {
     return res.json();
   }
 
+  async reorderViews(orderedViewIds: string[]): Promise<StoredView[]> {
+    const res = await this.request(`/views/reorder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ordered_view_ids: orderedViewIds }),
+    });
+    if (!res.ok) throw new Error("Failed to reorder views");
+    return res.json();
+  }
+
   async createView(view: StoredView): Promise<StoredView> {
     const res = await this.request(`/views`, {
       method: "POST",
@@ -405,7 +415,9 @@ class ApiClient {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || `Interaction failed for ${sourceId}`);
+      throw new Error(
+        err.detail || err.message || `Interaction failed for ${sourceId}`,
+      );
     }
   }
 

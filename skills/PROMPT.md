@@ -95,12 +95,23 @@ Supported `use` values:
 - `curl`
 - `extract`
 - `script`
+- `sql`
+- `mongodb`
+- `redis`
 - `log`
 - `webview`
 
 Guidance:
 - `api_key`: credential-focused auth input.
 - `form`: generic input collection (single/multi-field), persistence decided by `secrets`/`outputs`/`context` mapping.
+
+### Risky Data Operation Policy
+
+- For SQL/database-style steps, default to read/query-only patterns unless the user explicitly requires writes.
+- If a write/mutation operation is necessary, mark it as high risk and explain it requires runtime trust authorization before execution.
+- Never describe write/mutation operations as safe-by-default behavior.
+- SQL query text should be treated as fully user-authored; do not invent hidden parameter-injection layers.
+- Risk checks should be described as static analysis on final query text before execution.
 
 ### Output Channels
 
@@ -126,7 +137,7 @@ Avoid ambiguous variable naming across channels.
 
 ### Blocking/Resume Notes
 
-Blocking steps (`api_key`, `form`, `oauth`, `curl`, `webview`) may suspend execution.
+Blocking steps (`api_key`, `form`, `oauth`, `curl`, `webview`, and high-risk `sql`) may suspend execution.
 Design for resume safety:
 - keep pre-interaction steps idempotent
 - do not rely on `context` surviving long suspension
@@ -178,6 +189,38 @@ Design for resume safety:
   - `http_response` (JSON object/array, or `null` for non-JSON)
   - `raw_data` (always available response text)
   - `headers` (response headers)
+
+#### `sql`
+
+- Purpose: execute SQL queries through backend connector runtime.
+- Core args: `connector.profile`, connection string (`dsn` or `uri`), `query`; optional `connector.options.dialect`, `timeout`, `max_rows`.
+- Runtime output envelope: `sql_response` (rows, columns, row_count, timing/guardrail metadata).
+- Authoring default: read/query-only SQL.
+- Write/mutation SQL must be explicitly user-requested, marked high risk, and documented as trust-gated before execution.
+- SQL risk checks are SQLGlot AST-based on final query text, and high-risk operations route to the authorization wall protocol.
+
+#### `mongodb`
+
+- Purpose: execute read-only MongoDB operations through backend runtime.
+- Core args: connection string (`dsn` or `uri`), `database`, `collection`, `operation` (`find` or `aggregate`).
+- Optional args:
+  - `connector.profile` (if provided, must be `mongodb`)
+  - `filter`, `projection`, `sort` (for `operation=find`)
+  - `pipeline` (for `operation=aggregate`)
+  - `timeout`, `max_rows`
+- Runtime output envelope: `mongo_response` (`rows`, `fields`, `row_count`, `duration_ms`, `truncated`, `operation`, `timeout_seconds`, `max_rows`).
+- Authoring default: read-only query operations; do not propose write operations.
+
+#### `redis`
+
+- Purpose: execute read-only Redis commands through backend runtime.
+- Core args: connection string (`dsn` or `uri`), `command` (`get`, `mget`, `hgetall`, `lrange`, `zrange`, `smembers`).
+- Optional args:
+  - `connector.profile` (if provided, must be `redis`)
+  - `key`, `keys`, `start`, `stop`, `withscores` (command-specific)
+  - `timeout`, `max_rows`
+- Runtime output envelope: `redis_response` (`rows`, `fields`, `row_count`, `duration_ms`, `truncated`, `command`, `timeout_seconds`, `max_rows`).
+- Authoring default: read-only command set only.
 
 #### `extract`
 
@@ -308,9 +351,16 @@ templates:
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
+- Layout size values (`width` / `height`, where exposed): `auto` | `stretch` | positive number
 
 Do not use legacy enum values.
+
+Color rule:
+- On supported non-chart widgets, `color` overrides `tone`.
+- For charts, use `colors` as the array form of the same semantic color enum.
+- Keep widgets parameter-driven: bind chart datasets through `data_source` and optional metadata through `fields_source`; do not assume fixed backend field paths inside widget configs.
 
 ### Widget Catalog
 
@@ -318,21 +368,27 @@ Do not use legacy enum values.
 
 - `Container`
   - required: `type`, `items`
-  - optional: `spacing`, `align_y`
+  - optional: `spacing`, `align_x`, `align_y`, `height` (`auto` | `stretch` | positive number; default `stretch`)
 
 - `ColumnSet`
   - required: `type`, `columns`
-  - optional: `spacing`, `align_x`
+  - optional: `spacing`, `align_x`, `align_y`, `height` (`auto` | `stretch` | positive number; default `auto`)
 
 - `Column`
   - required: `type`, `items`
-  - optional: `width` (`auto` | `stretch` | positive number), `align_y`, `spacing`
+  - optional: `width` (`auto` | `stretch` | positive number; default `auto`), `height` (`auto` | `stretch` | positive number; default `auto`), `align_x`, `align_y`, `spacing`
+
+Layout sizing behavior:
+- `Container.height` / `ColumnSet.height`: `stretch` fills remaining vertical space; `auto` hugs content; positive number is a vertical flex weight.
+- `Column.width`: `stretch` fills remaining horizontal space; positive number is a horizontal flex weight.
+- `Column.height`: `stretch` fills the parent height; positive number is a fixed pixel height.
+- `align_x` and `align_y` are both valid on layout widgets; for `ColumnSet`, `align_x` is the main axis, while for `Container` / `Column`, `align_y` is the main axis.
 
 #### Data Container
 
 - `List`
   - required: `type`, `data_source`, `item_alias`, `render`
-  - optional: `layout` (`col` | `grid`), `columns` (1..6), `spacing`, `filter`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `pagination`, `page_size`
+  - optional: `layout` (`col` | `grid`), `columns` (1..6), `spacing`, `align_x`, `align_y`, `filter`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `pagination`, `page_size`
 
 Minimal valid `List` snippet (`render` must be a widget array):
 
@@ -349,11 +405,12 @@ Minimal valid `List` snippet (`render` must be a widget array):
 
 - `TextBlock`
   - required: `type`, `text`
-  - optional: `size`, `weight` (`normal` | `medium` | `semibold` | `bold`), `tone`, `align_x`, `wrap`, `max_lines`
+  - optional: `size`, `weight` (`normal` | `medium` | `semibold` | `bold`), `tone`, `color`, `align_x`, `wrap`, `max_lines`
 
 - `FactSet`
   - required: `type`, `facts`
-  - optional: `spacing`
+  - optional: `spacing`, `color`
+  - fact entries support `tone` and `color`; per-fact `color` overrides per-fact `tone`
 
 - `Image`
   - required: `type`, `url`
@@ -361,13 +418,30 @@ Minimal valid `List` snippet (`render` must be a widget array):
 
 - `Badge`
   - required: `type`, `text`
-  - optional: `tone`, `size`
+  - optional: `tone`, `color`, `size`
 
 #### Visualization
 
 - `Progress`
   - required: `type`, `value`
-  - optional: `label`, `style` (`bar` | `ring`), `size`, `tone`, `show_percentage`, `thresholds.warning`, `thresholds.danger`
+  - optional: `label`, `style` (`bar` | `ring`), `size`, `tone`, `color`, `show_percentage`, `thresholds.warning`, `thresholds.danger`
+
+- `Chart.Line` / `Chart.Bar` / `Chart.Area`
+  - required: `type`, `data_source`, `encoding.x.field`, `encoding.y.field`
+  - optional: `fields_source`, `encoding.series.field`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+
+- `Chart.Pie`
+  - required: `type`, `data_source`, `encoding.label.field`, `encoding.value.field`
+  - optional: `fields_source`, `donut` (boolean), `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+
+- `Chart.Table`
+  - required: `type`, `data_source`, `encoding.columns[*].field`
+  - optional: `fields_source`, `encoding.columns[*].title`, `encoding.columns[*].format`, `sort_by`, `sort_order` (`asc` | `desc`), `limit`, `title`, `description`, `legend`, `colors`, `format`, `empty_state`, `size`
+
+Chart color constraints:
+- `colors` only accepts semantic names:
+  `blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`.
+- Do not use raw hex, CSS variables, or library-native color tokens.
 
 #### Actions
 
@@ -377,11 +451,11 @@ Minimal valid `List` snippet (`render` must be a widget array):
 
 - `Action.OpenUrl`
   - required: `type`, `title`, `url`
-  - optional: `size`, `tone`
+  - optional: `size`, `tone`, `color`
 
 - `Action.Copy`
   - required: `type`, `title`, `text`
-  - optional: `size`, `tone`
+  - optional: `size`, `tone`, `color`
 
 ### Expression Rules
 

@@ -39,6 +39,46 @@ _SCHEMA_DDL = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS connection_trust_rules (
+        rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        capability TEXT NOT NULL,
+        scope_type TEXT NOT NULL CHECK(scope_type IN ('source', 'global')),
+        source_id TEXT,
+        target_type TEXT NOT NULL,
+        target_value TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK(decision IN ('allow', 'deny')),
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL,
+        expires_at REAL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        FOREIGN KEY(source_id) REFERENCES stored_sources(source_id) ON DELETE CASCADE,
+        CHECK(
+            (scope_type = 'global' AND source_id IS NULL)
+            OR (scope_type = 'source' AND source_id IS NOT NULL)
+        )
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_connection_trust_rules_identity
+        ON connection_trust_rules(
+            capability,
+            scope_type,
+            COALESCE(source_id, ''),
+            target_type,
+            target_value
+        )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_connection_trust_rules_lookup
+        ON connection_trust_rules(
+            capability,
+            target_type,
+            target_value,
+            scope_type,
+            source_id
+        )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS stored_views (
         view_id TEXT PRIMARY KEY,
         payload_json TEXT NOT NULL,

@@ -1,0 +1,133 @@
+name: "TEST - SQL PostgreSQL Generated Chart Suite"
+description: "PostgreSQL connector test with generated datasets. Validates connection, query runtime, and chart rendering without depending on specific tables."
+flow:
+    - id: collect_postgresql_dsn
+      use: api_key
+      args:
+          label: "PostgreSQL DSN"
+          description: "Paste full DSN. Example: postgresql://user:password@host:5432/db?sslmode=require&channel_binding=require"
+          message: "Provide PostgreSQL DSN for SQL connector testing."
+      secrets:
+          sql_test_pg_dsn: "api_key"
+
+    - id: query_pg_timeseries
+      use: sql
+      args:
+          connector:
+              profile: "postgresql"
+              options:
+                  dialect: "postgres"
+          dsn: "{sql_test_pg_dsn}"
+          query: |
+              WITH day_points AS (
+                SELECT gs AS day_index
+                FROM generate_series(0, 13) AS gs
+              ),
+              services AS (
+                SELECT
+                  service_name,
+                  latency_factor,
+                  request_offset
+                FROM (
+                  VALUES
+                    ('api', 1.00::numeric, 0),
+                    ('worker', 1.08::numeric, 6)
+                ) AS service_seed(service_name, latency_factor, request_offset)
+              )
+              SELECT
+                (CURRENT_DATE - (13 - day_index))::text AS metric_day,
+                services.service_name AS service,
+                ROUND(((120 + day_index * 6.5)::numeric * services.latency_factor), 2)::double precision AS latency_score,
+                (30 + day_index * 3 + services.request_offset)::integer AS request_count
+              FROM day_points
+              CROSS JOIN services
+              ORDER BY metric_day ASC, service ASC
+          timeout: 15
+          max_rows: 300
+      outputs:
+          pg_timeseries_rows: "sql_response.rows"
+          pg_timeseries_fields: "sql_response.fields"
+          pg_timeseries_count: "sql_response.row_count"
+
+    - id: query_pg_mix
+      use: sql
+      args:
+          connector:
+              profile: "postgresql"
+              options:
+                  dialect: "postgres"
+          dsn: "{sql_test_pg_dsn}"
+          query: |
+              SELECT
+                category,
+                volume
+              FROM (
+                VALUES
+                  ('alpha', 42),
+                  ('beta', 28),
+                  ('gamma', 18),
+                  ('delta', 12)
+              ) AS mix(category, volume)
+              ORDER BY volume DESC
+          timeout: 15
+          max_rows: 300
+      outputs:
+          pg_mix_rows: "sql_response.rows"
+          pg_mix_fields: "sql_response.fields"
+          pg_mix_count: "sql_response.row_count"
+
+templates:
+    - id: "sql_postgresql_generated_chart_suite"
+      type: "source_card"
+      ui:
+          title: "SQL PostgreSQL Generated Charts"
+          icon: "SQL"
+      widgets:
+          - type: "Container"
+            spacing: "md"
+            items:
+                - type: "Chart.Line"
+                  data_source: "{pg_timeseries_rows}"
+                  fields_source: "{pg_timeseries_fields}"
+                  legend: true
+                  encoding:
+                      x:
+                          field: "metric_day"
+                      y:
+                          field: "latency_score"
+                      series:
+                          field: "service"
+                - type: "Chart.Area"
+                  data_source: "{pg_timeseries_rows}"
+                  fields_source: "{pg_timeseries_fields}"
+                  legend: true
+                  encoding:
+                      x:
+                          field: "metric_day"
+                      y:
+                          field: "request_count"
+                      series:
+                          field: "service"
+                - type: "Chart.Pie"
+                  data_source: "{pg_mix_rows}"
+                  fields_source: "{pg_mix_fields}"
+                  donut: false
+                  encoding:
+                      label:
+                          field: "category"
+                      value:
+                          field: "volume"
+                - type: "Chart.Table"
+                  data_source: "{pg_mix_rows}"
+                  fields_source: "{pg_mix_fields}"
+                  encoding:
+                      columns:
+                          - field: "category"
+                            title: "Category"
+                            format: "text"
+                          - field: "volume"
+                            title: "Volume"
+                            format: "number"
+                  sort_by: "volume"
+                  sort_order: "desc"
+                  limit: 10

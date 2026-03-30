@@ -24,6 +24,15 @@ import ipaddress
 from urllib.parse import urlsplit
 from typing import Dict, Any, TYPE_CHECKING
 
+from core.network_trust.models import (
+    ClassifiedNetworkTarget,
+    NetworkTargetClass,
+    NetworkTargetDeniedError,
+    NetworkTargetInvalidError,
+    NetworkTrustRequiredError,
+    TrustDecision,
+)
+
 if TYPE_CHECKING:
     from core.config_loader import StepConfig, SourceConfig
     from core.executor import Executor
@@ -62,17 +71,68 @@ def _is_private_target_host(host: str) -> bool:
     return False
 
 
-def _validate_http_target_url(url: str) -> None:
+def _build_url_preview(url: str) -> str:
+    try:
+        parsed = urlsplit(url or "")
+    except Exception:
+        return ""
+    scheme = (parsed.scheme or "").strip().lower()
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        return ""
+    try:
+        parsed_port = parsed.port
+    except ValueError:
+        parsed_port = None
+    if parsed_port is not None:
+        netloc = f"{host}:{parsed_port}"
+    else:
+        netloc = host
+    path = parsed.path or "/"
+    return f"{scheme}://{netloc}{path}"
+
+
+def _classify_http_target_url(url: str) -> ClassifiedNetworkTarget:
     parsed = urlsplit(url or "")
     scheme = (parsed.scheme or "").strip().lower()
     host = _sanitize_url_host(url)
-
     if scheme not in _ALLOWED_HTTP_SCHEMES:
-        raise RuntimeError(f"http_target_blocked_scheme:{host}")
+        raise ValueError("unsupported_http_scheme")
     if not host:
-        raise RuntimeError("http_target_blocked_scheme:")
-    if _is_private_target_host(host):
-        raise RuntimeError(f"http_target_blocked_private:{host}")
+        raise ValueError("missing_http_host")
+
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("invalid_http_port") from error
+
+    target_type = "host_port" if port is not None else "host"
+    target_value = f"{host}:{port}" if port is not None else host
+
+    if host == "localhost":
+        target_class = NetworkTargetClass.LOOPBACK
+    else:
+        try:
+            target_ip = ipaddress.ip_address(host)
+        except ValueError:
+            target_class = NetworkTargetClass.PUBLIC
+        else:
+            if target_ip.is_loopback:
+                target_class = NetworkTargetClass.LOOPBACK
+            elif target_ip.is_link_local or target_ip.is_private:
+                target_class = NetworkTargetClass.PRIVATE
+            else:
+                target_class = NetworkTargetClass.PUBLIC
+
+    return ClassifiedNetworkTarget(
+        scheme=scheme,
+        host=host,
+        port=port,
+        target_type=target_type,
+        target_value=target_value,
+        target_class=target_class,
+        url=url,
+    )
 
 
 async def execute_http_step(
@@ -97,7 +157,60 @@ async def execute_http_step(
     backoff_seconds = float(args.get("retry_backoff_seconds", 0.5))
     retries = max(0, retries)
     backoff_seconds = max(0.0, backoff_seconds)
-    _validate_http_target_url(str(url or ""))
+    url_str = str(url or "")
+    method_str = str(method).upper()
+    try:
+        classified_target = _classify_http_target_url(url_str)
+    except ValueError:
+        raise NetworkTargetInvalidError(
+            source_id=source.id,
+            step_id=step.id,
+            data={
+                "capability": "http",
+                "method": method_str,
+                "url_preview": _build_url_preview(url_str),
+            },
+        )
+
+    if classified_target.target_class in {NetworkTargetClass.PRIVATE, NetworkTargetClass.LOOPBACK}:
+        trust_policy = getattr(executor, "_network_trust_policy", None)
+        if trust_policy is not None and hasattr(trust_policy, "evaluate"):
+            resolution = trust_policy.evaluate(
+                capability="http",
+                source_id=source.id,
+                target_type=classified_target.target_type,
+                target_value=classified_target.target_value,
+            )
+            decision = resolution.decision
+            decision_source = resolution.reason
+        else:
+            decision = TrustDecision.PROMPT
+            decision_source = "default"
+
+        interaction_data = {
+            "confirm_kind": "network_trust",
+            "capability": "http",
+            "method": method_str,
+            "url_preview": _build_url_preview(url_str),
+            "target_class": classified_target.target_class.value,
+            "target_type": classified_target.target_type,
+            "target_value": classified_target.target_value,
+            "target_key": classified_target.target_value,
+            "decision_source": decision_source,
+            "available_scopes": ["source", "global"],
+        }
+        if decision == TrustDecision.PROMPT:
+            raise NetworkTrustRequiredError(
+                source_id=source.id,
+                step_id=step.id,
+                data=interaction_data,
+            )
+        if decision == TrustDecision.DENY:
+            raise NetworkTargetDeniedError(
+                source_id=source.id,
+                step_id=step.id,
+                data=interaction_data,
+            )
 
     proxy_url = executor._get_proxy_url()
     client_kwargs: Dict[str, Any] = {

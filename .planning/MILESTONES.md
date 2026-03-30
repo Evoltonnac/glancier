@@ -1,5 +1,23 @@
 # Milestones
 
+## v1.2 SQL Data Access and Visualization Expansion (Shipped: 2026-03-29)
+
+**Phases completed:** 4 phases (07-10), 11 plans, 3 tasks
+
+**Key accomplishments:**
+- **SQL Step Implementation**: Added connection patterns for SQL queries, enabling integrations to fetch data from external databases like SQLite and PostgreSQL without backend code changes.
+- **Normalized Data Contracts**: Established a unified envelope for SQL responses, including metadata for fields to drive frontend rendering.
+- **Bento Chart Widgets**: Shipped a set of chart-oriented Bento widgets (Area, Bar, Line, Pie, Table) that consume normalized SQL data.
+- **Risk-Operation Trust Architecture**: Expanded the trust-gating system to protect against high-risk database operations and private network access.
+- **Metadata-Driven UI**: Resolved gaps in chart field mapping by ensuring frontend validators consume backend-emitted field metadata (CHART-06, CHART-07).
+- **Cross-Phase E2E Stability**: Verified the full data flow from SQL execution to interactive chart rendering with proper loading and error states.
+
+**Known gaps accepted at completion:**
+- Phase 11 (Authoring Usability and Diagnostics Hardening) was removed from v1.2 scope and deferred to future work.
+- Requirement UX-01 to UX-04 were dropped from this milestone cycle.
+
+---
+
 ## v1.1 Security and Stability Hardening (Shipped: 2026-03-23)
 
 **Phases completed:** 4 phases, 16 plans, 6 tasks

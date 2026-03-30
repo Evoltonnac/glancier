@@ -1,87 +1,85 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Glanceus",
-  "version": "1.1.2",
-  "identifier": "com.glanceus.app",
-  "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "Glanceus",
-        "width": 1200,
-        "height": 800,
-        "resizable": true,
-        "fullscreen": false,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
-      }
-    ],
-    "security": {
-      "csp": "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; frame-src 'none'; media-src 'none'; worker-src 'self' blob: asset:;",
-      "dangerousDisableAssetCspModification": false,
-      "freezePrototype": false
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "createUpdaterArtifacts": true,
-    "resources": [
-      "binaries"
-    ],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "windows": {
-      "nsis": {
-        "startMenuFolder": "Glanceus",
-        "installerIcon": "icons/icon.ico",
-        "displayLanguageSelector": false,
-        "installMode": "currentUser"
-      }
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "Glanceus",
+    "version": "1.2.0",
+    "identifier": "com.glanceus.app",
+    "build": {
+        "frontendDist": "../dist",
+        "devUrl": "http://localhost:3000",
+        "beforeDevCommand": "npm run dev",
+        "beforeBuildCommand": "npm run build"
     },
-    "macOS": {
-      "bundleVersion": "1.1.2",
-      "minimumSystemVersion": "11.0",
-      "signingIdentity": "-",
-      "dmg": {
-        "background": "icons/dmg-background.png",
-        "windowSize": {
-          "width": 800,
-          "height": 510
-        },
-        "appPosition": {
-          "x": 195,
-          "y": 253
-        },
-        "applicationFolderPosition": {
-          "x": 610,
-          "y": 253
+    "app": {
+        "windows": [
+            {
+                "title": "Glanceus",
+                "width": 1200,
+                "height": 800,
+                "resizable": true,
+                "fullscreen": false,
+                "titleBarStyle": "Overlay",
+                "hiddenTitle": true
+            }
+        ],
+        "security": {
+            "csp": "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; frame-src 'none'; media-src 'none'; worker-src 'self' blob: asset:;",
+            "dangerousDisableAssetCspModification": false,
+            "freezePrototype": false
         }
-      }
-    }
-  },
-  "plugins": {
-    "updater": {
-      "active": true,
-      "dialog": false,
-      "endpoints": [
-        "https://github.com/Evoltonnac/glanceus/releases/latest/download/latest.json"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzMzE4N0QyMzQzQkIwOEMKUldTTXNEczAwb2N4MHgvOTVCUXRsZ3MyaTM2cXpKK0lNbG5HMzJXWDRFbXhpMmptL2grRUVIUXoK",
-      "key": "gen/updater/tauri-update.key"
     },
-    "shell": {
-      "open": "^https?://"
+    "bundle": {
+        "active": true,
+        "targets": "all",
+        "createUpdaterArtifacts": true,
+        "resources": ["binaries"],
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico"
+        ],
+        "windows": {
+            "nsis": {
+                "startMenuFolder": "Glanceus",
+                "installerIcon": "icons/icon.ico",
+                "displayLanguageSelector": false,
+                "installMode": "currentUser"
+            }
+        },
+        "macOS": {
+            "bundleVersion": "1.2.0",
+            "minimumSystemVersion": "11.0",
+            "signingIdentity": "-",
+            "dmg": {
+                "background": "icons/dmg-background.png",
+                "windowSize": {
+                    "width": 800,
+                    "height": 510
+                },
+                "appPosition": {
+                    "x": 195,
+                    "y": 253
+                },
+                "applicationFolderPosition": {
+                    "x": 610,
+                    "y": 253
+                }
+            }
+        }
+    },
+    "plugins": {
+        "updater": {
+            "active": true,
+            "dialog": false,
+            "endpoints": [
+                "https://github.com/Evoltonnac/glanceus/releases/latest/download/latest.json"
+            ],
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzMzE4N0QyMzQzQkIwOEMKUldTTXNEczAwb2N4MHgvOTVCUXRsZ3MyaTM2cXpKK0lNbG5HMzJXWDRFbXhpMmptL2grRUVIUXoK",
+            "key": "gen/updater/tauri-update.key"
+        },
+        "shell": {
+            "open": "^https?://"
+        }
     }
-  }
 }

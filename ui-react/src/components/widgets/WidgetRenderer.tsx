@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { memo, useEffect, useState } from "react";
+import { useI18n } from "../../i18n";
 import { evaluateTemplateExpression } from "../../lib/templateExpression";
 import { resolveWidgetParams } from "./shared/widgetParamResolver";
+import { DataWidgetEmptyState } from "./shared/DataWidgetEmptyState";
 
 // Import all widget schemas
 import { ContainerSchema } from "./layouts/Container";
@@ -13,6 +15,18 @@ import { FactSetSchema } from "./elements/FactSet";
 import { ImageSchema } from "./elements/Image";
 import { BadgeSchema } from "./elements/Badge";
 import { ProgressSchema } from "./visualizations/Progress";
+import {
+    ChartLineSchema,
+    ChartBarSchema,
+    ChartAreaSchema,
+    ChartPieSchema,
+    ChartTableSchema,
+    RuntimeChartLineSchema,
+    RuntimeChartBarSchema,
+    RuntimeChartAreaSchema,
+    RuntimeChartPieSchema,
+    RuntimeChartTableSchema,
+} from "./shared/chartSchemas";
 import { ActionSetSchema } from "./actions/ActionSet";
 import { ActionOpenUrlSchema } from "./actions/ActionOpenUrl";
 import { ActionCopySchema } from "./actions/ActionCopy";
@@ -27,6 +41,11 @@ import { FactSet } from "./elements/FactSet";
 import { Image } from "./elements/Image";
 import { Badge } from "./elements/Badge";
 import { Progress } from "./visualizations/Progress";
+import { ChartLine } from "./charts/ChartLine";
+import { ChartBar } from "./charts/ChartBar";
+import { ChartArea } from "./charts/ChartArea";
+import { ChartPie } from "./charts/ChartPie";
+import { ChartTable } from "./charts/ChartTable";
 import { ActionSet } from "./actions/ActionSet";
 import { ActionOpenUrl } from "./actions/ActionOpenUrl";
 import { ActionCopy } from "./actions/ActionCopy";
@@ -39,11 +58,24 @@ import { ActionCopy } from "./actions/ActionCopy";
  */
 function createWidgetSchema(
     listRenderSchemaFactory: (self: z.ZodTypeAny) => z.ZodTypeAny,
+    chartSchemaSet: {
+        line: z.ZodTypeAny;
+        bar: z.ZodTypeAny;
+        area: z.ZodTypeAny;
+        pie: z.ZodTypeAny;
+        table: z.ZodTypeAny;
+    } = {
+        line: ChartLineSchema,
+        bar: ChartBarSchema,
+        area: ChartAreaSchema,
+        pie: ChartPieSchema,
+        table: ChartTableSchema,
+    },
 ): z.ZodType<any> {
     let selfSchema: z.ZodType<any>;
 
-    selfSchema = z.lazy(() =>
-        z.discriminatedUnion("type", [
+    selfSchema = z.lazy(() => {
+        const widgetSchemas = [
             // Layouts
             ContainerSchema.extend({
                 items: z.array(selfSchema),
@@ -66,14 +98,22 @@ function createWidgetSchema(
             BadgeSchema,
             // Visualizations
             ProgressSchema,
+            chartSchemaSet.line,
+            chartSchemaSet.bar,
+            chartSchemaSet.area,
+            chartSchemaSet.pie,
+            chartSchemaSet.table,
             // Actions
             ActionSetSchema.extend({
-                actions: z.array(z.union([ActionOpenUrlSchema, ActionCopySchema])),
+                actions: z.array(
+                    z.union([ActionOpenUrlSchema, ActionCopySchema]),
+                ),
             }),
             ActionOpenUrlSchema,
             ActionCopySchema,
-        ]),
-    );
+        ];
+        return z.discriminatedUnion("type", widgetSchemas as any);
+    });
 
     return selfSchema;
 }
@@ -83,6 +123,13 @@ export const WidgetSchema = createWidgetSchema((self) => z.array(self));
 const RuntimeWidgetSchema = createWidgetSchema(
     // Defer List.render validation until each item is rendered with item-specific data.
     () => z.array(z.any()),
+    {
+        line: RuntimeChartLineSchema,
+        bar: RuntimeChartBarSchema,
+        area: RuntimeChartAreaSchema,
+        pie: RuntimeChartPieSchema,
+        table: RuntimeChartTableSchema,
+    },
 );
 
 export type Widget = z.infer<typeof WidgetSchema>;
@@ -115,8 +162,7 @@ function formatIssuePath(path: readonly PropertyKey[]): string {
                     : `.${segment.toString()}`;
             }
             return index === 0 ? segment : `.${segment}`;
-        },
-        )
+        })
         .join("");
 }
 
@@ -132,10 +178,13 @@ interface ListWidgetRendererProps {
 }
 
 function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
+    const { t } = useI18n();
     const [currentPage, setCurrentPage] = useState(1);
 
     // Extract array data from inline array
-    const sourceItems = Array.isArray(widget.data_source) ? widget.data_source : [];
+    const sourceItems = Array.isArray(widget.data_source)
+        ? widget.data_source
+        : [];
 
     let processedData = [...sourceItems];
 
@@ -191,13 +240,19 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
           )
         : processedData;
 
+    if (processedData.length === 0) {
+        return <DataWidgetEmptyState kind="list" />;
+    }
+
     return (
         <div className="flex flex-col w-full flex-1 min-h-0 qb-gap-4">
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                 <List
                     layout={widget.layout}
                     columns={widget.columns}
                     spacing={widget.spacing}
+                    align_x={widget.align_x}
+                    align_y={widget.align_y}
                 >
                     {pageData.map((item, index) => {
                         // Create item-specific data context
@@ -213,7 +268,7 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
                                         renderWidget: Widget,
                                         renderIndex: number,
                                     ) => (
-                                        <WidgetRendererImpl
+                                        <WidgetRenderer
                                             key={renderIndex}
                                             widget={renderWidget}
                                             data={itemData}
@@ -236,10 +291,13 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
                         disabled={currentPage === 1}
                         className="rounded border border-border px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Prev
+                        {t("widget.pagination.prev")}
                     </button>
                     <span className="text-muted-foreground">
-                        Page {currentPage} / {totalPages}
+                        {t("widget.pagination.page", {
+                            current: currentPage,
+                            total: totalPages,
+                        })}
                     </span>
                     <button
                         type="button"
@@ -251,7 +309,7 @@ function ListWidgetRenderer({ widget, data }: ListWidgetRendererProps) {
                         disabled={currentPage === totalPages}
                         className="rounded border border-border px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Next
+                        {t("widget.pagination.next")}
                     </button>
                 </div>
             )}
@@ -284,7 +342,8 @@ function WidgetRendererImpl({
         const primaryPath = primaryIssue
             ? formatIssuePath(primaryIssue.path)
             : "(root)";
-        const primaryMessage = primaryIssue?.message ?? "Unknown validation error";
+        const primaryMessage =
+            primaryIssue?.message ?? "Unknown validation error";
 
         console.error("Widget validation failed:", parseResult.error);
         console.error(
@@ -317,9 +376,11 @@ function WidgetRendererImpl({
                 <Container
                     spacing={validWidget.spacing}
                     align_y={validWidget.align_y}
+                    align_x={validWidget.align_x}
+                    height={validWidget.height}
                 >
                     {validWidget.items.map((item: Widget, index: number) => (
-                        <WidgetRendererImpl
+                        <WidgetRenderer
                             key={index}
                             widget={item}
                             data={data}
@@ -334,17 +395,21 @@ function WidgetRendererImpl({
                 <ColumnSet
                     spacing={validWidget.spacing}
                     align_x={validWidget.align_x}
+                    align_y={validWidget.align_y}
+                    height={validWidget.height}
                 >
                     {validWidget.columns.map((column: any, index: number) => (
                         <Column
                             key={index}
                             width={column.width}
+                            height={column.height}
                             align_y={column.align_y}
                             spacing={column.spacing}
+                            align_x={column.align_x}
                         >
                             {column.items.map(
                                 (item: Widget, itemIndex: number) => (
-                                    <WidgetRendererImpl
+                                    <WidgetRenderer
                                         key={itemIndex}
                                         widget={item}
                                         data={data}
@@ -375,6 +440,21 @@ function WidgetRendererImpl({
         case "Progress":
             return <Progress {...validWidget} />;
 
+        case "Chart.Line":
+            return <ChartLine widget={validWidget} data={data} />;
+
+        case "Chart.Bar":
+            return <ChartBar widget={validWidget} data={data} />;
+
+        case "Chart.Area":
+            return <ChartArea widget={validWidget} data={data} />;
+
+        case "Chart.Pie":
+            return <ChartPie widget={validWidget} data={data} />;
+
+        case "Chart.Table":
+            return <ChartTable widget={validWidget} data={data} />;
+
         case "ActionSet":
             return (
                 <ActionSet
@@ -382,7 +462,7 @@ function WidgetRendererImpl({
                     align_x={validWidget.align_x}
                 >
                     {validWidget.actions.map((action: any, index: number) => (
-                        <WidgetRendererImpl
+                        <WidgetRenderer
                             key={index}
                             widget={action}
                             data={data}
@@ -407,4 +487,77 @@ function WidgetRendererImpl({
     }
 }
 
-export const WidgetRenderer = memo(WidgetRendererImpl);
+interface WidgetLayoutMeta {
+    layoutType: "structural" | "content" | "container";
+    minRows?: number;
+    weight?: number;
+}
+
+const WIDGET_LAYOUT_REGISTRY: Record<string, WidgetLayoutMeta> = {
+    // Container types: flex: 1 0 auto to fill parent and prevent compression
+    Container: { layoutType: "container" },
+    ColumnSet: { layoutType: "container" },
+    // Structural types: intrinsic size, no grow
+    TextBlock: { layoutType: "structural" },
+    FactSet: { layoutType: "structural" },
+    Image: { layoutType: "structural" },
+    Badge: { layoutType: "structural" },
+    Progress: { layoutType: "structural" },
+    ActionSet: { layoutType: "structural" },
+    "Action.OpenUrl": { layoutType: "structural" },
+    "Action.Copy": { layoutType: "structural" },
+    // Content types: flex-grow with rigid min-height baseline
+    List: { layoutType: "content", minRows: 2, weight: 1 },
+    "Chart.Line": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Bar": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Area": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Pie": { layoutType: "content", minRows: 3, weight: 2 },
+    "Chart.Table": { layoutType: "content", minRows: 3, weight: 2 },
+};
+
+function getWidgetLayoutMeta(type: string): WidgetLayoutMeta {
+    return WIDGET_LAYOUT_REGISTRY[type] || { layoutType: "structural" };
+}
+
+function WidgetWrapper({
+    widget,
+    data,
+    skipTemplateResolution = false,
+}: WidgetRendererProps) {
+    const type = getWidgetTypeLabel(widget);
+    const meta = getWidgetLayoutMeta(type);
+
+    // Container types (Container, ColumnSet) are layout wrappers themselves —
+    // no outer shell needed, they handle flex: 1 0 auto internally.
+    if (meta.layoutType === "container") {
+        return (
+            <WidgetRendererImpl
+                widget={widget}
+                data={data}
+                skipTemplateResolution={skipTemplateResolution}
+            />
+        );
+    }
+
+    const style =
+        meta.layoutType === "content"
+            ? ({
+                  "--widget-weight": meta.weight || 1,
+                  "--widget-min-height-rows": meta.minRows || 1,
+              } as React.CSSProperties)
+            : undefined;
+
+    const className = `sdui-widget-shell sdui-widget-shell--${meta.layoutType} flex flex-col overflow-hidden`;
+
+    return (
+        <div className={className} style={style}>
+            <WidgetRendererImpl
+                widget={widget}
+                data={data}
+                skipTemplateResolution={skipTemplateResolution}
+            />
+        </div>
+    );
+}
+
+export const WidgetRenderer = memo(WidgetWrapper);

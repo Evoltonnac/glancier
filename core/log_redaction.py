@@ -15,9 +15,15 @@ SENSITIVE_LOG_FIELDS = {
     "refresh_token",
     "secret",
     "client_secret",
+    "password",
+    "passwd",
+    "pwd",
     "code",
     "device_code",
 }
+_URL_CREDENTIALS_PATTERN = re.compile(
+    r"(?i)\b([a-z][a-z0-9+\-.]*://[^/\s:@]+:)([^@/\s]+)(@)"
+)
 
 
 def redact_sensitive_fields(
@@ -54,8 +60,12 @@ def sanitize_log_reason(reason: Any, *, max_length: int = 240) -> str:
     if not text:
         return "unknown_error"
 
+    text = _URL_CREDENTIALS_PATTERN.sub(rf"\1{REDACTED_MARKER}\3", text)
+
     for field in SENSITIVE_LOG_FIELDS:
-        pattern = re.compile(rf"(?i)\b({re.escape(field)})\b\s*[:=]\s*([^\s,;]+)")
+        pattern = re.compile(
+            rf"(?i)\b({re.escape(field)})\b\s*[:=]\s*([\"']?)([^\s,;\"']+)\2"
+        )
         text = pattern.sub(rf"\1={REDACTED_MARKER}", text)
 
     if len(text) > max_length:

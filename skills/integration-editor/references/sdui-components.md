@@ -14,9 +14,20 @@ Use only these values:
 - `spacing`: `none` | `sm` | `md` | `lg`
 - `size`: `sm` | `md` | `lg` | `xl`
 - `tone`: `default` | `muted` | `info` | `success` | `warning` | `danger`
+- `color`: `blue` | `orange` | `green` | `violet` | `red` | `cyan` | `amber` | `pink` | `teal` | `gold` | `slate` | `yellow`
 - `align_x` / `align_y`: `start` | `center` | `end`
+- Layout size values (`width` / `height`, where exposed): `auto` | `stretch` | positive number
 
 Avoid legacy values such as `small/default/large` or old alignment aliases.
+
+Color rule:
+- On supported non-chart widgets, `color` overrides `tone`.
+- Charts keep `colors` as the array form of the same semantic color enum.
+
+Layout size rule:
+- Shared value domain is `auto` | `stretch` | positive number, but numeric meaning is field-specific.
+- `Container.height` / `ColumnSet.height` and `Column.width` use flex-weight semantics for numeric values.
+- `Column.height` uses fixed pixel semantics for numeric values.
 
 ## 3. Widget Catalog
 
@@ -29,7 +40,9 @@ Required:
 
 Optional:
 - `spacing`
+- `align_x`
 - `align_y`
+- `height`: `auto` | `stretch` | positive number (default `stretch`)
 
 #### `ColumnSet`
 Required:
@@ -39,6 +52,8 @@ Required:
 Optional:
 - `spacing`
 - `align_x`
+- `align_y`
+- `height`: `auto` | `stretch` | positive number (default `auto`)
 
 #### `Column`
 Required:
@@ -47,8 +62,16 @@ Required:
 
 Optional:
 - `width`: `auto` | `stretch` | positive number
+- `height`: `auto` | `stretch` | positive number
+- `align_x`
 - `align_y`
 - `spacing`
+
+Layout sizing behavior:
+- `Container.height` / `ColumnSet.height`: `stretch` fills remaining vertical space; `auto` hugs content; positive number is a vertical flex weight.
+- `Column.width`: `stretch` fills remaining horizontal space; positive number is a horizontal flex weight.
+- `Column.height`: `stretch` fills the parent height; positive number is a fixed pixel height.
+- `align_x` and `align_y` are both valid on layout widgets; for `ColumnSet`, `align_x` is the main axis, while for `Container` / `Column`, `align_y` is the main axis.
 
 ### 3.2 Data Container
 
@@ -74,6 +97,8 @@ Optional:
 - `layout`: `col` | `grid`
 - `columns`: 1..6
 - `spacing`
+- `align_x`
+- `align_y`
 - `filter`: expression string
 - `sort_by`: string path
 - `sort_order`: `asc` | `desc`
@@ -92,6 +117,7 @@ Optional:
 - `size`
 - `weight`: `normal` | `medium` | `semibold` | `bold`
 - `tone`
+- `color`
 - `align_x`
 - `wrap`: boolean
 - `max_lines`: number
@@ -99,10 +125,11 @@ Optional:
 #### `FactSet`
 Required:
 - `type: "FactSet"`
-- `facts`: array of `{ label, value, tone? }`
+- `facts`: array of `{ label, value, tone?, color? }`
 
 Optional:
 - `spacing`
+- `color`
 
 #### `Image`
 Required:
@@ -120,6 +147,7 @@ Required:
 
 Optional:
 - `tone`
+- `color`
 - `size`
 
 ### 3.4 Visualization
@@ -134,9 +162,73 @@ Optional:
 - `style`: `bar` | `ring`
 - `size`
 - `tone`
+- `color`
 - `show_percentage`: boolean
 - `thresholds.warning`
 - `thresholds.danger`
+
+#### `Chart.Line` / `Chart.Bar` / `Chart.Area`
+Required:
+- `type`: one of `Chart.Line`, `Chart.Bar`, `Chart.Area`
+- `data_source`
+- `encoding.x.field`
+- `encoding.y.field`
+
+Optional:
+- `fields_source`
+- `encoding.series.field`
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+- `size`
+
+#### `Chart.Pie`
+Required:
+- `type: "Chart.Pie"`
+- `data_source`
+- `encoding.label.field`
+- `encoding.value.field`
+
+Optional:
+- `fields_source`
+- `donut`: boolean
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+- `size`
+
+#### `Chart.Table`
+Required:
+- `type: "Chart.Table"`
+- `data_source`
+- `encoding.columns[*].field` (at least one column)
+
+Optional:
+- `fields_source`
+- `encoding.columns[*].title`
+- `encoding.columns[*].format`
+- `sort_by`
+- `sort_order`: `asc` | `desc`
+- `limit`: positive number
+- `title`
+- `description`
+- `legend`
+- `colors`
+- `format`
+- `empty_state`
+- `size`
+
+Chart color contract:
+- `colors` must use semantic names only:
+  `blue`, `orange`, `green`, `violet`, `red`, `cyan`, `amber`, `pink`, `teal`, `gold`, `slate`, `yellow`.
+- Do not use raw hex/CSS variable/native library color values.
+- Keep chart configs parameter-driven: bind dataset via `data_source` and metadata via optional `fields_source`; do not encode fixed backend response paths as hidden assumptions.
 
 ### 3.5 Actions
 
@@ -158,6 +250,7 @@ Required:
 Optional:
 - `size`
 - `tone`
+- `color`
 
 #### `Action.Copy`
 Required:
@@ -168,6 +261,7 @@ Required:
 Optional:
 - `size`
 - `tone`
+- `color`
 
 ## 4. Template Expression Rules
 
@@ -215,5 +309,6 @@ Do:
 
 Do not:
 - Use unsupported legacy widget names (`hero_metric`, `progress_bar`, `key_value_grid`, etc.).
+- Use legacy chart aliases such as `line_chart` or `bar_chart`.
 - Put auth/fetch orchestration logic into templates.
 - Rely on undocumented widget properties.

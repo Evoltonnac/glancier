@@ -14,16 +14,15 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { useContext } from "react";
+import { useI18n } from "../i18n";
 
 interface RouteInterceptorProps {
     when: boolean;
     message?: string;
 }
 
-export function RouteInterceptor({
-    when,
-    message = "You have unsaved changes. Are you sure you want to leave?",
-}: RouteInterceptorProps) {
+export function RouteInterceptor({ when, message }: RouteInterceptorProps) {
+    const { t } = useI18n();
     const [showConfirm, setShowConfirm] = useState(false);
     const [pendingLocation, setPendingLocation] = useState<string | null>(null);
     const location = useLocation();
@@ -81,16 +80,18 @@ export function RouteInterceptor({
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             if (when) {
+                const displayMessage =
+                    message ?? t("common.unsavedChanges.description");
                 e.preventDefault();
-                e.returnValue = message;
-                return message;
+                e.returnValue = displayMessage;
+                return displayMessage;
             }
         };
 
         window.addEventListener("beforeunload", handleBeforeUnload);
         return () =>
             window.removeEventListener("beforeunload", handleBeforeUnload);
-    }, [when, message]);
+    }, [when, message, t]);
 
     const handleStay = useCallback(() => {
         setShowConfirm(false);
@@ -110,15 +111,19 @@ export function RouteInterceptor({
         <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Unsaved Changes</DialogTitle>
-                    <DialogDescription>{message}</DialogDescription>
+                    <DialogTitle>
+                        {t("common.unsavedChanges.title")}
+                    </DialogTitle>
+                    <DialogDescription>
+                        {message ?? t("common.unsavedChanges.description")}
+                    </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={handleStay}>
-                        Stay
+                        {t("common.unsavedChanges.stay")}
                     </Button>
                     <Button variant="destructive" onClick={handleLeave}>
-                        Leave
+                        {t("common.unsavedChanges.leave")}
                     </Button>
                 </DialogFooter>
             </DialogContent>

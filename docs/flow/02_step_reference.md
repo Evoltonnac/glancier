@@ -22,7 +22,7 @@ Field semantics:
 | Field | Required | Type | Meaning |
 | --- | --- | --- | --- |
 | `id` | Yes | `string` | Unique step identifier in the flow. |
-| `use` | Yes | `StepType` | One of: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `log`, `webview`. |
+| `use` | Yes | `StepType` | One of: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, `sql`, `mongodb`, `redis`, `log`, `webview`. |
 | `run` | No | `string \| null` | Reserved field (not currently used by executor logic). |
 | `args` | No | `object` | Step-specific input arguments after `{var}` substitution. |
 | `outputs` | No | `map<string,string>` | Persist/display mappings (`target: source_path`). |
@@ -49,13 +49,17 @@ Blocking (can suspend flow and request interaction):
 3. `oauth`
 4. `curl`
 5. `webview`
+6. `sql` (only for high-risk SQL operations when trust decision is `prompt`)
 
 Non-blocking runtime steps:
 
 1. `http`
 2. `extract`
 3. `script`
-4. `log` (schema-defined; see status note below)
+4. `sql` (normal query path when trust check is already resolved)
+5. `mongodb`
+6. `redis`
+7. `log` (schema-defined; see status note below)
 
 ## 3. Step Catalog
 
@@ -215,6 +219,25 @@ Runtime output envelope:
 - `raw_data` (raw response text)
 - `headers` (response headers)
 
+Runtime trust-gate behavior:
+- URL scheme must be `http` or `https`; invalid target emits `runtime.network_target_invalid`.
+- Public targets continue as normal.
+- Private/loopback targets are evaluated by trust policy:
+  - No matching trust decision -> suspend with interaction (`confirm`) and `runtime.network_trust_required`.
+  - Explicit deny -> fail with `runtime.network_target_denied`.
+  - Allow (persisted or one-time) -> request proceeds.
+
+Trust interaction submit contract (`/api/sources/{source_id}/interact`):
+
+```json
+{
+  "type": "confirm",
+  "decision": "allow_once | allow_always | deny",
+  "scope": "source | global",
+  "target_key": "<normalized-host-or-host_port>"
+}
+```
+
 Typical mapping:
 
 ```yaml
@@ -285,6 +308,142 @@ Typical mapping:
     usage_signal: "signal"
 ```
 
+### `sql`
+
+Purpose:
+- Execute a SQL query through the backend-owned connector runtime and return deterministic query output envelopes.
+
+Required `args`:
+- `connector.profile`
+- connection string: `dsn` or `uri` (secret-backed)
+- `query`
+
+Optional `args`:
+- `connector.options.dialect` (used for SQLGlot parser dialect hints)
+- `timeout` (seconds)
+- `max_rows`
+
+Runtime contract:
+- Final SQL text is classified with SQLGlot AST before execution.
+- Connector profile runtime support (current): `sqlite`, `postgresql`, `mysql`.
+- High-risk or non-query statements require trust policy evaluation (`capability=sql`):
+  - no trust decision -> suspend with `runtime.sql_risk_operation_requires_trust`
+  - explicit deny -> fail with `runtime.sql_risk_operation_denied`
+  - allow -> execute
+- For timeout and row-limit guardrails, precedence is:
+  1. source override (resolved `args.timeout` / `args.max_rows`, including source-variable substitution)
+  2. system defaults (`sql_default_timeout_seconds`, `sql_default_max_rows`)
+  3. step built-ins (`30s`, `500 rows`)
+- Deterministic runtime SQL failure codes:
+  - `runtime.sql_invalid_contract`
+  - `runtime.sql_connect_failed`
+  - `runtime.sql_auth_failed`
+  - `runtime.sql_query_failed`
+  - `runtime.sql_timeout`
+- `max_rows` is a response-shaping guardrail: over-limit rows are truncated into a successful response (`sql_response.truncated=true`) instead of raising a runtime failure.
+
+Runtime output envelope:
+- Canonical keys:
+  - `sql_response.rows`
+  - `sql_response.fields`
+  - `sql_response.row_count`
+  - `sql_response.duration_ms`
+  - `sql_response.truncated`
+  - `sql_response.statement_count`
+  - `sql_response.statement_types`
+  - `sql_response.is_high_risk`
+  - `sql_response.risk_reasons`
+  - `sql_response.timeout_seconds`
+  - `sql_response.max_rows`
+- Compatibility aliases:
+  - `sql_response.columns` (derived from `sql_response.fields[*].name`)
+  - `sql_response.execution_ms` (alias of `sql_response.duration_ms`)
+
+Typical mapping:
+
+```yaml
+- id: query_usage
+  use: sql
+  args:
+    connector:
+      profile: sqlite
+      options:
+        dialect: sqlite
+    dsn: "{sqlite_dsn_or_path}"
+    query: "SELECT value FROM metrics ORDER BY id"
+    timeout: "{sql_timeout_override}"
+    max_rows: "{sql_max_rows_override}"
+  outputs:
+    sql_rows: "sql_response.rows"
+```
+
+### `mongodb`
+
+Purpose:
+- Execute read-only MongoDB operations through backend runtime (`find` / `aggregate`) and return deterministic document envelopes.
+
+Required `args`:
+- connection string: `uri` or `dsn` (secret-backed)
+- `database`
+- `collection`
+- `operation` (`find` or `aggregate`)
+
+Optional `args`:
+- `connector.profile` (when provided, must be `mongodb`)
+- `filter`, `projection`, `sort` (for `operation=find`)
+- `pipeline` (for `operation=aggregate`)
+- `timeout` (seconds)
+- `max_rows`
+
+Deterministic runtime MongoDB failure codes:
+- `runtime.mongo_invalid_contract`
+- `runtime.mongo_connect_failed`
+- `runtime.mongo_auth_failed`
+- `runtime.mongo_query_failed`
+- `runtime.mongo_timeout`
+
+Runtime output envelope:
+- `mongo_response.rows`
+- `mongo_response.fields`
+- `mongo_response.row_count`
+- `mongo_response.duration_ms`
+- `mongo_response.truncated`
+- `mongo_response.operation`
+- `mongo_response.timeout_seconds`
+- `mongo_response.max_rows`
+
+### `redis`
+
+Purpose:
+- Execute read-only Redis commands through backend runtime and return deterministic row envelopes.
+
+Required `args`:
+- connection string: `uri` or `dsn` (secret-backed)
+- `command` (currently: `get`, `mget`, `hgetall`, `lrange`, `zrange`, `smembers`)
+
+Optional `args`:
+- `connector.profile` (when provided, must be `redis`)
+- `key`, `keys`, `start`, `stop`, `withscores` (command-specific parameters; `withscores` applies to `zrange`, default `true`)
+- `timeout` (seconds)
+- `max_rows`
+
+Deterministic runtime Redis failure codes:
+- `runtime.redis_invalid_contract`
+- `runtime.redis_connect_failed`
+- `runtime.redis_auth_failed`
+- `runtime.redis_query_failed`
+- `runtime.redis_timeout`
+
+Runtime output envelope:
+- `redis_response.rows`
+- `redis_response.fields`
+- `redis_response.row_count`
+- `redis_response.duration_ms`
+- `redis_response.truncated`
+- `redis_response.command`
+- `redis_response.timeout_seconds`
+- `redis_response.max_rows`
+
 ### `log`
 
 Purpose:
@@ -297,7 +456,37 @@ Current runtime status:
 - Declared in schema, but no dedicated executor branch is wired yet.
 - Do not rely on `log` for production flow behavior; use `script` with `print()` if runtime traces are required.
 
-## 4. Adding a New Step Type
+## 4. Database Metadata Normalization
+
+For database step types (`sql`, `mongodb`, `redis`), the `response.fields` metadata is normalized into a canonical Glanceus format to ensure consistent chart rendering regardless of the underlying database engine.
+
+### 4.1 Canonical Field Types
+
+| Canonical Type | Description | Typical Source Types |
+| --- | --- | --- |
+| `integer` | Whole numbers | `int`, `bigint`, `int4`, `int8`, `short`, `long` |
+| `float` | Floating point numbers | `float`, `double`, `real`, `float8` |
+| `decimal` | Exact numeric values | `decimal`, `numeric`, `money` |
+| `string` | Text strings | `varchar`, `text`, `char`, `uuid`, `json` |
+| `boolean` | Logical values | `bool`, `boolean`, `tinyint(1)` |
+| `date` | Date without time | `date`, `year` |
+| `time` | Time without date | `time`, `timetz` |
+| `datetime` | Date and time | `timestamp`, `datetime`, `timestamptz` |
+| `bytes` | Binary data | `blob`, `bytea`, `binary`, `varbinary` |
+| `unknown` | Undetected or complex type | Default fallback when no mapping or data exists |
+
+### 4.2 Normalization vs Inference
+
+The system uses a two-tier strategy to determine field types:
+
+1.  **Driver Mapping (Tier 1)**: The system first checks the type metadata reported by the database driver (e.g., `psycopg`, `pymysql`, `sqlite3`). If the driver returns a known type alias (including common internal names like PostgreSQL's `int4` or `float8`), it is mapped to a canonical type.
+2.  **Automatic Inference (Tier 2)**: If the driver reports an unknown type alias or explicitly marks it as `unknown`, the system falls back to automatic inference. It scans the actual data rows in the result set and identifies the Python equivalent types (`int`, `float`, `Decimal`, `datetime`, etc.) to resolve a canonical type.
+
+### 4.3 SDUI Integration
+
+When authoring templates, using `fields_source: "{sql_response.fields}"` ensures that widgets like `Chart.Table` can automatically select the correct column alignment, numeric formatting, and sorting behavior based on these canonical types.
+
+## 5. Adding a New Step Type
 
 1. Add `StepType` entry in [core/config_loader.py](/Users/xingminghua/Coding/evoltonnac/glanceus/core/config_loader.py).
 2. Add corresponding schema in `STEP_ARGS_SCHEMAS_BY_USE` (same file).

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from core.config_loader import StepType
+from core.executor import InvalidCredentialsError
 from core.source_state import InteractionType, SourceStatus
 from tests.factories import build_source_config, build_step
 
@@ -21,7 +22,7 @@ from tests.factories import build_source_config, build_step
                 use=StepType.FORM,
                 args={"fields": [{"key": "account_id", "label": "Account ID"}]},
             ),
-            InteractionType.INPUT_TEXT,
+            InteractionType.INPUT_FORM,
         ),
         (
             build_step(step_id="oauth", use=StepType.OAUTH),
@@ -99,6 +100,34 @@ async def test_webview_interaction_exposes_required_payload(executor):
 
 
 @pytest.mark.asyncio
+async def test_webview_interaction_uses_manual_webview_required_error_code(
+    executor,
+    data_controller,
+):
+    source = build_source_config(
+        source_id="auth-matrix-webview-error-code",
+        name="Webview Error Code Source",
+        flow=[
+            build_step(
+                step_id="webview",
+                use=StepType.WEBVIEW,
+                args={"url": "https://example.com/login"},
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    suspended_calls = [
+        call.kwargs
+        for call in data_controller.set_state.call_args_list
+        if call.kwargs.get("status") == SourceStatus.SUSPENDED.value
+    ]
+    assert suspended_calls
+    assert suspended_calls[-1]["error_code"] == "auth.manual_webview_required"
+
+
+@pytest.mark.asyncio
 async def test_required_interaction_step_id_tracks_actual_step(executor, secrets_controller):
     source = build_source_config(
         source_id="auth-step-id-transition",
@@ -145,6 +174,176 @@ async def test_api_key_whitespace_is_treated_as_missing(executor, secrets_contro
     assert state.interaction is not None
     assert state.interaction.step_id == "api_key"
     assert [field.key for field in state.interaction.fields] == ["api_key"]
+
+
+@pytest.mark.asyncio
+async def test_form_interaction_keeps_step_title_description_and_message(executor):
+    source = build_source_config(
+        source_id="auth-form-step-metadata",
+        name="Metadata Form Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={
+                    "title": "SQLite Connection (Chinook)",
+                    "description": "Provide a local path to Chinook_Sqlite.sqlite.",
+                    "message": "Input SQLite path and SQL guardrails for this test source.",
+                    "fields": [
+                        {"key": "chinook_db_path", "label": "Chinook SQLite Path", "required": True},
+                    ],
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.title == "SQLite Connection (Chinook)"
+    assert (
+        state.interaction.description
+        == "Provide a local path to Chinook_Sqlite.sqlite."
+    )
+    assert (
+        state.interaction.message
+        == "Input SQLite path and SQL guardrails for this test source."
+    )
+
+
+@pytest.mark.asyncio
+async def test_form_interaction_keeps_optional_missing_fields_and_metadata(executor):
+    source = build_source_config(
+        source_id="auth-form-optional-fields",
+        name="Optional Form Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={
+                    "message": "Fill optional form fields",
+                    "fields": [
+                        {
+                            "key": "workspace",
+                            "label": "Workspace",
+                            "required": False,
+                            "type": "select",
+                            "options": [
+                                {"label": "Alpha", "value": "alpha"},
+                                {"label": "Beta", "value": "beta"},
+                            ],
+                            "default": "beta",
+                        },
+                        {
+                            "key": "notifications",
+                            "label": "Notifications",
+                            "required": False,
+                            "type": "switch",
+                            "default": True,
+                        },
+                    ],
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.step_id == "form"
+    assert state.interaction.message == "Fill optional form fields"
+    assert [field.key for field in state.interaction.fields] == [
+        "workspace",
+        "notifications",
+    ]
+    workspace_field = state.interaction.fields[0]
+    notifications_field = state.interaction.fields[1]
+    assert workspace_field.required is False
+    assert workspace_field.type == "select"
+    assert workspace_field.default == "beta"
+    assert workspace_field.options == [
+        {"label": "Alpha", "value": "alpha"},
+        {"label": "Beta", "value": "beta"},
+    ]
+    assert notifications_field.required is False
+    assert notifications_field.type == "switch"
+    assert notifications_field.default is True
+
+
+@pytest.mark.asyncio
+async def test_form_interaction_includes_required_and_optional_missing_fields(executor):
+    source = build_source_config(
+        source_id="auth-form-mixed-fields",
+        name="Mixed Form Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={
+                    "fields": [
+                        {"key": "tenant", "label": "Tenant", "required": True},
+                        {
+                            "key": "regions",
+                            "label": "Regions",
+                            "required": False,
+                            "type": "multiselect",
+                            "multiple": True,
+                            "options": [
+                                {"label": "US", "value": "us"},
+                                {"label": "EU", "value": "eu"},
+                            ],
+                        },
+                    ]
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert [field.key for field in state.interaction.fields] == ["tenant", "regions"]
+    assert state.interaction.fields[0].required is True
+    assert state.interaction.fields[1].required is False
+    assert state.interaction.fields[1].multiple is True
+
+
+@pytest.mark.asyncio
+async def test_form_interaction_includes_all_fields_for_large_forms(executor):
+    fields = [
+        {
+            "key": f"field_{index}",
+            "label": f"Field {index}",
+            "required": False,
+            "type": "text",
+        }
+        for index in range(1, 33)
+    ]
+    source = build_source_config(
+        source_id="auth-form-large-fields",
+        name="Large Form Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={"fields": fields},
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert len(state.interaction.fields) == 32
+    assert state.interaction.fields[-1].key == "field_32"
 
 
 @pytest.mark.asyncio
@@ -212,6 +411,46 @@ async def test_missing_credentials_interaction_persists_standard_error_code(
 
 
 @pytest.mark.asyncio
+async def test_form_step_interaction_uses_input_form_type_and_missing_form_inputs_code(
+    executor,
+    data_controller,
+):
+    """Form step must emit INPUT_FORM (not INPUT_TEXT) and error_code auth.missing_form_inputs."""
+    source = build_source_config(
+        source_id="auth-form-error-code",
+        name="Form Error Code Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={
+                    "title": "My Form Title",
+                    "description": "My form description.",
+                    "fields": [{"key": "db_path", "label": "DB Path", "required": True}],
+                },
+            )
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.SUSPENDED
+    assert state.interaction is not None
+    assert state.interaction.type == InteractionType.INPUT_FORM
+    assert state.interaction.title == "My Form Title"
+    assert state.interaction.description == "My form description."
+
+    suspended_calls = [
+        call.kwargs
+        for call in data_controller.set_state.call_args_list
+        if call.kwargs.get("status") == SourceStatus.SUSPENDED.value
+    ]
+    assert suspended_calls
+    assert suspended_calls[-1]["error_code"] == "auth.missing_form_inputs"
+
+
+@pytest.mark.asyncio
 async def test_oauth_interaction_keeps_route_bound_source_id(executor):
     source = build_source_config(
         source_id="oauth-route-bound-source",
@@ -232,3 +471,54 @@ async def test_oauth_interaction_keeps_route_bound_source_id(executor):
     assert state.interaction is not None
     assert state.interaction.type == InteractionType.OAUTH_START
     assert state.interaction.source_id == source.id
+
+
+@pytest.mark.asyncio
+async def test_invalid_credentials_reentry_does_not_reuse_form_custom_copy(
+    executor,
+    monkeypatch,
+):
+    source = build_source_config(
+        source_id="form-invalid-reentry-copy",
+        name="Form Invalid Reentry Source",
+        flow=[
+            build_step(
+                step_id="form",
+                use=StepType.FORM,
+                args={
+                    "title": "Custom Initial Title",
+                    "description": "Custom initial description",
+                    "message": "Custom initial message",
+                    "warning_message": "Custom warning",
+                    "fields": [{"key": "workspace", "label": "Workspace", "required": True}],
+                },
+            ),
+            build_step(
+                step_id="fetch",
+                use=StepType.HTTP,
+                args={"url": "https://example.com/data"},
+            ),
+        ],
+    )
+
+    async def raise_invalid_credentials(_source):
+        raise InvalidCredentialsError(
+            source_id=source.id,
+            step_id="fetch",
+            message="401 unauthorized",
+            status_code=401,
+        )
+
+    monkeypatch.setattr(executor, "_run_flow", raise_invalid_credentials)
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ERROR
+    assert state.interaction is not None
+    assert state.interaction.type == InteractionType.INPUT_FORM
+    assert state.interaction.step_id == "form"
+    assert state.interaction.title is None
+    assert state.interaction.description is None
+    assert state.interaction.message is None
+    assert state.interaction.warning_message is None

@@ -161,6 +161,7 @@ class SqliteResourceRepository:
                     views.append(StoredView.model_validate(payload))
             except Exception:
                 continue
+        views.sort(key=lambda view: (view.sort_index, view.id))
         return views
 
     def save_view(self, view: StoredView) -> StoredView:
@@ -181,6 +182,42 @@ class SqliteResourceRepository:
                 ),
             )
         return view
+
+    def reorder_views(self, ordered_view_ids: list[str]) -> list[StoredView]:
+        views = self.load_views()
+        if not views:
+            return []
+
+        unique_ordered_ids = list(dict.fromkeys(ordered_view_ids))
+        if len(unique_ordered_ids) != len(ordered_view_ids):
+            raise ValueError("Duplicate view ids are not allowed")
+
+        existing_view_ids = {view.id for view in views}
+        if len(unique_ordered_ids) != len(views) or set(unique_ordered_ids) != existing_view_ids:
+            raise ValueError("ordered_view_ids must include each existing view exactly once")
+
+        view_by_id = {view.id: view for view in views}
+        reordered_views = [
+            view_by_id[view_id].model_copy(update={"sort_index": index})
+            for index, view_id in enumerate(unique_ordered_ids)
+        ]
+
+        with self._lock:
+            def _reorder() -> None:
+                now = time.time()
+                for view in reordered_views:
+                    self._connection.execute(
+                        "UPDATE stored_views SET payload_json = ?, updated_at = ? WHERE view_id = ?",
+                        (
+                            json.dumps(view.model_dump(), ensure_ascii=False),
+                            now,
+                            view.id,
+                        ),
+                    )
+
+            self._write("resource.reorder_views", _reorder)
+
+        return reordered_views
 
     def upsert_migration_views(self, views: list[StoredView]) -> list[str]:
         if not views:

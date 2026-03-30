@@ -6,12 +6,15 @@ from types import SimpleNamespace
 
 import main as main_module
 from core.config_loader import AppConfig
+from core.network_trust.models import PersistedTrustDecision, TrustDecision, TrustScopeType
+from core.network_trust.policy import NetworkTrustPolicy
 from core.models import StoredSource, StoredView, ViewItem
 from core.storage.contract import STORAGE_SCHEMA_VERSION
 from core.storage.settings_adapter import SettingsAdapter
 from core.storage.sqlite_connection import create_sqlite_connection
 from core.storage.sqlite_resource_repo import SqliteResourceRepository
 from core.storage.sqlite_runtime_repo import SqliteRuntimeRepository
+from core.storage.sqlite_trust_rule_repo import SqliteTrustRuleRepository
 from core.settings_manager import SettingsManager, SystemSettings
 
 
@@ -54,7 +57,229 @@ def test_storage_bootstrap_sets_schema_version_and_tables(tmp_path):
             "SELECT name FROM sqlite_master WHERE type='table'"
         ).fetchall()
         table_names = {row[0] for row in table_rows}
-        assert {"runtime_latest", "runtime_history", "stored_sources", "stored_views"} <= table_names
+        assert {
+            "runtime_latest",
+            "runtime_history",
+            "stored_sources",
+            "stored_views",
+            "connection_trust_rules",
+        } <= table_names
+
+        index_rows = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'"
+        ).fetchall()
+        index_names = {row[0] for row in index_rows}
+        assert "idx_connection_trust_rules_identity" in index_names
+        assert "idx_connection_trust_rules_lookup" in index_names
+    finally:
+        conn.close()
+
+
+def test_trust_rule_repo_upsert_query_delete_and_policy_precedence(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    source_repo = SqliteResourceRepository(conn)
+    trust_repo = SqliteTrustRuleRepository(conn)
+
+    source_repo.save_source(
+        StoredSource(
+            id="source-alpha",
+            integration_id="demo",
+            name="Alpha",
+            config={},
+            vars={},
+        )
+    )
+
+    try:
+        source_rule = trust_repo.upsert_rule(
+            capability="http",
+            scope_type=TrustScopeType.SOURCE.value,
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+            decision=PersistedTrustDecision.ALLOW.value,
+            metadata={"from": "test"},
+        )
+        assert source_rule.scope_type == TrustScopeType.SOURCE
+        assert source_rule.decision == PersistedTrustDecision.ALLOW
+
+        # Deterministic identity: same key upserts in-place instead of creating duplicates.
+        updated_source_rule = trust_repo.upsert_rule(
+            capability="http",
+            scope_type=TrustScopeType.SOURCE.value,
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+            decision=PersistedTrustDecision.DENY.value,
+            metadata={"from": "update"},
+        )
+        assert updated_source_rule.rule_id == source_rule.rule_id
+        assert updated_source_rule.decision == PersistedTrustDecision.DENY
+        rows = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM connection_trust_rules
+            WHERE capability = 'http'
+              AND scope_type = 'source'
+              AND source_id = 'source-alpha'
+              AND target_type = 'host'
+              AND target_value = '127.0.0.1'
+            """
+        ).fetchone()
+        assert rows is not None
+        assert rows["cnt"] == 1
+
+        global_rule = trust_repo.upsert_rule(
+            capability="http",
+            scope_type=TrustScopeType.GLOBAL.value,
+            source_id=None,
+            target_type="host",
+            target_value="10.0.0.5",
+            decision=PersistedTrustDecision.ALLOW.value,
+        )
+        assert global_rule.scope_type == TrustScopeType.GLOBAL
+        assert global_rule.source_id is None
+        fetched_global = trust_repo.find_rule(
+            capability="http",
+            scope_type=TrustScopeType.GLOBAL.value,
+            source_id=None,
+            target_type="host",
+            target_value="10.0.0.5",
+        )
+        assert fetched_global is not None
+        assert fetched_global.decision == PersistedTrustDecision.ALLOW
+
+        policy = NetworkTrustPolicy(
+            rule_repository=trust_repo,
+            default_policy_resolver=lambda: "prompt",
+        )
+
+        # Source rule overrides global and default.
+        source_resolution = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        assert source_resolution.decision == TrustDecision.DENY
+        assert source_resolution.reason == "source_rule"
+
+        # Global rule applies when source-scoped rule is absent.
+        global_resolution = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="10.0.0.5",
+        )
+        assert global_resolution.decision == TrustDecision.ALLOW
+        assert global_resolution.reason == "global_rule"
+
+        # Default fallback resolves when no persisted match exists.
+        fallback_resolution = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="example.com",
+        )
+        assert fallback_resolution.decision == TrustDecision.PROMPT
+        assert fallback_resolution.reason == "default"
+
+        policy.grant_allow_once(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        first_allow_once = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        second_allow_once = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        assert first_allow_once.decision == TrustDecision.ALLOW
+        assert first_allow_once.reason == "allow_once"
+        assert second_allow_once.decision == TrustDecision.ALLOW
+        assert second_allow_once.reason == "allow_once"
+
+        policy.clear_allow_once_for_source(source_id="source-alpha")
+        cleared_resolution = policy.evaluate(
+            capability="http",
+            source_id="source-alpha",
+            target_type="host",
+            target_value="127.0.0.1",
+        )
+        assert cleared_resolution.decision == TrustDecision.DENY
+        assert cleared_resolution.reason == "source_rule"
+
+        assert trust_repo.delete_rule(
+            capability="http",
+            scope_type=TrustScopeType.GLOBAL.value,
+            source_id=None,
+            target_type="host",
+            target_value="10.0.0.5",
+        ) is True
+        assert trust_repo.delete_rule(
+            capability="http",
+            scope_type=TrustScopeType.GLOBAL.value,
+            source_id=None,
+            target_type="host",
+            target_value="10.0.0.5",
+        ) is False
+    finally:
+        conn.close()
+
+
+def test_trust_rule_source_scope_cascades_on_source_delete(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    source_repo = SqliteResourceRepository(conn)
+    trust_repo = SqliteTrustRuleRepository(conn)
+
+    source_repo.save_source(
+        StoredSource(
+            id="source-delete-me",
+            integration_id="demo",
+            name="Delete Me",
+            config={},
+            vars={},
+        )
+    )
+    trust_repo.upsert_rule(
+        capability="http",
+        scope_type=TrustScopeType.SOURCE.value,
+        source_id="source-delete-me",
+        target_type="host",
+        target_value="192.168.1.5",
+        decision=PersistedTrustDecision.ALLOW.value,
+    )
+
+    try:
+        before = trust_repo.find_rule(
+            capability="http",
+            scope_type=TrustScopeType.SOURCE.value,
+            source_id="source-delete-me",
+            target_type="host",
+            target_value="192.168.1.5",
+        )
+        assert before is not None
+
+        assert source_repo.delete_source("source-delete-me") is True
+
+        after = trust_repo.find_rule(
+            capability="http",
+            scope_type=TrustScopeType.SOURCE.value,
+            source_id="source-delete-me",
+            target_type="host",
+            target_value="192.168.1.5",
+        )
+        assert after is None
     finally:
         conn.close()
 
@@ -149,6 +374,10 @@ def test_resource_repo_crud_and_source_reference_cleanup(tmp_path):
         assert saved_view.id == "view-alpha"
         assert [v.id for v in repo.load_views()] == ["view-alpha"]
 
+        reordered_views = repo.reorder_views(["view-alpha"])
+        assert [v.id for v in reordered_views] == ["view-alpha"]
+        assert [v.sort_index for v in reordered_views] == [0]
+
         affected_views = repo.remove_source_references_from_views("source-alpha")
         assert affected_views == ["view-alpha"]
         updated_view = repo.load_views()[0]
@@ -162,12 +391,88 @@ def test_resource_repo_crud_and_source_reference_cleanup(tmp_path):
         conn.close()
 
 
+def test_resource_repo_load_views_orders_by_sort_index_then_id(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    repo = SqliteResourceRepository(conn)
+
+    views = [
+        StoredView(
+            id="view-b",
+            name="View B",
+            sort_index=2,
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-c",
+            name="View C",
+            sort_index=1,
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-a",
+            name="View A",
+            sort_index=1,
+            layout_columns=12,
+            items=[],
+        ),
+    ]
+
+    try:
+        for view in views:
+            repo.save_view(view)
+        assert [view.id for view in repo.load_views()] == [
+            "view-a",
+            "view-c",
+            "view-b",
+        ]
+    finally:
+        conn.close()
+
+
+def test_resource_repo_reorder_views_updates_sort_index_atomically(tmp_path):
+    db_path = tmp_path / "storage.db"
+    conn = create_sqlite_connection(db_path)
+    repo = SqliteResourceRepository(conn)
+
+    views = [
+        StoredView(
+            id="view-1",
+            name="View 1",
+            sort_index=0,
+            layout_columns=12,
+            items=[],
+        ),
+        StoredView(
+            id="view-2",
+            name="View 2",
+            sort_index=1,
+            layout_columns=12,
+            items=[],
+        ),
+    ]
+
+    try:
+        for view in views:
+            repo.save_view(view)
+
+        reordered_views = repo.reorder_views(["view-2", "view-1"])
+        assert [view.id for view in reordered_views] == ["view-2", "view-1"]
+        assert [view.sort_index for view in reordered_views] == [0, 1]
+        assert [view.id for view in repo.load_views()] == ["view-2", "view-1"]
+    finally:
+        conn.close()
+
+
 def test_create_app_wires_shared_storage_contract(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
     class _FakeDataController:
-        def __init__(self, *, storage):
+        def __init__(self, *, storage, source_update_bus=None):
             captured["data_storage"] = storage
+            captured["source_update_bus"] = source_update_bus
 
         def close(self):
             return None
@@ -200,19 +505,23 @@ def test_create_app_wires_shared_storage_contract(monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "ResourceManager", _FakeResourceManager)
     monkeypatch.setattr(main_module, "SettingsManager", _FakeSettingsManager)
     monkeypatch.setattr(main_module, "SecretsController", lambda: fake_secrets)
-    monkeypatch.setattr(main_module, "AuthManager", lambda _secrets, app_config: SimpleNamespace())
     monkeypatch.setattr(
         main_module,
-        "Executor",
-        lambda _dc, _sc, _sm, **_kwargs: SimpleNamespace(get_source_state=lambda _source_id: None),
+        "AuthManager",
+        lambda _secrets, app_config, settings_manager=None: SimpleNamespace(),
     )
+    def _build_fake_executor(_dc, _sc, _sm, **kwargs):
+        captured["executor_kwargs"] = kwargs
+        return SimpleNamespace(get_source_state=lambda _source_id: None)
+
+    monkeypatch.setattr(main_module, "Executor", _build_fake_executor)
     monkeypatch.setattr(main_module, "IntegrationManager", lambda: SimpleNamespace())
     monkeypatch.setattr(
         main_module,
         "RefreshScheduler",
         lambda **_kwargs: SimpleNamespace(start=lambda: None, stop=lambda: None),
     )
-    monkeypatch.setattr(main_module.api, "init_api", lambda **_kwargs: None)
+    monkeypatch.setattr(main_module.api, "init_api", lambda **kwargs: captured.setdefault("api_kwargs", kwargs))
 
     main_module.create_app()
 
@@ -220,6 +529,12 @@ def test_create_app_wires_shared_storage_contract(monkeypatch, tmp_path):
     resource_storage = captured["resource_storage"]
     assert data_storage is resource_storage
     assert isinstance(data_storage.settings, SettingsAdapter)
+    assert data_storage.trust_rules is not None
+    executor_kwargs = captured["executor_kwargs"]
+    assert executor_kwargs.get("network_trust_policy") is not None
+    api_kwargs = captured["api_kwargs"]
+    assert api_kwargs.get("network_trust_policy") is not None
+    assert api_kwargs.get("trust_rule_repo") is not None
 
 
 def test_settings_adapter_writes_to_settings_json(tmp_path):
@@ -454,6 +769,7 @@ def test_resource_repo_mutations_run_in_begin_immediate_transaction(tmp_path):
     try:
         repo.save_source(source)
         repo.save_view(view)
+        repo.reorder_views(["view-alpha"])
         repo.remove_source_references_from_views("source-alpha")
         repo.delete_source("source-alpha")
         repo.delete_view("view-alpha")

@@ -3,6 +3,8 @@ import {
     SizeSchema,
     ToneSchema,
     toneBadgeClassMap,
+    SemanticColorSchema,
+    resolveSurfaceColorStyle,
 } from "../shared/commonProps";
 
 /**
@@ -13,6 +15,7 @@ export const BadgeSchema = z.object({
     text: z.union([z.string(), z.number()]),
     tone: ToneSchema.default("default"),
     size: SizeSchema.default("md"),
+    color: SemanticColorSchema.optional(),
 });
 
 export type BadgeProps = z.infer<typeof BadgeSchema>;
@@ -24,10 +27,18 @@ const sizeMap = {
     xl: "px-3 py-1 text-sm",
 };
 
-export function Badge({ text, tone = "default", size = "md" }: BadgeProps) {
+export function Badge({
+    text,
+    tone = "default",
+    size = "md",
+    color,
+}: BadgeProps) {
     return (
         <span
-            className={`inline-flex items-center rounded-md font-medium ${sizeMap[size]} ${toneBadgeClassMap[tone]}`}
+            className={`inline-flex items-center rounded-md font-medium ${sizeMap[size]} ${
+                color ? "" : toneBadgeClassMap[tone]
+            }`}
+            style={resolveSurfaceColorStyle(color)}
         >
             {text}
         </span>
