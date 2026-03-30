@@ -117,7 +117,16 @@ Progress: [██████████] 11/11 plans (100%)
 
 ### Pending Todos
 
-None yet.
+8 pending todos remain in `.planning/todos/pending`.
+
+- dashboard-sidebar-hover-add-widget
+- click-to-copy-interaction
+- security-static-analysis
+- ux-ai-enhancements
+- topnav-global-search
+- global-state-chat-sidebar
+- density-toggle-optimization
+- windows-sidecar-process-lifecycle
 
 ### Blockers/Concerns
 
