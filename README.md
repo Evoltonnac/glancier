@@ -30,7 +30,7 @@
 
 ```bash
 pip install -r requirements.txt
-npm --prefix ui-react install
+pnpm --dir ui-react install
 ```
 
 ### 2. Run in development
@@ -58,7 +58,7 @@ make dev-tauri  # backend + Tauri desktop shell
 
 ```bash
 pip install -r requirements.txt
-npm --prefix ui-react install
+pnpm --dir ui-react install
 ```
 
 ### Core commands
@@ -96,7 +96,7 @@ Generate signer keys locally (private key must stay secret):
 
 ```bash
 cd ui-react
-npx tauri signer generate --ci --write-keys src-tauri/gen/updater/tauri-update.key
+pnpm exec tauri signer generate --ci --write-keys src-tauri/gen/updater/tauri-update.key
 ```
 
 ### AI workflow in this project (GSD + TDD)

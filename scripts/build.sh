@@ -189,8 +189,8 @@ if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || [ -z "${TAURI_SIGNING_PRIVATE_KEY_
     fi
 fi
 
-# Execute build.
-npx tauri build --bundles "$TAURI_BUNDLES" --target "$TAURI_TARGET"
+# Execute build with pnpm-managed CLI in ui-react workspace.
+pnpm exec tauri build --bundles "$TAURI_BUNDLES" --target "$TAURI_TARGET"
 
 echo ""
 echo "=== ✅ Build complete! ==="

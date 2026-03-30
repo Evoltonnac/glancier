@@ -18,23 +18,23 @@ help:
 	@echo "  make clean-artifacts        # Remove generated build artifacts"
 
 dev:
-	npm --prefix ui-react run dev:all
+	pnpm --dir ui-react run dev:all
 
 dev-tauri:
-	npm --prefix ui-react run tauri:dev:all
+	pnpm --dir ui-react run tauri:dev:all
 
 build-backend:
 	bash scripts/build.sh --prepare-only
 
 build-mac:
-	npm --prefix ui-react run tauri:build:mac
+	pnpm --dir ui-react run tauri:build:mac
 
 build-win:
-	npm --prefix ui-react run tauri:build:win
+	pnpm --dir ui-react run tauri:build:win
 
 build-desktop:
 	@echo "build-desktop is deprecated. Use make build-mac or make build-win."
-	npm --prefix ui-react run tauri:build
+	pnpm --dir ui-react run tauri:build
 
 test-backend:
 	bash scripts/test_backend_core.sh

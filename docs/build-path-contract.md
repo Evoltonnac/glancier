@@ -14,11 +14,11 @@ Use root `Makefile` commands first:
 
 | Command | Purpose | Underlying command |
 | --- | --- | --- |
-| `make dev` | Backend + web frontend dev mode | `npm --prefix ui-react run dev:all` |
-| `make dev-tauri` | Backend + Tauri dev mode | `npm --prefix ui-react run tauri:dev:all` |
+| `make dev` | Backend + web frontend dev mode | `pnpm --dir ui-react run dev:all` |
+| `make dev-tauri` | Backend + Tauri dev mode | `pnpm --dir ui-react run tauri:dev:all` |
 | `make build-backend` | Build Python sidecar archive only | `bash scripts/build.sh --prepare-only` |
-| `make build-mac` | Build macOS arm64 desktop package (.dmg) | `npm --prefix ui-react run tauri:build:mac` |
-| `make build-win` | Build Windows x64 desktop package (.exe) | `npm --prefix ui-react run tauri:build:win` |
+| `make build-mac` | Build macOS arm64 desktop package (.dmg) | `pnpm --dir ui-react run tauri:build:mac` |
+| `make build-win` | Build Windows x64 desktop package (.exe) | `pnpm --dir ui-react run tauri:build:win` |
 | `make test-backend` | Backend core gate | `bash scripts/test_backend_core.sh` |
 | `make test-frontend` | Frontend core gate | `bash scripts/test_frontend_core.sh` |
 | `make test-typecheck` | Frontend core + typecheck gate | `bash scripts/test_frontend_core.sh --with-typecheck` |
@@ -26,24 +26,24 @@ Use root `Makefile` commands first:
 | `make gen-schemas` | Generate schema outputs | `python scripts/generate_schemas.py` |
 | `make clean-artifacts` | Remove generated outputs | `bash scripts/clean_artifacts.sh` |
 
-## Remaining Direct npm Commands (Advanced)
+## Remaining Direct PNPM Commands (Advanced)
 
 These remain valid, but are secondary to `make` entrypoints:
 
 | Location | Command | Status |
 | --- | --- | --- |
-| `ui-react/package.json` | `npm --prefix ui-react run dev` | Keep (web-only debug) |
-| `ui-react/package.json` | `npm --prefix ui-react run dev:backend` | Keep (backend-only helper from UI workspace) |
-| `ui-react/package.json` | `npm --prefix ui-react run tauri` | Keep (raw Tauri CLI passthrough) |
-| `ui-react/package.json` | `npm --prefix ui-react run tauri:dev` | Keep (desktop shell debug) |
-| `ui-react/package.json` | `npm --prefix ui-react run tauri:build` | Keep (host-platform auto build wrapper, compatibility) |
-| `ui-react/package.json` | `npm --prefix ui-react run tauri:build:mac` | Keep (explicit macOS package build) |
-| `ui-react/package.json` | `npm --prefix ui-react run tauri:build:win` | Keep (explicit Windows package build) |
-| `ui-react/package.json` | `npm --prefix ui-react run preview` | Keep (preview built web assets) |
-| `ui-react/package.json` | `npm --prefix ui-react run test` | Keep (full frontend test runner) |
-| `ui-react/package.json` | `npm --prefix ui-react run test:core` | Keep (focused core suite) |
-| `ui-react/package.json` | `npm --prefix ui-react run typecheck` | Keep (TS validation) |
-| `ui-react/package.json` | `npm --prefix ui-react run audit:high` | Keep (security audit, on-demand) |
+| `ui-react/package.json` | `pnpm --dir ui-react run dev` | Keep (web-only debug) |
+| `ui-react/package.json` | `pnpm --dir ui-react run dev:backend` | Keep (backend-only helper from UI workspace) |
+| `ui-react/package.json` | `pnpm --dir ui-react run tauri` | Keep (raw Tauri CLI passthrough) |
+| `ui-react/package.json` | `pnpm --dir ui-react run tauri:dev` | Keep (desktop shell debug) |
+| `ui-react/package.json` | `pnpm --dir ui-react run tauri:build` | Keep (host-platform auto build wrapper, compatibility) |
+| `ui-react/package.json` | `pnpm --dir ui-react run tauri:build:mac` | Keep (explicit macOS package build) |
+| `ui-react/package.json` | `pnpm --dir ui-react run tauri:build:win` | Keep (explicit Windows package build) |
+| `ui-react/package.json` | `pnpm --dir ui-react run preview` | Keep (preview built web assets) |
+| `ui-react/package.json` | `pnpm --dir ui-react run test` | Keep (full frontend test runner) |
+| `ui-react/package.json` | `pnpm --dir ui-react run test:core` | Keep (focused core suite) |
+| `ui-react/package.json` | `pnpm --dir ui-react run typecheck` | Keep (TS validation) |
+| `ui-react/package.json` | `pnpm --dir ui-react run audit:high` | Keep (security audit, on-demand) |
 
 ## Remaining Scripts Inventory
 
@@ -88,7 +88,7 @@ The GitHub Actions release job is defined in `.github/workflows/ci.yml` as `rele
   - `macos-15` -> `aarch64-apple-darwin` -> `--bundles app,dmg`
   - `macos-15-intel` -> `x86_64-apple-darwin` -> `--bundles app,dmg`
   - `windows-latest` -> `x86_64-pc-windows-msvc` -> `--bundles nsis`
-- Prebuild policy: run `bash scripts/build.sh --prepare-only` with `SKIP_TAURI_BUILD=1` before `npm run tauri build`, so sidecar archives are staged under `ui-react/src-tauri/binaries/`.
+- Prebuild policy: run `bash scripts/build.sh --prepare-only` with `SKIP_TAURI_BUILD=1` before `pnpm run tauri build`, so sidecar archives are staged under `ui-react/src-tauri/binaries/`.
 - Updater policy: `createUpdaterArtifacts` is `true`; updater archives and signatures are generated and signed for release distribution.
 - Release upload policy: upload updater archive/signature from `ui-react/src-tauri/target/<target>/release/bundle/**` by target format (`*.app.tar.gz(.sig)` for macOS; for Windows NSIS, prefer `*.nsis.zip(.sig)` and fallback to `*.exe(.sig)` for Tauri v2 output).
 - Manifest policy: each matrix target uploads its updater archive/signature and a partial `latest-<platform>.json`; updater asset names are prefixed with `platform key` to avoid cross-arch filename collisions (notably macOS arm64/x64), then CI merges partial manifests into one release asset `latest.json` containing all required desktop updater platforms (`darwin-aarch64`, `darwin-x86_64`, `windows-x86_64-nsis`).
@@ -103,11 +103,11 @@ The GitHub Actions release job is defined in `.github/workflows/ci.yml` as `rele
 - Windows process-lifecycle policy: backend child processes must be assigned to a `Job Object` with `KILL_ON_JOB_CLOSE` so installer/update-driven app termination also cascades to backend process trees.
 - Windows runtime cleanup policy: when backend runtime extraction needs to refresh files and the cleanup is blocked by stale `glanceus-server.exe`, the app must force-terminate stale backend processes and retry cleanup before startup continues.
 
-## Script and npm Command Audit (2026-03-09)
+## Script and PNPM Command Audit (2026-03-09)
 
 - Checked: `scripts/*.sh` shell syntax (`bash -n`) passed.
 - Checked: Python entry scripts compile (`python -m py_compile`) passed.
-- Checked: npm scripts in `ui-react/package.json` resolve referenced files (paths exist).
+- Checked: pnpm scripts in `ui-react/package.json` resolve referenced files (paths exist).
 - Action taken: removed redundant `make build-desktop-prepare` alias to reduce duplicate entrypoints.
 - Action taken: added `make test-impacted` and `make gen-schemas` so commonly used scripts are covered by the same root entrypoint.
 
