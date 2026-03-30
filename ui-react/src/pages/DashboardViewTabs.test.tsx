@@ -1,5 +1,6 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
 
 const {
     apiMock,
@@ -12,6 +13,7 @@ const {
     useStoreMock,
     storeState,
     toggleSidebarMock,
+    gridStackInitMock,
 } = vi.hoisted(() => {
     const apiMock = {
         getSources: vi.fn().mockResolvedValue([]),
@@ -40,8 +42,21 @@ const {
     const useSettingsMock = vi.fn();
     const useViewTabsStateMock = vi.fn();
     const toggleSidebarMock = vi.fn();
-    const storeState = {
+    const gridStackInitMock = vi.fn((_options: unknown, element: HTMLElement) => ({
+        el: element,
+        on: vi.fn(),
+        batchUpdate: vi.fn(),
+        cellHeight: vi.fn(),
+        margin: vi.fn(),
+        getColumn: vi.fn(() => 12),
+        getGridItems: vi.fn(() => []),
+        removeWidget: vi.fn(),
+        makeWidget: vi.fn(),
+        destroy: vi.fn(),
+    }));
+    const storeState: any = {
         viewConfig: null,
+
         setViewConfig: vi.fn(),
         sources: [],
         setSources: vi.fn(),
@@ -68,6 +83,7 @@ const {
         useStoreMock,
         storeState,
         toggleSidebarMock,
+        gridStackInitMock,
     };
 });
 
@@ -114,6 +130,12 @@ vi.mock("../hooks/useScraper", () => ({
     }),
 }));
 
+vi.mock("gridstack", () => ({
+    GridStack: {
+        init: gridStackInitMock,
+    },
+}));
+
 vi.mock("../components/auth/FlowHandler", () => ({
     FlowHandler: ({ source, isOpen }: { source: any; isOpen: boolean }) => (
         <div
@@ -132,7 +154,12 @@ vi.mock("../components/ScraperStatusBanner", () => ({
 }));
 
 vi.mock("../components/BaseSourceCard", () => ({
-    BaseSourceCard: () => <div data-testid="mock-base-source-card" className="mock-base-source-card" />,
+    BaseSourceCard: () => (
+        <div
+            data-testid="mock-base-source-card"
+            className="mock-base-source-card"
+        />
+    ),
 }));
 
 vi.mock("../components/AddWidgetDialog", () => ({
@@ -162,7 +189,9 @@ vi.mock("../components/EmptyState", () => ({
     EmptyState: () => <div data-testid="mock-empty-state" />,
 }));
 
+import type { StoredView } from "../types/config";
 import ViewManagementPanel from "../components/dashboard/ViewManagementPanel";
+
 import ViewTabsBar from "../components/dashboard/ViewTabsBar";
 import enMessages from "../i18n/messages/en";
 import zhMessages from "../i18n/messages/zh";
@@ -179,7 +208,11 @@ function makeView(id: string, name: string): StoredView {
     };
 }
 
-function resetDashboardMocks(views: StoredView[], activeViewId: string | null) {
+function resetDashboardMocks(
+    views: StoredView[],
+    activeViewId: string | null,
+    viewMode: "single" | "management" = "single",
+) {
     useSourcesMock.mockReturnValue({
         sources: [],
         dataMap: {},
@@ -213,13 +246,19 @@ function resetDashboardMocks(views: StoredView[], activeViewId: string | null) {
         setActiveViewId,
         setOrderedViewIds,
         syncWithViews,
-        viewMode: "single",
+        viewMode,
         setViewMode,
         selectedDashboardId: activeViewId,
         setSelectedDashboardId,
     });
 
-    return { setActiveViewId, setOrderedViewIds, syncWithViews };
+    return {
+        setActiveViewId,
+        setOrderedViewIds,
+        setViewMode,
+        setSelectedDashboardId,
+        syncWithViews,
+    };
 }
 
 describe("tab bar and management panel", () => {
@@ -232,12 +271,12 @@ describe("tab bar and management panel", () => {
                 {
                     id: "widget-1",
                     template_id: "source_card",
-                    type: "source_card",
                     x: 0,
                     y: 0,
                     w: 6,
                     h: 4,
-                    source_id: null,
+                    source_id: "source-1",
+
                     props: { label: "Widget Shell" },
                 },
             ],
@@ -250,7 +289,7 @@ describe("tab bar and management panel", () => {
         const shell = await screen.findByText((_, element) =>
             Boolean(
                 element?.classList.contains("sdui-card-shell") &&
-                    element.querySelector('[data-testid="mock-base-source-card"]'),
+                element.querySelector('[data-testid="mock-base-source-card"]'),
             ),
         );
 
@@ -274,11 +313,27 @@ describe("tab bar and management panel", () => {
                 step_id: "collect_sqlite_inputs",
                 title: "SQLite Connection (Chinook)",
                 description: "Provide a local path to Chinook_Sqlite.sqlite.",
-                message: "Input SQLite path and SQL guardrails for this test source.",
+                message:
+                    "Input SQLite path and SQL guardrails for this test source.",
                 fields: [
-                    { key: "chinook_db_path", label: "Chinook SQLite Path", type: "text", required: true },
-                    { key: "sql_timeout_seconds", label: "SQL Timeout Seconds", type: "text", required: false },
-                    { key: "sql_max_rows", label: "SQL Max Rows", type: "text", required: false },
+                    {
+                        key: "chinook_db_path",
+                        label: "Chinook SQLite Path",
+                        type: "text",
+                        required: true,
+                    },
+                    {
+                        key: "sql_timeout_seconds",
+                        label: "SQL Timeout Seconds",
+                        type: "text",
+                        required: false,
+                    },
+                    {
+                        key: "sql_max_rows",
+                        label: "SQL Max Rows",
+                        type: "text",
+                        required: false,
+                    },
                 ],
             },
         };
@@ -297,7 +352,12 @@ describe("tab bar and management panel", () => {
                 title: "API Key",
                 message: "Provide API key",
                 fields: [
-                    { key: "api_key", label: "API Key", type: "password", required: true },
+                    {
+                        key: "api_key",
+                        label: "API Key",
+                        type: "password",
+                        required: true,
+                    },
                 ],
             },
         };
@@ -308,7 +368,10 @@ describe("tab bar and management panel", () => {
             const flowHandler = screen.getByTestId("mock-flow-handler");
             expect(flowHandler).toHaveAttribute("data-open", "true");
             expect(flowHandler).toHaveAttribute("data-source-id", "source-1");
-            expect(flowHandler).toHaveAttribute("data-step-id", "collect_sqlite_inputs");
+            expect(flowHandler).toHaveAttribute(
+                "data-step-id",
+                "collect_sqlite_inputs",
+            );
             expect(flowHandler).toHaveAttribute("data-field-count", "3");
             expect(flowHandler).toHaveAttribute(
                 "data-title",
@@ -323,7 +386,10 @@ describe("tab bar and management panel", () => {
 
         render(
             <ViewTabsBar
-                views={[makeView("view-1", "Overview"), makeView("view-2", "Errors")]}
+                views={[
+                    makeView("view-1", "Overview"),
+                    makeView("view-2", "Errors"),
+                ]}
                 activeViewId="view-1"
                 visibleViewIds={["view-1", "view-2"]}
                 overflowViewIds={[]}
@@ -338,8 +404,12 @@ describe("tab bar and management panel", () => {
             />,
         );
 
-        expect(screen.getByTestId("dashboard-chrome-tab-view-1")).toBeInTheDocument();
-        expect(screen.getByTestId("dashboard-chrome-tab-view-2")).toBeInTheDocument();
+        expect(
+            screen.getByTestId("dashboard-chrome-tab-view-1"),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByTestId("dashboard-chrome-tab-view-2"),
+        ).toBeInTheDocument();
     });
 
     it("truncates long tab names and keeps full value in tooltip title", () => {
@@ -415,7 +485,9 @@ describe("tab bar and management panel", () => {
         fireEvent.click(overflowTrigger);
 
         expect(screen.getByTestId("dashboard-view-create")).toBeInTheDocument();
-        expect(screen.getByTestId("dashboard-view-row-view-1")).toBeInTheDocument();
+        expect(
+            screen.getByTestId("dashboard-view-row-view-1"),
+        ).toBeInTheDocument();
         expect(
             screen.getByTestId("dashboard-view-rename-view-1"),
         ).toBeInTheDocument();
@@ -437,7 +509,10 @@ describe("dashboard view lifecycle", () => {
     });
 
     it("delegates persisted-active reconciliation to syncWithViews", async () => {
-        const views = [makeView("view-1", "Overview"), makeView("view-2", "Errors")];
+        const views = [
+            makeView("view-1", "Overview"),
+            makeView("view-2", "Errors"),
+        ];
         const { setActiveViewId, syncWithViews } = resetDashboardMocks(
             views,
             "missing-id",
@@ -451,118 +526,146 @@ describe("dashboard view lifecycle", () => {
         expect(setActiveViewId).not.toHaveBeenCalled();
     });
 
-    it("creates a new view with default payload and keeps active tab unchanged", async () => {
+    it("creates a dashboard from management mode and switches to the created view", async () => {
         const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1700000000000);
-        // Need 7+ views to trigger overflow so the ViewManagementPanel is accessible
-        const views = [
-            makeView("view-1", "Overview"),
-            makeView("view-2", "View 2"),
-            makeView("view-3", "View 3"),
-            makeView("view-4", "View 4"),
-            makeView("view-5", "View 5"),
-            makeView("view-6", "View 6"),
-            makeView("view-7", "View 7"),
-        ];
-        const { setActiveViewId } = resetDashboardMocks(views, "view-1");
+        const views = [makeView("view-1", "Overview")];
+        const { setActiveViewId, setOrderedViewIds, setViewMode, setSelectedDashboardId } =
+            resetDashboardMocks(views, "view-1", "management");
         apiMock.createView.mockResolvedValue({
             id: "view-1700000000000",
-            name: "新视图",
+            name: "新看板",
+            sort_index: 1,
             layout_columns: 12,
             items: [],
         });
 
         render(<Dashboard />);
 
-        // Open the overflow popover to access the ViewManagementPanel
-        fireEvent.click(screen.getByTestId("dashboard-tab-overflow-trigger"));
-        fireEvent.click(screen.getByTestId("dashboard-view-create"));
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: zhMessages["dashboard.management.create_button"],
+            }),
+        );
+
+        fireEvent.change(
+            screen.getByPlaceholderText(
+                zhMessages["dashboard.management.create_placeholder"],
+            ),
+            { target: { value: "  新看板  " } },
+        );
+        fireEvent.click(
+            screen.getByRole("button", {
+                name: zhMessages["dashboard.management.create_submit"],
+            }),
+        );
 
         await waitFor(() => {
             expect(apiMock.createView).toHaveBeenCalledTimes(1);
         });
         expect(apiMock.createView).toHaveBeenCalledWith({
             id: "view-1700000000000",
-            name: "新视图",
+            name: "新看板",
+            sort_index: 1,
             layout_columns: 12,
             items: [],
         });
-        expect(setActiveViewId).not.toHaveBeenCalledWith("view-1700000000000");
+        expect(setActiveViewId).toHaveBeenCalledWith("view-1700000000000");
+        expect(setSelectedDashboardId).toHaveBeenCalledWith("view-1700000000000");
+        expect(setOrderedViewIds).toHaveBeenCalledWith([
+            "view-1",
+            "view-1700000000000",
+        ]);
+        expect(setViewMode).toHaveBeenCalledWith("single");
         nowSpy.mockRestore();
     });
 
-    it("supports double-click tab rename and panel rename with normalized values", async () => {
-        // Need 7+ views to trigger overflow so the panel rename is accessible
+    it("supports management dialog rename with trimmed values", async () => {
         const views = [
             makeView("view-1", "Overview"),
             makeView("view-2", "Errors"),
-            makeView("view-3", "View 3"),
-            makeView("view-4", "View 4"),
-            makeView("view-5", "View 5"),
-            makeView("view-6", "View 6"),
-            makeView("view-7", "View 7"),
         ];
-        resetDashboardMocks(views, "view-1");
+        resetDashboardMocks(views, "view-1", "management");
         apiMock.updateView.mockResolvedValue(views[0]);
 
         render(<Dashboard />);
 
-        // Double-click the Chrome tab to enter rename mode
-        fireEvent.doubleClick(screen.getByTestId("dashboard-chrome-tab-view-1"));
-        const tabRenameInput = screen.getByTestId("dashboard-tab-rename-view-1");
-        fireEvent.change(tabRenameInput, { target: { value: "  Ops   Board  " } });
-        fireEvent.keyDown(tabRenameInput, { key: "Enter" });
+        fireEvent.click(
+            screen.getAllByRole("button", {
+                name: zhMessages["dashboard.management.edit"],
+            })[0],
+        );
+        fireEvent.change(screen.getByDisplayValue("Overview"), {
+            target: { value: "  Ops   Board  " },
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: zhMessages["common.save"] }),
+        );
 
         await waitFor(() => {
-            expect(apiMock.updateView).toHaveBeenCalledWith(
+            expect(apiMock.updateView).toHaveBeenNthCalledWith(
+                1,
                 "view-1",
-                expect.objectContaining({ name: "Ops Board" }),
+                expect.objectContaining({ name: "Ops   Board" }),
             );
         });
 
-        // Open overflow popover to access panel rename
-        fireEvent.click(screen.getByTestId("dashboard-tab-overflow-trigger"));
-        const panelRenameInput = screen.getByTestId("dashboard-view-rename-view-2");
-        fireEvent.change(panelRenameInput, { target: { value: "  Build   Health  " } });
-        fireEvent.keyDown(panelRenameInput, { key: "Enter" });
+        fireEvent.click(
+            screen.getAllByRole("button", {
+                name: zhMessages["dashboard.management.edit"],
+            })[1],
+        );
+        fireEvent.change(screen.getByDisplayValue("Errors"), {
+            target: { value: "  Build   Health  " },
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: zhMessages["common.save"] }),
+        );
 
         await waitFor(() => {
-            expect(apiMock.updateView).toHaveBeenCalledWith(
+            expect(apiMock.updateView).toHaveBeenNthCalledWith(
+                2,
                 "view-2",
-                expect.objectContaining({ name: "Build Health" }),
+                expect.objectContaining({ name: "Build   Health" }),
             );
         });
     });
 
-    it("blocks deleting last view and falls back active tab after deleting active view", async () => {
-        // Note: With the Popover architecture, the "delete blocked" case requires overflow
-        // (Panel is only rendered when there are overflow views). The "last view blocked"
-        // case is tested via the Panel's own isDeleteBlocked guard which fires when
-        // Panel's views.length <= 1.
-        // Here we test that deletion works for non-blocked cases.
+    it("deletes selected dashboard via management dialog and clears selected id", async () => {
         const views = [
             makeView("view-1", "Overview"),
             makeView("view-2", "Errors"),
-            makeView("view-3", "View 3"),
-            makeView("view-4", "View 4"),
-            makeView("view-5", "View 5"),
-            makeView("view-6", "View 6"),
-            makeView("view-7", "View 7"),
         ];
-        const { setActiveViewId } = resetDashboardMocks(views, "view-2");
+        const { setActiveViewId, setSelectedDashboardId } = resetDashboardMocks(
+            views,
+            "view-2",
+            "management",
+        );
         apiMock.deleteView.mockResolvedValue(undefined);
         invalidateViewsMock.mockResolvedValue(undefined);
 
         render(<Dashboard />);
-        fireEvent.click(screen.getByTestId("dashboard-tab-overflow-trigger"));
-        fireEvent.click(screen.getByTestId("dashboard-view-delete-view-2"));
+        fireEvent.click(
+            screen.getAllByRole("button", {
+                name: zhMessages["dashboard.management.delete"],
+            })[1],
+        );
+        const deleteDialog = await screen.findByRole("dialog", {
+            name: zhMessages["common.confirmDelete"],
+        });
+        fireEvent.click(
+            within(deleteDialog).getByRole("button", {
+                name: zhMessages["dashboard.management.delete"],
+            }),
+        );
 
         await waitFor(() => {
             expect(apiMock.deleteView).toHaveBeenCalledWith("view-2");
         });
-        expect(setActiveViewId).toHaveBeenCalledWith("view-1");
+        expect(setSelectedDashboardId).toHaveBeenCalledWith(null);
+        expect(setActiveViewId).not.toHaveBeenCalled();
     });
 
-    it("renders +N overflow trigger when view count exceeds visible cap", () => {
+    it("renders swiper navigation dots instead of tab overflow controls", () => {
         const views = Array.from({ length: 8 }, (_, index) =>
             makeView(`view-${index + 1}`, `View ${index + 1}`),
         );
@@ -570,7 +673,13 @@ describe("dashboard view lifecycle", () => {
 
         render(<Dashboard />);
 
-        expect(screen.getByTestId("dashboard-tab-overflow-trigger")).toHaveTextContent("+2");
+        expect(
+            screen.queryByTestId("dashboard-tab-overflow-trigger"),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.getByRole("tablist", { name: "Dashboard navigation" }),
+        ).toBeInTheDocument();
+        expect(screen.getAllByRole("tab")).toHaveLength(views.length);
     });
 
     it("does not invalidate sources when adding widget", async () => {
