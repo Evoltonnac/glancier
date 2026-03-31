@@ -217,7 +217,7 @@ jobs:
               run: bash scripts/build.sh --prepare-only
 
             - name: Build Tauri app
-              run: pnpm --dir ui-react run tauri build -- ${{ matrix.tauri_args }}
+              run: pnpm --dir ui-react exec tauri build ${{ matrix.tauri_args }}
 
             - name: Prepare release assets directory
               run: mkdir -p release-assets updater-metadata
