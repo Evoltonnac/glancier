@@ -1169,15 +1169,12 @@ pub async fn push_scraper_task(
 
         #[cfg(target_os = "macos")]
         {
-            // WKWebView on macOS may suspend JS for fully hidden/off-screen windows.
-            // Keep a minimal visible window in the active Space to preserve execution.
+            // On macOS, keep the background worker hidden and not focused.
             builder = builder
-                .visible(true)
+                .visible(false)
+                .focused(false)
                 .decorations(false)
-                .inner_size(1.0, 1.0)
-                .position(0.0, 0.0)
-                .skip_taskbar(true)
-                .visible_on_all_workspaces(true);
+                .skip_taskbar(true);
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -1499,15 +1496,12 @@ async fn start_claimed_scraper_task(
     .initialization_script(&final_script);
     #[cfg(target_os = "macos")]
     {
-        // Keep daemon worker attached to active Space during fullscreen transitions.
-        // WKWebView execution depends on staying visible in view hierarchy on macOS.
+        // On macOS, keep daemon worker hidden and not focused.
         builder = builder
-            .visible(true)
+            .visible(false)
+            .focused(false)
             .decorations(false)
-            .inner_size(1.0, 1.0)
-            .position(0.0, 0.0)
-            .skip_taskbar(true)
-            .visible_on_all_workspaces(true);
+            .skip_taskbar(true);
     }
     #[cfg(not(target_os = "macos"))]
     {
