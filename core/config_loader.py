@@ -195,6 +195,12 @@ STEP_ARGS_SCHEMAS_BY_USE: Dict[str, Dict[str, Any]] = {
             "timeout": {"type": "number"},
             "retries": {"type": "integer", "minimum": 0},
             "retry_backoff_seconds": {"type": "number", "minimum": 0},
+            "follow_redirects": {
+                "anyOf": [
+                    {"type": "boolean"},
+                    {"type": "string", "minLength": 1},
+                ]
+            },
         },
         "required": ["url"],
         "additionalProperties": True,

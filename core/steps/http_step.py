@@ -49,6 +49,22 @@ _RETRYABLE_NETWORK_ERRORS = (
 _ALLOWED_HTTP_SCHEMES = {"http", "https"}
 
 
+def _resolve_bool_arg(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return default
+
+
 def _sanitize_url_host(url: str) -> str:
     try:
         parsed = urlsplit(url)
@@ -155,6 +171,7 @@ async def execute_http_step(
     timeout_seconds = float(args.get("timeout", 30.0))
     retries = int(args.get("retries", 2))
     backoff_seconds = float(args.get("retry_backoff_seconds", 0.5))
+    follow_redirects = _resolve_bool_arg(args.get("follow_redirects"), default=False)
     retries = max(0, retries)
     backoff_seconds = max(0.0, backoff_seconds)
     url_str = str(url or "")
@@ -227,7 +244,12 @@ async def execute_http_step(
     async with httpx.AsyncClient(**client_kwargs) as client:
         for attempt in range(retries + 1):
             try:
-                response = await client.request(method, url, headers=headers)
+                response = await client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    follow_redirects=follow_redirects,
+                )
                 try:
                     response.raise_for_status()
                 except httpx.HTTPStatusError as http_status_error:

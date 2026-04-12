@@ -74,7 +74,7 @@ Current `use`: `http`, `oauth`, `api_key`, `form`, `curl`, `extract`, `script`, 
 
 ## `http`
 - Purpose: execute an HTTP request.
-- Args: `url` (required), `method` (default `GET`), `headers`, `timeout` (default `30`), `retries` (default `2`), `retry_backoff_seconds` (default `0.5`).
+- Args: `url` (required), `method` (default `GET`), `headers`, `timeout` (default `30`), `retries` (default `2`), `retry_backoff_seconds` (default `0.5`), `follow_redirects` (default `false`; supports boolean or boolean-like string values).
 - Runtime output envelope:
   - `http_response` (JSON object/array, or `null` if response is not JSON)
   - `raw_data` (always available response text)
