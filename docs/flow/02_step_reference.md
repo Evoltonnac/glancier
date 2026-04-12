@@ -212,7 +212,7 @@ Purpose:
 
 Supported `args`:
 - Required: `url`
-- Optional: `method` (default `GET`), `headers`, `timeout` (default `30`), `retries` (default `2`), `retry_backoff_seconds` (default `0.5`)
+- Optional: `method` (default `GET`), `headers`, `timeout` (default `30`), `retries` (default `2`), `retry_backoff_seconds` (default `0.5`), `follow_redirects` (default `false`)
 
 Runtime output envelope:
 - `http_response` (parsed JSON, or `null` if response is not JSON)

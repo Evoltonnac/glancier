@@ -46,8 +46,8 @@ async def test_http_step_retries_connect_error(monkeypatch: pytest.MonkeyPatch):
             _ = (exc_type, exc, tb)
             return None
 
-        async def request(self, method, url, headers=None):
-            _ = (method, url, headers)
+        async def request(self, method, url, headers=None, **kwargs):
+            _ = (method, url, headers, kwargs)
             calls["count"] += 1
             if calls["count"] == 1:
                 import httpx
@@ -106,8 +106,8 @@ async def test_http_step_raises_after_retry_exhausted(monkeypatch: pytest.Monkey
             _ = (exc_type, exc, tb)
             return None
 
-        async def request(self, method, url, headers=None):
-            _ = (method, url, headers)
+        async def request(self, method, url, headers=None, **kwargs):
+            _ = (method, url, headers, kwargs)
             import httpx
 
             raise httpx.ConnectTimeout(
@@ -282,8 +282,8 @@ async def test_http_step_allows_private_target_when_policy_allows(monkeypatch: p
             _ = (exc_type, exc, tb)
             return None
 
-        async def request(self, method, url, headers=None):
-            _ = (method, url, headers)
+        async def request(self, method, url, headers=None, **kwargs):
+            _ = (method, url, headers, kwargs)
             calls["count"] += 1
             return _FakeResponse({"allowed": True})
 
@@ -320,3 +320,104 @@ async def test_http_step_allows_private_target_when_policy_allows(monkeypatch: p
 
     assert calls["count"] == 1
     assert result["http_response"] == {"allowed": True}
+
+
+@pytest.mark.asyncio
+async def test_http_step_uses_follow_redirects_default_false(monkeypatch: pytest.MonkeyPatch):
+    captured_request_kwargs: dict = {}
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            _ = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            _ = (exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, headers=None, follow_redirects=False):
+            _ = (method, url, headers)
+            captured_request_kwargs["follow_redirects"] = follow_redirects
+            return _FakeResponse({"ok": True})
+
+    import core.steps.http_step as http_step_module
+
+    monkeypatch.setattr(http_step_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    step = build_step(step_id="fetch", use=StepType.HTTP)
+    source = build_source_config(source_id="source-http", flow=[step])
+    executor = SimpleNamespace(
+        _get_proxy_url=lambda: None,
+        _classify_http_status_error=lambda source, step, error: error,
+        _classify_http_network_error=lambda source, step, error: error,
+    )
+
+    await execute_http_step(
+        step,
+        source,
+        {
+            "url": "https://example.com",
+            "method": "GET",
+            "headers": {},
+        },
+        {},
+        {},
+        executor,
+    )
+
+    assert captured_request_kwargs["follow_redirects"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("follow_redirects", [True, "true", "1", "yes", "on"])
+async def test_http_step_supports_follow_redirects_arg(
+    monkeypatch: pytest.MonkeyPatch,
+    follow_redirects: object,
+):
+    captured_request_kwargs: dict = {}
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            _ = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            _ = (exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, headers=None, follow_redirects=False):
+            _ = (method, url, headers)
+            captured_request_kwargs["follow_redirects"] = follow_redirects
+            return _FakeResponse({"ok": True})
+
+    import core.steps.http_step as http_step_module
+
+    monkeypatch.setattr(http_step_module.httpx, "AsyncClient", FakeAsyncClient)
+
+    step = build_step(step_id="fetch", use=StepType.HTTP)
+    source = build_source_config(source_id="source-http", flow=[step])
+    executor = SimpleNamespace(
+        _get_proxy_url=lambda: None,
+        _classify_http_status_error=lambda source, step, error: error,
+        _classify_http_network_error=lambda source, step, error: error,
+    )
+
+    await execute_http_step(
+        step,
+        source,
+        {
+            "url": "https://example.com",
+            "method": "GET",
+            "headers": {},
+            "follow_redirects": follow_redirects,
+        },
+        {},
+        {},
+        executor,
+    )
+
+    assert captured_request_kwargs["follow_redirects"] is True

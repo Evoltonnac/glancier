@@ -276,6 +276,17 @@
             "retry_backoff_seconds": {
               "type": "number",
               "minimum": 0
+            },
+            "follow_redirects": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
             }
           },
           "required": [
