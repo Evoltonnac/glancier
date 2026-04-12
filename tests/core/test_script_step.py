@@ -125,3 +125,86 @@ async def test_script_sandbox_disabled_preserves_existing_import_behavior(
     state = executor.get_source_state(source.id)
     assert state.status == SourceStatus.ACTIVE
     data_controller.upsert.assert_called_once_with(source.id, {"platform_name": os.name})
+
+
+@pytest.mark.asyncio
+async def test_script_imports_visible_inside_function_scope(
+    data_controller,
+    secrets_controller,
+):
+    executor = Executor(
+        data_controller,
+        secrets_controller,
+        settings_manager=_StaticSettingsManager(
+            SystemSettings(script_sandbox_enabled=False, script_timeout_seconds=10),
+        ),
+    )
+    source = build_source_config(
+        source_id="script-import-scope",
+        flow=[
+            build_step(
+                step_id="script",
+                use=StepType.SCRIPT,
+                args={
+                    "code": (
+                        "import re\n"
+                        "def parser(value):\n"
+                        "    return bool(re.search(r'\\\\d+', value))\n"
+                        "matched = parser('user-42')\n"
+                    ),
+                },
+                outputs={"matched": "matched"},
+            ),
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ACTIVE
+    data_controller.upsert.assert_called_once_with(source.id, {"matched": True})
+
+
+@pytest.mark.asyncio
+async def test_script_sandbox_allows_common_parsing_and_time_modules(
+    data_controller,
+    secrets_controller,
+):
+    executor = Executor(
+        data_controller,
+        secrets_controller,
+        settings_manager=_StaticSettingsManager(
+            SystemSettings(script_sandbox_enabled=True, script_timeout_seconds=10),
+        ),
+    )
+    source = build_source_config(
+        source_id="script-sandbox-common-modules",
+        flow=[
+            build_step(
+                step_id="script",
+                use=StepType.SCRIPT,
+                args={
+                    "code": (
+                        "import re\n"
+                        "import calendar\n"
+                        "import csv\n"
+                        "import uuid\n"
+                        "import hashlib\n"
+                        "year = int(re.search(r'\\\\d{4}', 'year=2026').group(0))\n"
+                        "leap = calendar.isleap(year)\n"
+                        "rows = list(csv.reader(['k,v', 'a,1']))\n"
+                        "token = str(uuid.UUID('12345678-1234-5678-1234-567812345678'))\n"
+                        "digest = hashlib.sha256(token.encode('utf-8')).hexdigest()\n"
+                        "summary = f\"{leap}:{rows[1][1]}:{len(digest)}\"\n"
+                    ),
+                },
+                outputs={"summary": "summary"},
+            ),
+        ],
+    )
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ACTIVE
+    data_controller.upsert.assert_called_once_with(source.id, {"summary": "False:1:64"})
