@@ -885,7 +885,7 @@ class Executor:
                     },
                 )
             if step.use == StepType.API_KEY:
-                api_key = step.secrets.get("api_key", "api_key") if step.secrets else "api_key"
+                api_key = self._resolve_step_secret_name(step, "api_key")
                 return InteractionRequest(
                     type=InteractionType.INPUT_TEXT,
                     step_id=step.id,
@@ -922,7 +922,7 @@ class Executor:
                     },
                 )
             if step.use == StepType.CURL:
-                curl_key = step.secrets.get("curl_command", "curl_command") if step.secrets else "curl_command"
+                curl_key = self._resolve_step_secret_name(step, "curl_command")
                 return InteractionRequest(
                     type=InteractionType.INPUT_TEXT,
                     step_id=step.id,
@@ -957,7 +957,7 @@ class Executor:
                         "url": (step.args or {}).get("url"),
                         "script": (step.args or {}).get("script"),
                         "intercept_api": (step.args or {}).get("intercept_api"),
-                        "secret_key": step.secrets.get("webview_data", "webview_data") if step.secrets else "webview_data",
+                        "secret_key": self._resolve_step_secret_name(step, "webview_data"),
                         "manual_only": True,
                         "failed_step_id": error.step_id,
                         "recovery_step_id": step.id,
@@ -1074,9 +1074,7 @@ class Executor:
                         "url": (webview_step.args or {}).get("url"),
                         "script": (webview_step.args or {}).get("script"),
                         "intercept_api": (webview_step.args or {}).get("intercept_api"),
-                        "secret_key": webview_step.secrets.get("webview_data", "webview_data")
-                        if webview_step.secrets
-                        else "webview_data",
+                        "secret_key": self._resolve_step_secret_name(webview_step, "webview_data"),
                     }
                 )
             if error.data:

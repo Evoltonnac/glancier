@@ -522,3 +522,46 @@ async def test_invalid_credentials_reentry_does_not_reuse_form_custom_copy(
     assert state.interaction.description is None
     assert state.interaction.message is None
     assert state.interaction.warning_message is None
+
+
+@pytest.mark.asyncio
+async def test_invalid_credentials_reentry_uses_mapped_api_key_secret_field(
+    executor,
+    monkeypatch,
+):
+    source = build_source_config(
+        source_id="api-key-invalid-reentry-secret-mapping",
+        name="API Key Invalid Reentry Secret Mapping",
+        flow=[
+            build_step(
+                step_id="api_key",
+                use=StepType.API_KEY,
+                args={"label": "Provider API Key"},
+                secrets={"provider_api_key": "api_key"},
+            ),
+            build_step(
+                step_id="fetch",
+                use=StepType.HTTP,
+                args={"url": "https://example.com/data"},
+            ),
+        ],
+    )
+
+    async def raise_invalid_credentials(_source):
+        raise InvalidCredentialsError(
+            source_id=source.id,
+            step_id="fetch",
+            message="401 unauthorized",
+            status_code=401,
+        )
+
+    monkeypatch.setattr(executor, "_run_flow", raise_invalid_credentials)
+
+    await executor.fetch_source(source)
+
+    state = executor.get_source_state(source.id)
+    assert state.status == SourceStatus.ERROR
+    assert state.interaction is not None
+    assert state.interaction.type == InteractionType.INPUT_TEXT
+    assert state.interaction.step_id == "api_key"
+    assert [field.key for field in state.interaction.fields] == ["provider_api_key"]
