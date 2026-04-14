@@ -292,6 +292,7 @@ Runtime behavior:
 - Script runtime enforces `script_timeout_seconds` from system settings (default `10` seconds) and fails with `script_timeout_exceeded` when exceeded.
 - Optional lightweight sandbox mode (`script_sandbox_enabled`, **Beta**) is disabled by default for compatibility; when enabled it blocks high-risk builtins/imports and fails with `script_sandbox_blocked`.
 - Sandbox mode intentionally favors compatibility over full isolation; integrations that need blocked capabilities should keep sandbox disabled.
+- Sandbox allowlist includes common deterministic stdlib modules for parsing/time/data transforms (for example: `re`, `datetime`, `time`, `calendar`, `csv`, `json`, `uuid`, `hashlib`, `collections`, `math`).
 - Integrations and UI surfaces should preserve deterministic error-code exposure for these failures (avoid generic-only fallback text).
 
 Typical mapping:

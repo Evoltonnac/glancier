@@ -34,18 +34,30 @@ _MIN_SCRIPT_TIMEOUT_SECONDS = 1
 _MAX_SCRIPT_TIMEOUT_SECONDS = 120
 _BLOCKED_IMPORT_ROOTS = {"os", "subprocess", "socket", "pathlib"}
 _ALLOWED_IMPORT_ROOTS = {
+    "base64",
+    "bisect",
+    "calendar",
     "collections",
+    "csv",
     "datetime",
     "decimal",
     "functools",
+    "hashlib",
+    "heapq",
+    "hmac",
     "itertools",
     "json",
     "math",
+    "operator",
+    "pprint",
     "random",
     "re",
     "statistics",
     "string",
     "time",
+    "textwrap",
+    "unicodedata",
+    "uuid",
 }
 _BLOCKED_BUILTIN_CALLS = {"open", "exec", "eval", "compile", "__import__"}
 _ALLOWED_BUILTINS = {
@@ -262,12 +274,11 @@ async def execute_script_step(
         raise ValueError(f"Step {step.id} has use=script but no 'code' argument provided.")
     
     sandbox_enabled, timeout_seconds = _resolve_script_runtime_controls(executor)
-    local_env = {**context, **outputs}
+    execution_env = {**context, **outputs}
     execution_logs: list[str] = []
-    globals_env: dict[str, Any] = {}
     if sandbox_enabled:
         _validate_script_sandbox(step.id, script_code)
-        globals_env["__builtins__"] = _build_sandbox_builtins(step.id)
+        execution_env["__builtins__"] = _build_sandbox_builtins(step.id)
 
     try:
         def on_script_stream(stream: str, chunk: str):
@@ -291,17 +302,17 @@ async def execute_script_step(
             _ScriptTimeoutGuard(timeout_seconds=timeout_seconds, step_id=step.id),
         ):
             compiled = compile(script_code, f"<step_{step.id}>", "exec")
-            exec(compiled, globals_env, local_env)
+            exec(compiled, execution_env, execution_env)
         
         output = {}
         if step.outputs:
             for _target_var, source_path in step.outputs.items():
-                resolved = _resolve_script_path(local_env, source_path)
+                resolved = _resolve_script_path(execution_env, source_path)
                 if resolved is not _MISSING:
                     output[source_path] = resolved
         if getattr(step, 'context', None):
             for _target_var, source_path in step.context.items():
-                resolved = _resolve_script_path(local_env, source_path)
+                resolved = _resolve_script_path(execution_env, source_path)
                 if resolved is not _MISSING:
                     output[source_path] = resolved
                     
